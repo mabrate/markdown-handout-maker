@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 280" role="img" aria-label="Pond ecosystem">
+  <rect width="420" height="280" fill="#eef6ed"/>
+  <circle cx="350" cy="55" r="30" fill="#f5d75e"/>
+  <path d="M0 164 Q105 125 210 165 T420 154 V280 H0Z" fill="#8bc5d3"/>
+  <path d="M0 213 Q110 180 220 216 T420 205 V280 H0Z" fill="#5ba2b5"/>
+  <path d="M0 160 Q65 125 125 160 Q180 112 243 163" fill="none" stroke="#6c9858" stroke-width="18"/>
+  <g fill="none" stroke="#456f38" stroke-width="6">
+    <path d="M65 174V88M58 110l-18-25M72 126l22-28"/>
+    <path d="M325 185V107M318 132l-21-24M332 141l24-27"/>
+  </g>
+  <g fill="#5d873e"><ellipse cx="40" cy="85" rx="18" ry="9"/><ellipse cx="95" cy="98" rx="18" ry="9"/><ellipse cx="297" cy="109" rx="18" ry="9"/><ellipse cx="356" cy="115" rx="18" ry="9"/></g>
+  <g fill="#f2a24d" stroke="#81572b" stroke-width="3">
+    <path d="M155 216q35-28 70 0-35 27-70 0m70 0 25-18v36z"/>
+  </g>
+  <g fill="#6c9f48"><ellipse cx="89" cy="208" rx="44" ry="13"/><ellipse cx="357" cy="224" rx="42" ry="12"/></g>
+  <text x="18" y="28" fill="#304b37" font-family="Arial" font-size="18" font-weight="bold">A pond ecosystem</text>
+</svg>

@@ -1,0 +1,2 @@
+const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('handoutDesktop', { openFolder: () => ipcRenderer.invoke('folders:open'), readFile: filePath => ipcRenderer.invoke('files:read', filePath), saveFile: (filePath, content) => ipcRenderer.invoke('files:save', filePath, content), newFile: () => ipcRenderer.invoke('files:new'), print: title => ipcRenderer.invoke('handout:print', title), exportPdf: (layout, title) => ipcRenderer.invoke('handout:pdf', layout, title) });

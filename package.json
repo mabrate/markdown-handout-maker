@@ -1,0 +1,36 @@
+{
+  "name": "classroom-handout-maker",
+  "version": "0.1.0",
+  "description": "Local Markdown handout editor and print preview",
+  "author": "Handout Maker",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "org.classroom.handoutmaker",
+    "productName": "Handout Maker",
+    "files": [
+      "handout-maker/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.12"
+  }
+}
