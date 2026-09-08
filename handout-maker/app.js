@@ -4,6 +4,7 @@ const statusText = document.querySelector("#status");
 const pageCount = document.querySelector("#page-count");
 const layoutSelect = document.querySelector("#layout-select");
 const previewPanel = document.querySelector(".preview-panel");
+const workspace = document.querySelector(".workspace");
 const assetMap = new Map();
 let renderTimer;
 let liveSourceVersion = null;
@@ -12,6 +13,42 @@ let liveAssetVersion = "";
 let showAnswers = false;
 let questionCounter = 1;
 let activeHandoutTitle = "handout";
+
+function setupPanelControls() {
+  for (const toggle of document.querySelectorAll(".panel-toggle")) {
+    toggle.addEventListener("click", () => {
+      const panel = toggle.dataset.panel;
+      const collapsedClass = `${panel}-collapsed`;
+      const collapsed = workspace.classList.toggle(collapsedClass);
+      toggle.textContent = collapsed ? "Show" : "Hide";
+      toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${panel === "file" ? "handout files" : "Markdown editor"}`);
+    });
+  }
+
+  for (const divider of document.querySelectorAll(".panel-divider")) {
+    divider.addEventListener("pointerdown", event => {
+      if (window.matchMedia("(max-width: 900px)").matches) return;
+      const panel = divider.dataset.divider;
+      const startX = event.clientX;
+      const startWidth = document.querySelector(`.${panel}-panel`).getBoundingClientRect().width;
+      const minimum = panel === "file" ? 150 : 280;
+      divider.setPointerCapture(event.pointerId);
+      const resize = moveEvent => {
+        const width = Math.max(minimum, startWidth + moveEvent.clientX - startX);
+        workspace.style.setProperty(`--${panel}-width`, `${width}px`);
+        workspace.classList.remove(`${panel}-collapsed`);
+      };
+      const stop = () => {
+        divider.removeEventListener("pointermove", resize);
+        divider.removeEventListener("pointerup", stop);
+      };
+      divider.addEventListener("pointermove", resize);
+      divider.addEventListener("pointerup", stop);
+    });
+  }
+}
+
+setupPanelControls();
 
 const layouts = {
   letter: { width: "8.5in", height: "11in", page: "letter portrait", label: "Letter" },
@@ -25,6 +62,17 @@ const layouts = {
 };
 const requestedLayout = new URLSearchParams(window.location.search).get("layout");
 if (requestedLayout && layouts[requestedLayout]) layoutSelect.value = requestedLayout;
+
+function setSourceContent(content) {
+  source.value = content;
+  const frontMatter = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
+  const layoutSetting = frontMatter && frontMatter[1].match(/^layout\s*:\s*([\w-]+)\s*$/m);
+  if (layoutSetting && layouts[layoutSetting[1]]) layoutSelect.value = layoutSetting[1];
+}
+
+function withoutDocumentSettings(markdown) {
+  return markdown.replace(/^---\s*\n[\s\S]*?\n---\s*(?:\n|$)/, "");
+}
 
 const example = `# Ecosystems Review
 
@@ -561,7 +609,7 @@ function paginate(blocks) {
 function render() {
   const previousScroll = previewPanel.scrollTop;
   applyLayout();
-  paginate(parseBlocks(source.value));
+  paginate(parseBlocks(withoutDocumentSettings(source.value)));
   statusText.textContent = "Preview updated";
   requestAnimationFrame(() => {
     previewPanel.scrollTop = previousScroll;
@@ -589,7 +637,7 @@ async function loadFiles(files) {
     }
   }
   if (!markdownFile) { statusText.textContent = "No Markdown file found"; return; }
-  source.value = await markdownFile.text();
+  setSourceContent(await markdownFile.text());
   statusText.textContent = markdownFile.name;
   render();
 }
@@ -609,8 +657,12 @@ source.addEventListener("input", scheduleRender);
 layoutSelect.addEventListener("change", render);
 const toggleAnswersBtn = document.querySelector('#toggle-answers');
 if (toggleAnswersBtn) toggleAnswersBtn.addEventListener('click', () => { showAnswers = !showAnswers; toggleAnswersBtn.classList.toggle('active', showAnswers); toggleAnswersBtn.textContent = showAnswers ? 'Hide answers' : 'Show answers'; render(); });
-document.querySelector("#print-button").addEventListener("click", () => {
-  if (window.handoutDesktop) return window.handoutDesktop.print(activeHandoutTitle);
+document.querySelector("#print-button").addEventListener("click", async () => {
+  if (window.handoutDesktop) {
+    const result = await window.handoutDesktop.print(activeHandoutTitle);
+    statusText.textContent = result.success ? "Print job sent" : `Could not print: ${result.failureReason || "unknown error"}`;
+    return;
+  }
   window.print();
 });
 document.querySelector("#export-button").addEventListener("click", async () => {
@@ -645,7 +697,7 @@ async function checkLiveSource(initial = false) {
     if (handout.version !== liveSourceVersion) {
       liveSourceVersion = handout.version;
       liveAssetVersion = handout.version;
-      source.value = handout.content;
+      setSourceContent(handout.content);
       render();
       statusText.textContent = initial ? `${handout.name} · live preview` : `${handout.name} · saved changes loaded`;
     }
@@ -719,7 +771,7 @@ if (window.handoutDesktop) {
     if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
     if (dirty) await saveCurrent();
     try {
-      source.value = await desktop.readFile(node.path); selectedFile = node; currentHandoutTitle(); clearActive(); if (button) button.classList.add("active"); markDirty(false); render(); source.focus();
+      setSourceContent(await desktop.readFile(node.path)); selectedFile = node; currentHandoutTitle(); clearActive(); if (button) button.classList.add("active"); markDirty(false); render(); source.focus();
     } catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
   }
   async function saveCurrent() {

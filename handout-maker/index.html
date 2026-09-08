@@ -11,8 +11,10 @@
     </div>
   </header>
   <main class="workspace">
-    <aside class="file-panel"><div class="panel-heading"><label>Handout files</label><span id="folder-name">No folder</span></div><div id="file-tree" class="file-tree"><p class="empty-tree">Choose a folder to begin.</p></div></aside>
-    <section class="editor-panel"><div class="panel-heading"><label for="source">Markdown</label><span id="status">No file open</span></div><textarea id="source" spellcheck="true" aria-label="Markdown editor"></textarea><details class="syntax-help"><summary>Handout syntax</summary><code>{{lines:3}}</code> answer lines<br><code>{{lines:3:inline}}</code> first line follows question<br><code>{{space:6}}</code> drawing space<br><code>&lt;br&gt;</code> manual break<br><code>:::wrap</code>, <code>:::grid</code>, <code>:::pagebreak</code></details></section>
+    <aside class="file-panel"><div class="panel-heading"><label>Handout files</label><span id="folder-name">No folder</span><button class="panel-toggle" data-panel="file" type="button" aria-label="Collapse handout files">Hide</button></div><div id="file-tree" class="file-tree"><p class="empty-tree">Choose a folder to begin.</p></div></aside>
+    <div class="panel-divider" data-divider="file" role="separator" aria-label="Resize handout files panel" tabindex="0"></div>
+    <section class="editor-panel"><div class="panel-heading"><label for="source">Markdown</label><span id="status">No file open</span><button class="panel-toggle" data-panel="editor" type="button" aria-label="Collapse Markdown editor">Hide</button></div><textarea id="source" spellcheck="true" aria-label="Markdown editor"></textarea><details class="syntax-help"><summary>Handout syntax</summary><code>{{lines:3}}</code> answer lines<br><code>{{lines:3:inline}}</code> first line follows question<br><code>{{space:6}}</code> drawing space<br><code>&lt;br&gt;</code> manual break<br><code>:::wrap</code>, <code>:::grid</code>, <code>:::pagebreak</code></details></section>
+    <div class="panel-divider" data-divider="editor" role="separator" aria-label="Resize Markdown editor panel" tabindex="0"></div>
     <section class="preview-panel"><div class="preview-heading"><span>Print preview</span><span id="page-count">0 pages</span></div><div id="preview" aria-live="polite"></div></section>
   </main>
   <input id="file-input" type="file" accept=".md,.markdown,text/markdown" hidden><input id="folder-input" type="file" webkitdirectory multiple hidden>

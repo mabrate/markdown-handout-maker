@@ -62,7 +62,8 @@ body {
 .button.primary:hover { background: #f0ffff; }
 
 .workspace {
-  display: grid; grid-template-columns: minmax(190px, 18vw) minmax(340px, 32vw) 1fr;
+  --file-width: 18vw; --editor-width: 32vw;
+  display: grid; grid-template-columns: minmax(0, var(--file-width)) 6px minmax(0, var(--editor-width)) 6px minmax(340px, 1fr);
   height: calc(100vh - 68px);
 }
 .editor-panel {
@@ -70,6 +71,17 @@ body {
   border-right: 1px solid #b7c2c8; background: #f4f6f7;
 }
 .file-panel { min-width: 0; overflow: auto; border-right: 1px solid #b7c2c8; background: #eef2f3; }
+.panel-divider { cursor: col-resize; background: #c6d0d5; transition: background .15s ease; }
+.panel-divider:hover, .panel-divider:focus { outline: 0; background: var(--accent); }
+.panel-heading { gap: 8px; }
+.panel-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-toggle { margin-left: auto; border: 1px solid #aebbc1; border-radius: 4px; padding: 3px 7px; color: #42525c; background: #fff; font: 650 11px inherit; cursor: pointer; }
+.panel-toggle:hover { color: #fff; background: var(--accent); }
+.workspace.file-collapsed { --file-width: 0px; }
+.workspace.editor-collapsed { --editor-width: 0px; }
+.workspace.file-collapsed .file-panel, .workspace.editor-collapsed .editor-panel { visibility: hidden; overflow: hidden; }
+.workspace.file-collapsed .file-panel *, .workspace.editor-collapsed .editor-panel * { visibility: hidden; }
+.workspace.file-collapsed .panel-divider[data-divider="file"], .workspace.editor-collapsed .panel-divider[data-divider="editor"] { cursor: e-resize; }
 .file-tree { padding: 8px 6px 20px; font-size: 13px; }
 .file-tree ul { margin: 0; padding-left: 15px; list-style: none; }
 .file-tree li { margin: 1px 0; }
@@ -219,6 +231,7 @@ body {
 @media (max-width: 900px) {
   .toolbar { position: relative; align-items: flex-start; flex-direction: column; }
   .workspace { display: block; height: auto; }
+  .panel-divider { display: none; }
   .file-panel { max-height: 24vh; border-right: 0; border-bottom: 1px solid #aaa; }
   .editor-panel { height: 58vh; border-right: 0; border-bottom: 1px solid #aaa; }
   .preview-panel { overflow: visible; }
@@ -228,7 +241,7 @@ body {
 @page { size: letter portrait; margin: 0; }
 @media print {
   body { background: white; }
-  .toolbar, .file-panel, .editor-panel, .preview-heading { display: none !important; }
+  .toolbar, .file-panel, .editor-panel, .panel-divider, .preview-heading { display: none !important; }
   .workspace, .preview-panel, #preview { display: block; height: auto; overflow: visible; padding: 0; }
   .handout-page, .print-sheet {
     margin: 0; box-shadow: none;

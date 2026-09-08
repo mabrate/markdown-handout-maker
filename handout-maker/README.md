@@ -65,6 +65,22 @@ The folder picker loads the first Markdown file it finds and embeds the folder's
 
 ## Page sizes and print layouts
 
+You can set a document's starting layout with YAML-style front matter at the
+very top of the Markdown file:
+
+```markdown
+---
+layout: letter-landscape
+---
+
+# My worksheet
+```
+
+The layout menu remains available for changing the layout manually after the
+file opens. Supported values are `letter`, `letter-landscape`, `a4`,
+`half-portrait`, `half-landscape`, `half-duplicate-portrait`,
+`half-duplicate-landscape`, and `booklet`.
+
 Choose a preset from the **Layout** menu:
 
 - **Letter** — 8.5 × 11 inch portrait pages.
