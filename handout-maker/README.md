@@ -22,6 +22,22 @@ To make a distributable app on the current platform, run `npm run dist`.
 Electron Builder is configured for Linux AppImage/Deb and macOS DMG targets.
 Build macOS output on macOS for the most dependable signing/notarization path.
 
+### Optional local AI
+
+The desktop app includes optional local AI tools powered by `node-llama-cpp`.
+No API key or network service is required. The first time you use **AI Tools**,
+open **AI Settings** and choose a compatible instruction-tuned `.gguf` model.
+The model path is saved in the application's user settings; the model is loaded
+only when an AI action is run and reused for later actions.
+
+Available actions include **Create Vocabulary Table**, **Create Vocabulary Table
+with Examples**, and **Generate Multiple-Choice Distractors**. The vocabulary
+actions insert editable HTML tables with `<col>` percentage widths, so adjust
+the column proportions directly in the Markdown. Select Markdown in the editor before choosing an action. Results
+are validated and shown in a preview dialog. The document is not changed until
+you click **Insert/Replace**. If no model is installed, the rest of the desktop
+application remains fully usable.
+
 ## Use it
 
 ### Edit in a code editor with automatic preview

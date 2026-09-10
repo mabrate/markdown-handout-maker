@@ -971,9 +971,107 @@ if (window.handoutDesktop) {
     button.addEventListener("click", event => { event.stopPropagation(); panel.classList.toggle("open"); });
     document.addEventListener("click", event => { if (!menu.contains(event.target)) panel.classList.remove("open"); });
     document.querySelector(".actions").insertBefore(menu, document.querySelector(".layout-control"));
+    return { menu, panel };
   }
   makeToolbarMenu("File", [openFolderButton, openFileButton, recentButton, newHandoutButton, saveButton]);
   makeToolbarMenu("View", [toggleAnswersBtn, ...document.querySelectorAll(".panel-restore")]);
+
+  function makeActionButton(label, handler) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button";
+    button.textContent = label;
+    button.addEventListener("click", handler);
+    return button;
+  }
+
+  function escapeAIHtml(value) {
+    return escapeHtml(String(value));
+  }
+
+  function shuffleChoices(correctAnswer, distractors) {
+    const choices = [correctAnswer, ...distractors].map((text, index) => ({ text, correct: index === 0 }));
+    for (let index = choices.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [choices[index], choices[swapIndex]] = [choices[swapIndex], choices[index]];
+    }
+    return choices;
+  }
+
+  function makeAIOutput(actionId, result) {
+    if (actionId === "vocabulary" || actionId === "vocabularyExamples") {
+      const withExamples = actionId === "vocabularyExamples";
+      const columns = withExamples ? '<col style="width: 22%">\n  <col style="width: 38%">\n  <col style="width: 40%">' : '<col style="width: 25%">\n  <col style="width: 75%">';
+      const headers = withExamples ? '<th>Term</th><th>Definition</th><th>Example</th>' : '<th>Term</th><th>Definition</th>';
+      const rows = result.rows.map(row => withExamples ? `<tr><td>${escapeHtml(row.term)}</td><td>${escapeHtml(row.definition)}</td><td>${escapeHtml(row.example)}</td></tr>` : `<tr><td>${escapeHtml(row.term)}</td><td>${escapeHtml(row.definition)}</td></tr>`);
+      return `<table class="worksheet-table vocabulary-table">\n  <colgroup>\n  ${columns}\n  </colgroup>\n  <thead>\n    <tr>${headers}</tr>\n  </thead>\n  <tbody>\n    ${rows.join("\n    ")}\n  </tbody>\n</table>\n\n`;
+    }
+    const choices = result.previewChoices || shuffleChoices(result.correctAnswer, result.distractors);
+    return `:::question type=mc\n${result.question}\n${choices.map(choice => `- ${choice.text}${choice.correct ? " *" : ""}`).join("\n")}\n:::\n\n`;
+  }
+
+  function showAIPreview(actionId, result) {
+    if (actionId === "vocabulary" || actionId === "vocabularyExamples") {
+      const withExamples = actionId === "vocabularyExamples";
+      return `<table class="ai-preview-table"><colgroup>${withExamples ? '<col style="width:22%"><col style="width:38%"><col style="width:40%">' : '<col style="width:25%"><col style="width:75%">'}</colgroup><thead><tr><th>Term</th><th>Definition</th>${withExamples ? "<th>Example</th>" : ""}</tr></thead><tbody>${result.rows.map(row => `<tr><td>${escapeAIHtml(row.term)}</td><td>${escapeAIHtml(row.definition)}</td>${withExamples ? `<td>${escapeAIHtml(row.example)}</td>` : ""}</tr>`).join("")}</tbody></table>`;
+    }
+    const choices = result.previewChoices || shuffleChoices(result.correctAnswer, result.distractors);
+    return `<div class="ai-question-preview"><strong>${escapeAIHtml(result.question)}</strong><ol type="A">${choices.map(choice => `<li>${escapeAIHtml(choice.text)}</li>`).join("")}</ol></div>`;
+  }
+
+  function openAIAction(action) {
+    const start = source.selectionStart;
+    const end = source.selectionEnd;
+    const selectedText = source.value.slice(start, end).trim();
+    if (!selectedText) { statusText.textContent = "Select text in the Markdown editor first"; source.focus(); return; }
+    const overlay = document.createElement("div");
+    overlay.className = "ai-dialog-overlay";
+    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-dialog-title"><header><h2 id="ai-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">${escapeAIHtml(action.description)}</p><div class="ai-dialog-source"><strong>Selected text</strong><pre>${escapeAIHtml(selectedText)}</pre></div><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-regenerate">Generate</button><button type="button" class="button primary ai-approve" disabled>Insert/Replace</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
+    document.body.append(overlay);
+    const status = overlay.querySelector(".ai-status");
+    const resultArea = overlay.querySelector(".ai-result");
+    const generateButton = overlay.querySelector(".ai-regenerate");
+    const approveButton = overlay.querySelector(".ai-approve");
+    let result = null;
+    let busy = false;
+    const close = () => overlay.remove();
+    overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
+    overlay.querySelector(".ai-cancel").addEventListener("click", close);
+    async function generate() {
+      if (busy) return;
+      busy = true; generateButton.disabled = true; approveButton.disabled = true; status.textContent = "Generating… Loading local model…"; resultArea.innerHTML = "";
+      try {
+        result = await desktop.generateAI(action.id, selectedText);
+        if (action.id === "distractors") result.previewChoices = shuffleChoices(result.correctAnswer, result.distractors);
+        resultArea.innerHTML = showAIPreview(action.id, result);
+        status.textContent = "Review the proposed result before inserting it.";
+        approveButton.disabled = false;
+      } catch (error) {
+        result = null;
+        status.textContent = error.message || "AI generation failed.";
+      } finally { busy = false; generateButton.disabled = false; }
+    }
+    generateButton.addEventListener("click", generate);
+    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
+    generate();
+  }
+
+  async function showAISettings() {
+    const overlay = document.createElement("div");
+    overlay.className = "ai-dialog-overlay";
+    overlay.innerHTML = '<section class="ai-dialog" role="dialog" aria-modal="true"><header><h2>AI Settings</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="ai-settings-status"></div><footer><button type="button" class="button primary ai-select-model">Select GGUF model</button><button type="button" class="button secondary ai-cancel">Close</button></footer></section>';
+    document.body.append(overlay);
+    const status = overlay.querySelector(".ai-settings-status");
+    const renderStatus = model => { const stateLabels = { installed: "Installed", "not-installed": "Not Installed", loading: "Loading", error: "Error" }; status.innerHTML = `<p><strong>Local AI:</strong> ${escapeAIHtml(stateLabels[model.state] || model.state)}</p><p><strong>Model:</strong> ${escapeAIHtml(model.modelName || "None selected")}</p><p class="ai-model-path">${escapeAIHtml(model.modelPath || "Choose a compatible .gguf file to enable AI tools.")}</p>${model.message ? `<p class="ai-error">${escapeAIHtml(model.message)}</p>` : ""}`; };
+    renderStatus(await desktop.aiStatus());
+    const close = () => overlay.remove();
+    overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
+    overlay.querySelector(".ai-cancel").addEventListener("click", close);
+    overlay.querySelector(".ai-select-model").addEventListener("click", async event => { event.currentTarget.disabled = true; try { const model = await desktop.selectAIModel(); if (model) renderStatus(model); } catch (error) { status.innerHTML += `<p class="ai-error">${escapeAIHtml(error.message)}</p>`; } finally { event.currentTarget.disabled = false; } });
+  }
+
+  const aiMenu = makeToolbarMenu("AI Tools", [makeActionButton("AI Settings", showAISettings)]);
+  desktop.aiActions().then(actions => actions.reverse().forEach(action => aiMenu.panel.insertBefore(makeActionButton(action.label, () => openAIAction(action)), aiMenu.panel.firstChild))).catch(error => { console.error("[local-ai] Could not load actions", error); });
 
   function jumpToPreviewSource(block, target) {
     const normalizePreviewText = text => text.replace(/^\s*\d+\.\s*/, "").replace(/\s+/g, " ").trim();
