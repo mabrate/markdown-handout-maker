@@ -14,14 +14,124 @@ let showAnswers = false;
 let questionCounter = 1;
 let activeHandoutTitle = "handout";
 
+const snippets = {
+  heading: "## New section\n\n",
+  checklist: "▢ First checklist item  \n▢ Second checklist item  \n▢ Third checklist item  \n\n",
+  question: ":::question type=short lines=3\nWhat is the answer?\n:::answer\nTeacher answer\n:::\n\n",
+  "multiple-choice": ":::question type=mc\nWhich answer is correct?\n- First choice\n- Correct choice *\n- Third choice\n:::\n\n",
+  lines: "{{lines:3}}\n\n",
+  "inline-lines": "Answer here: {{lines:2:inline}}\n\n",
+  space: "{{space:6}}\n\n",
+  box: "{{space:6:box}}\n\n",
+  dots: "{{space:6:dots}}\n\n",
+  wrap: ":::wrap\n![Alt text](image.png){.float-right width=2in}\n\nText that wraps beside the image.\n:::\n\n",
+  grid: ":::grid columns=2\n:::cell\nColumn one\n:::cell\nColumn two\n:::\n\n",
+  cards: ":::grid columns=2 cards\n:::cell\n### Box one\nContent\n:::cell\n### Box two\nContent\n:::\n\n",
+  pagebreak: ":::pagebreak\n\n",
+  style: "<style>\n/* Custom styles for this handout */\n.handout-page h1 { color: #215b75; }\n</style>\n\n"
+};
+
+function makeColumns(format, widths, cards = false) {
+  const values = widths.split(",");
+  if (format === "html") {
+    const template = values.map(value => `${Number(value.split("/")[0])}fr`).join(" ");
+    const cardStyle = cards ? " border: 1px solid #666; padding: .14in;" : "";
+    const cells = values.map((_, index) => `  <div style="${cardStyle}">Column ${index + 1}</div>`).join("\n");
+    return `<div class="worksheet-columns" style="--grid-template: ${template}">\n${cells}\n</div>\n\n`;
+  }
+  return `:::grid widths=${widths}${cards ? " cards" : ""}\n${values.map((_, index) => `:::cell\nColumn ${index + 1}`).join("\n")}\n:::\n\n`;
+}
+
+function insertSnippet(text) {
+  const start = source.selectionStart;
+  const end = source.selectionEnd;
+  source.setRangeText(text, start, end, "end");
+  source.dispatchEvent(new Event("input", { bubbles: true }));
+  source.focus();
+}
+
+function makeTable(format, rows, columns) {
+  if (format === "html") {
+    const width = (100 / columns).toFixed(2);
+    const cols = Array.from({ length: columns }, () => `    <col style="width: ${width}%">`).join("\n");
+    const header = Array.from({ length: columns }, (_, index) => `      <th>Header ${index + 1}</th>`).join("\n");
+    const body = Array.from({ length: rows }, (_, row) => `    <tr>\n${Array.from({ length: columns }, (_, column) => `      <td>Row ${row + 1}, column ${column + 1}</td>`).join("\n")}\n    </tr>`).join("\n");
+    return `<table class="worksheet-table">\n  <colgroup>\n${cols}\n  </colgroup>\n  <thead>\n    <tr>\n${header}\n    </tr>\n  </thead>\n  <tbody>\n${body}\n  </tbody>\n</table>\n\n`;
+  }
+  const header = `| ${Array.from({ length: columns }, (_, index) => `Header ${index + 1}`).join(" | ")} |`;
+  const separator = `| ${Array.from({ length: columns }, () => "---").join(" | ")} |`;
+  const body = Array.from({ length: rows }, (_, row) => `| ${Array.from({ length: columns }, (_, column) => `Row ${row + 1}, column ${column + 1}`).join(" | ")} |`).join("\n");
+  return `${header}\n${separator}\n${body}\n\n`;
+}
+
+function setupSnippetPalette() {
+  const snippetGrid = document.querySelector(".snippet-grid");
+  if (snippetGrid && !snippetGrid.querySelector('[data-snippet="checklist"]')) {
+    const checklist = document.createElement("button");
+    checklist.type = "button";
+    checklist.className = "snippet-button";
+    checklist.dataset.snippet = "checklist";
+    checklist.textContent = "Checklist";
+    snippetGrid.insertBefore(checklist, snippetGrid.firstChild?.nextSibling || null);
+  }
+  if (snippetGrid && !snippetGrid.querySelector('[data-snippet="multiple-choice"]')) {
+    const multipleChoice = document.createElement("button");
+    multipleChoice.type = "button";
+    multipleChoice.className = "snippet-button";
+    multipleChoice.dataset.snippet = "multiple-choice";
+    multipleChoice.textContent = "Multiple choice";
+    snippetGrid.insertBefore(multipleChoice, snippetGrid.children[2] || null);
+  }
+  if (!document.querySelector("#insert-columns")) {
+    const picker = document.createElement("div");
+    picker.className = "snippet-picker";
+    picker.innerHTML = '<label>Columns <select id="column-format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Widths <select id="column-layout"><option value="1/2,1/2">1/2 + 1/2</option><option value="1/3,2/3">1/3 + 2/3</option><option value="2/3,1/3">2/3 + 1/3</option><option value="1/4,3/4">1/4 + 3/4</option><option value="3/4,1/4">3/4 + 1/4</option><option value="1/4,1/4,1/2">1/4 + 1/4 + 1/2</option><option value="1/4,1/4,1/4,1/4">Four equal</option></select></label><label class="check-control"><input id="column-cards" type="checkbox"> Boxes</label><button type="button" class="snippet-button" id="insert-columns">Insert columns</button>';
+    document.querySelector(".snippet-picker")?.after(picker);
+  }
+  document.querySelectorAll(".snippet-button[data-snippet]").forEach(button => {
+    button.addEventListener("click", () => insertSnippet(snippets[button.dataset.snippet]));
+  });
+  const tableButton = document.querySelector("#insert-table");
+  if (tableButton) tableButton.addEventListener("click", () => {
+    const format = document.querySelector("#table-format").value;
+    const rows = Number(document.querySelector("#table-rows").value);
+    const columns = Number(document.querySelector("#table-columns").value);
+    insertSnippet(makeTable(format, rows, columns));
+  });
+  const columnsButton = document.querySelector("#insert-columns");
+  if (columnsButton) columnsButton.addEventListener("click", () => {
+    insertSnippet(makeColumns(document.querySelector("#column-format").value, document.querySelector("#column-layout").value, document.querySelector("#column-cards").checked));
+  });
+}
+
+setupSnippetPalette();
+
 function setupPanelControls() {
+  const actions = document.querySelector(".actions");
+  const restores = {};
+  for (const panel of ["file", "editor"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button panel-restore";
+    button.textContent = panel === "file" ? "Show files" : "Show editor";
+    button.hidden = true;
+    button.addEventListener("click", () => {
+      workspace.classList.remove(`${panel}-collapsed`);
+      button.hidden = true;
+      document.querySelector(`.panel-toggle[data-panel="${panel}"]`).textContent = "Hide";
+    });
+    actions?.append(button);
+    restores[panel] = button;
+  }
   for (const toggle of document.querySelectorAll(".panel-toggle")) {
+    if (!toggle.dataset.panel) continue;
     toggle.addEventListener("click", () => {
       const panel = toggle.dataset.panel;
       const collapsedClass = `${panel}-collapsed`;
       const collapsed = workspace.classList.toggle(collapsedClass);
       toggle.textContent = collapsed ? "Show" : "Hide";
       toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${panel === "file" ? "handout files" : "Markdown editor"}`);
+      restores[panel].hidden = !collapsed;
     });
   }
 
@@ -65,6 +175,7 @@ if (requestedLayout && layouts[requestedLayout]) layoutSelect.value = requestedL
 
 function setSourceContent(content) {
   source.value = content;
+  source.dispatchEvent(new Event("input", { bubbles: true }));
   const frontMatter = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
   const layoutSetting = frontMatter && frontMatter[1].match(/^layout\s*:\s*([\w-]+)\s*$/m);
   if (layoutSetting && layouts[layoutSetting[1]]) layoutSelect.value = layoutSetting[1];
@@ -222,17 +333,17 @@ function restoreLegacyInlineHtml(html) {
     });
 }
 
-function parseBlocks(markdown) {
+function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
   const cleaned = markdown.replace(/<!--([\s\S]*?)-->/g, "");
   const lines = cleaned.replace(/\r\n?/g, "\n").split("\n");
   const placeholders = [];
   const outLines = [];
-  let questionNumber = 1;
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { outLines.push(""); i++; continue; }
+    if (/^ {0,3}#{1,2}(?:\s|$)/.test(line)) outLines.push("<!--HANDOUT_QUESTION_RESET-->");
 
     if (/^:::pagebreak\s*$/.test(line.trim())) {
       const token = `@@BLOCK${placeholders.length}@@`;
@@ -257,23 +368,53 @@ function parseBlocks(markdown) {
       const match = line.trim().match(/^:::question(?:\s+(.*))?\s*$/);
       const attrStr = match && match[1] ? match[1] : "";
       const start = i + 1; i++;
-      while (i < lines.length && lines[i].trim() !== ":::") i++;
+      let answerMarker = -1;
+      while (i < lines.length && lines[i].trim() !== ":::") {
+        if (lines[i].trim() === ":::answer") answerMarker = i;
+        i++;
+      }
       const content = lines.slice(start, i).join("\n");
       const token = `@@BLOCK${placeholders.length}@@`;
       placeholders.push({ type: "question", attrStr, content });
       outLines.push(token);
-      if (i < lines.length) i++;
+      if (i < lines.length) {
+        i++;
+        if (answerMarker !== -1 && i < lines.length && lines[i].trim() === ":::") i++;
+      }
       continue;
     }
 
-    if (/^:::grid(?:\s+columns=(\d+))?(?:\s+(cards))?\s*$/.test(line.trim())) {
-      const match = line.trim().match(/^:::grid(?:\s+columns=(\d+))?(?:\s+(cards))?\s*$/);
-      const attr = { columns: match && match[1] ? match[1] : undefined, cards: !!(match && match[2]) };
-      const start = i + 1; i++;
-      while (i < lines.length && lines[i].trim() !== ":::") i++;
-      const content = lines.slice(start, i).join("\n");
+    if (/^:::grid(?:\s+.*)?\s*$/.test(line.trim())) {
+      const attrText = line.trim().replace(/^:::grid\s*/, "");
+      const attr = { columns: undefined, widths: undefined, cards: false };
+      attrText.split(/\s+/).forEach(token => {
+        if (token === "cards") attr.cards = true;
+        else if (token.startsWith("columns=")) attr.columns = token.slice(8);
+        else if (token.startsWith("widths=")) attr.widths = token.slice(7);
+      });
+      const cells = [];
+      let cell = [];
+      let depth = 0;
+      i++;
+      while (i < lines.length) {
+        const nested = lines[i].trim();
+        if (depth === 0 && /^:::cell\s*$/.test(nested)) {
+          if (cell.length) cells.push(cell.join("\n"));
+          cell = [];
+          i++;
+          continue;
+        }
+        if (/^:::(question|wrap|grid)(?:\s+.*)?$/.test(nested)) depth++;
+        else if (nested === ":::") {
+          if (depth > 0) depth--;
+          else break;
+        }
+        cell.push(lines[i]);
+        i++;
+      }
+      if (cell.length) cells.push(cell.join("\n"));
       const token = `@@BLOCK${placeholders.length}@@`;
-      placeholders.push({ type: "grid", attr, content });
+      placeholders.push({ type: "grid", attr, cells });
       outLines.push(token);
       if (i < lines.length) i++;
       continue;
@@ -349,6 +490,7 @@ function parseBlocks(markdown) {
   const rendered = md ? md.render(preprocessLegacyMarkdown(custommdSource)) : preprocessLegacyMarkdown(custommdSource);
 
   const renderedWithBlocks = rendered
+    .replace(/<!--HANDOUT_QUESTION_RESET-->/g, () => { numbering.questionNumber = 1; return ""; })
     .replace(/@@LEGACY_BR_(\d+)@@/g, (_, index) => '<br>')
     .replace(/@@BLOCK(\d+)@@/g, (_, indexText) => {
     const index = Number(indexText);
@@ -360,17 +502,18 @@ function parseBlocks(markdown) {
     }
 
     if (block.type === "wrap") {
-      const innerBlocks = parseBlocks(block.content);
+      const innerBlocks = parseBlocks(block.content, numbering);
       const wrappedHtml = innerBlocks.map(blockItem => blockItem.html).join("");
       return `<section class="text-wrap">${wrappedHtml}</section>`;
     }
 
     if (block.type === "grid") {
-      const parts = block.content.split(/^:::cell\s*$/m).map(part => part.trim()).filter(Boolean);
-      const cellHtml = parts.map(part => `<div class="grid-cell">${parseBlocks(part).map(blockItem => blockItem.html).join("")}</div>`).join("");
-      const columns = Math.max(1, Math.min(4, Number(block.attr.columns) || 2));
+      const parts = block.cells.map(part => part.trim()).filter(Boolean);
+      const cellHtml = parts.map(part => `<div class="grid-cell">${parseBlocks(part, numbering).map(blockItem => blockItem.html).join("")}</div>`).join("");
+      const columns = Math.max(1, Math.min(4, Number(block.attr.columns) || parts.length || 2));
       const cardClass = block.attr.cards ? " cards" : "";
-      return `<div class="grid${cardClass}" style="--columns:${columns}">${cellHtml}</div>`;
+      const widths = block.attr.widths ? block.attr.widths.split(",").map(value => { const [numerator, denominator] = value.split("/").map(Number); return Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0 ? `${numerator}fr` : "1fr"; }).join(" ") : `repeat(${columns}, minmax(0, 1fr))`;
+      return `<div class="grid${cardClass}" style="--grid-template:${widths}">${cellHtml}</div>`;
     }
 
     if (block.type === "table") {
@@ -425,7 +568,7 @@ function parseBlocks(markdown) {
 
       let qHtml = `<div class="question" data-qid="${escapeHtml(qid)}" data-qtype="${escapeHtml(qtype)}">`;
       if (prompt.trim()) {
-        const number = questionNumber++;
+        const number = numbering.questionNumber++;
         const promptHtml = renderTextBlock(prompt);
         qHtml += `<div class="question-prompt"><span class="question-num">${number}.</span>${promptHtml}</div>`;
       }
@@ -441,7 +584,7 @@ function parseBlocks(markdown) {
       } else {
         const linesCount = Number(attrs.lines) || 3;
         if (showAnswers && answerLines.length) {
-          const answerHtml = parseBlocks(answerLines.join("\n")).map(blockItem => blockItem.html).join("");
+          const answerHtml = parseBlocks(answerLines.join("\n"), numbering).map(blockItem => blockItem.html).join("");
           qHtml += `<div class="short-answer-key handwritten">${answerHtml}</div>`;
         } else {
           qHtml += answerMarkup(linesCount);
@@ -655,7 +798,14 @@ document.querySelector("#file-input").addEventListener("change", event => loadFi
 document.querySelector("#folder-input").addEventListener("change", event => loadFiles([...event.target.files]));
 source.addEventListener("input", scheduleRender);
 layoutSelect.addEventListener("change", render);
-const toggleAnswersBtn = document.querySelector('#toggle-answers');
+let toggleAnswersBtn = document.querySelector('#toggle-answers');
+if (!toggleAnswersBtn && window.handoutDesktop) {
+  toggleAnswersBtn = document.createElement("button");
+  toggleAnswersBtn.id = "toggle-answers";
+  toggleAnswersBtn.className = "button";
+  toggleAnswersBtn.textContent = "Show answers";
+  document.querySelector(".actions").insertBefore(toggleAnswersBtn, document.querySelector("#print-button"));
+}
 if (toggleAnswersBtn) toggleAnswersBtn.addEventListener('click', () => { showAnswers = !showAnswers; toggleAnswersBtn.classList.toggle('active', showAnswers); toggleAnswersBtn.textContent = showAnswers ? 'Hide answers' : 'Show answers'; render(); });
 document.querySelector("#print-button").addEventListener("click", async () => {
   if (window.handoutDesktop) {
@@ -728,9 +878,263 @@ if (window.handoutDesktop) {
   const openFolderButton = document.querySelector("#open-folder-button");
   const newHandoutButton = document.querySelector("#new-handout-button");
   const saveButton = document.querySelector("#save-button");
+  const openFileButton = document.querySelector("#open-file-button");
+  const recentButton = document.querySelector("#recent-button");
+  const editorPanel = document.querySelector(".editor-panel");
+  const tabBar = document.createElement("div");
+  tabBar.className = "document-tabs";
+  editorPanel.insertBefore(tabBar, editorPanel.firstChild);
+  const editorSurface = document.createElement("div");
+  editorSurface.className = "editor-surface";
+  editorPanel.insertBefore(editorSurface, source);
+  const highlight = document.createElement("pre");
+  highlight.id = "source-highlight";
+  highlight.className = "source-highlight";
+  highlight.setAttribute("aria-hidden", "true");
+  const lineNumbers = document.createElement("pre");
+  lineNumbers.className = "line-numbers";
+  lineNumbers.setAttribute("aria-hidden", "true");
+  const searchHighlight = document.createElement("pre");
+  searchHighlight.className = "search-highlight";
+  searchHighlight.setAttribute("aria-hidden", "true");
+  editorSurface.append(lineNumbers, highlight, searchHighlight, source);
+  source.classList.add("highlighted-source");
   let selectedFile = null;
   let dirty = false;
   let folder = null;
+  const documents = new Map();
+  let activePath = null;
+  let loadingDocument = false;
+
+  function makeToolbarMenu(label, controls) {
+    const menu = document.createElement("div");
+    menu.className = "toolbar-menu";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button menu-button";
+    button.textContent = label;
+    const panel = document.createElement("div");
+    panel.className = "toolbar-menu-panel";
+    controls.forEach(control => control && panel.append(control));
+    menu.append(button, panel);
+    button.addEventListener("click", event => { event.stopPropagation(); panel.classList.toggle("open"); });
+    document.addEventListener("click", event => { if (!menu.contains(event.target)) panel.classList.remove("open"); });
+    document.querySelector(".actions").insertBefore(menu, document.querySelector(".layout-control"));
+  }
+  makeToolbarMenu("File", [openFolderButton, openFileButton, recentButton, newHandoutButton, saveButton]);
+  makeToolbarMenu("View", [toggleAnswersBtn, ...document.querySelectorAll(".panel-restore")]);
+
+  function jumpToPreviewSource(block, target) {
+    const normalizePreviewText = text => text.replace(/^\s*\d+\.\s*/, "").replace(/\s+/g, " ").trim();
+    const clickedSpecial = target.closest(".answer-lines, .inline-answer, .drawing-space");
+    if (clickedSpecial) {
+      const sourcePattern = clickedSpecial.closest(".drawing-space") ? /\{\{space:\d+(?::(?:blank|box|dots))?\}\}/ : /\{\{lines:\d+(?::(?:inline|new))?\}\}/;
+      const sourceLines = source.value.split("\n");
+      const nearbyBlock = clickedSpecial.closest(".handout-block");
+      const previousBlock = nearbyBlock && nearbyBlock.previousElementSibling;
+      const anchorText = [nearbyBlock, previousBlock]
+        .filter(Boolean)
+        .flatMap(candidate => [...candidate.querySelectorAll("h1,h2,h3,h4,p,li")].map(node => node.textContent.trim()))
+        .filter(text => text.length >= 4)
+        .sort((a, b) => b.length - a.length)[0];
+      const anchorLine = anchorText ? sourceLines.findIndex(line => line.toLowerCase().includes(anchorText.toLowerCase().slice(0, 80))) : -1;
+      let specialLine = -1;
+      for (let index = Math.max(0, anchorLine); index < sourceLines.length; index++) {
+        if (sourcePattern.test(sourceLines[index])) { specialLine = index; break; }
+        if (anchorLine !== -1 && index > anchorLine + 20) break;
+      }
+      if (specialLine !== -1) {
+        const start = sourceLines.slice(0, specialLine).join("\n").length + (specialLine ? 1 : 0);
+        source.focus();
+        source.setSelectionRange(start, start + sourceLines[specialLine].length);
+        const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
+        source.scrollTop = Math.max(0, specialLine * lineHeight - source.clientHeight / 3);
+        syncHighlight();
+        statusText.textContent = `Editing line ${specialLine + 1}`;
+        return;
+      }
+    }
+    const prompt = target.closest(".question-prompt");
+    const candidates = [prompt, ...block.querySelectorAll("h1,h2,h3,h4,p,li,th,td")]
+      .filter(Boolean)
+      .map(node => normalizePreviewText(node.textContent))
+      .filter(text => text.length >= 4)
+      .sort((a, b) => b.length - a.length);
+    const lines = source.value.split("\n");
+    const candidate = candidates.find(text => lines.some(line => line.toLowerCase().includes(text.toLowerCase().slice(0, 80))));
+    if (!candidate) { statusText.textContent = "Could not locate this preview block in the Markdown"; return; }
+    const matchIndex = lines.findIndex(line => line.toLowerCase().includes(candidate.toLowerCase().slice(0, 80)));
+    const start = lines.slice(0, matchIndex).join("\n").length + (matchIndex ? 1 : 0);
+    source.focus();
+    source.setSelectionRange(start, start + lines[matchIndex].length);
+    const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
+    source.scrollTop = Math.max(0, matchIndex * lineHeight - source.clientHeight / 3);
+    syncHighlight();
+    statusText.textContent = `Editing line ${matchIndex + 1}`;
+  }
+  preview.addEventListener("click", event => {
+    const block = event.target.closest(".handout-block");
+    if (block) jumpToPreviewSource(block, event.target);
+  });
+
+  function saveActiveState() {
+    if (!selectedFile) return;
+    const documentState = documents.get(selectedFile.path);
+    if (documentState) { documentState.content = source.value; documentState.dirty = dirty; }
+  }
+  function drawTabs() {
+    tabBar.innerHTML = "";
+    for (const documentState of documents.values()) {
+      const tab = document.createElement("div");
+      tab.className = `document-tab${documentState.file.path === activePath ? " active" : ""}`;
+      tab.title = documentState.file.path;
+      const label = document.createElement("button");
+      label.className = "document-tab-label";
+      label.textContent = `${documentState.file.name}${documentState.dirty ? " *" : ""}`;
+      label.title = documentState.file.path;
+      label.addEventListener("click", () => activateDocument(documentState.file.path));
+      const close = document.createElement("button");
+      close.className = "document-tab-close";
+      close.type = "button";
+      close.textContent = "x";
+      close.title = `Close ${documentState.file.name}`;
+      close.setAttribute("aria-label", `Close ${documentState.file.name}`);
+      close.addEventListener("click", event => { event.stopPropagation(); closeDocument(documentState.file.path); });
+      tab.append(label, close);
+      tabBar.append(tab);
+    }
+  }
+  async function closeDocument(filePath) {
+    const documentState = documents.get(filePath);
+    if (!documentState) return;
+    if (documentState.dirty) {
+      const choice = window.confirm(`Save changes to ${documentState.file.name} before closing?`);
+      if (choice) {
+        try { await desktop.saveFile(filePath, documentState.content); }
+        catch (error) { statusText.textContent = `Could not save: ${error.message}`; return; }
+      }
+    }
+    const wasActive = activePath === filePath;
+    documents.delete(filePath);
+    if (!wasActive) { drawTabs(); return; }
+    const next = documents.values().next().value;
+    if (next) activateDocument(next.file.path);
+    else {
+      activePath = null; selectedFile = null; dirty = false; source.value = ""; setAssets([]); markDirty(false); drawTabs(); render();
+    }
+  }
+  function activateDocument(filePath) {
+    saveActiveState();
+    const documentState = documents.get(filePath);
+    if (!documentState) return;
+    activePath = filePath;
+    selectedFile = documentState.file;
+    dirty = documentState.dirty;
+    loadingDocument = true;
+    setSourceContent(documentState.content);
+    loadingDocument = false;
+    setAssets(documentState.assets || []);
+    currentHandoutTitle();
+    markDirty(dirty);
+    drawTabs();
+    render();
+    source.focus();
+  }
+  function addDocument(file, content, assets) {
+    const existing = documents.get(file.path);
+    if (existing) { activateDocument(file.path); return; }
+    documents.set(file.path, { file, content, assets, dirty: false });
+    activateDocument(file.path);
+  }
+
+  function highlightMarkdown(value) {
+    return value.split("\n").map(line => {
+      const escaped = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const lineClass = escaped.includes("|") ? " md-table-line" : "";
+      return escaped.replace(/^(#{1,6})(.*)$|^(:::[^\n]*)$|(\{\{[^}]+\}\})|(`[^`]+`)|(\*\*[^*]+\*\*)|(!?\[[^\]]*\]\([^)]*\))/g, (match, hashes, heading, directive, token, code, strong, link) => {
+        if (hashes) return `<span class="md-heading">${match}</span>`;
+        if (directive) return `<span class="md-directive">${match}</span>`;
+        if (token) return `<span class="md-token">${match}</span>`;
+        if (code) return `<span class="md-code">${match}</span>`;
+        if (strong) return `<span class="md-strong">${match}</span>`;
+        if (link) return `<span class="md-link">${match}</span>`;
+        return match;
+      }) + `<span class="${lineClass.trim()}"></span>`;
+    }).join("\n");
+  }
+  function syncHighlight() {
+    highlight.innerHTML = `${highlightMarkdown(source.value)}\n`;
+    lineNumbers.textContent = Array.from({ length: Math.max(1, source.value.split("\n").length) }, (_, index) => index + 1).join("\n");
+    highlight.scrollTop = source.scrollTop;
+    highlight.scrollLeft = source.scrollLeft;
+    searchHighlight.scrollTop = source.scrollTop;
+    searchHighlight.scrollLeft = source.scrollLeft;
+    lineNumbers.scrollTop = source.scrollTop;
+  }
+  syncHighlight();
+  source.addEventListener("input", syncHighlight);
+  source.addEventListener("scroll", syncHighlight);
+
+  const findBar = document.createElement("div");
+  findBar.className = "find-bar";
+  findBar.innerHTML = '<button type="button" class="find-arrow find-previous" aria-label="Previous match">&#x25B2;</button><input type="search" placeholder="Find in document" aria-label="Find in document"><span class="find-count"></span><button type="button" class="find-arrow find-next" aria-label="Next match">&#x25BC;</button><button type="button" class="panel-toggle find-close">Close</button>';
+  editorPanel.insertBefore(findBar, editorSurface);
+  const findInput = findBar.querySelector("input");
+  const findCount = findBar.querySelector(".find-count");
+  let searchMatches = [];
+  let activeMatch = 0;
+  function renderSearchHighlights() {
+    const query = findInput.value;
+    if (!query) { searchHighlight.innerHTML = ""; searchMatches = []; findCount.textContent = ""; return; }
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    searchMatches = [...source.value.matchAll(new RegExp(escapedQuery, "gi"))];
+    if (!searchMatches.length) { searchHighlight.innerHTML = source.value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); findCount.textContent = "0 matches"; return; }
+    activeMatch = Math.min(activeMatch, searchMatches.length - 1);
+    let cursor = 0;
+    let html = "";
+    searchMatches.forEach((match, index) => {
+      html += source.value.slice(cursor, match.index).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const text = match[0].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      html += `<mark class="${index === activeMatch ? "active" : ""}">${text}</mark>`;
+      cursor = match.index + match[0].length;
+    });
+    searchHighlight.innerHTML = `${html}${source.value.slice(cursor).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}\n`;
+    findCount.textContent = `${activeMatch + 1} of ${searchMatches.length}`;
+  }
+  function selectSearchMatch() {
+    const match = searchMatches[activeMatch];
+    if (!match) return;
+    source.setSelectionRange(match.index, match.index + match[0].length);
+    const lineNumber = source.value.slice(0, match.index).split("\n").length - 1;
+    const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
+    source.scrollTop = Math.max(0, lineNumber * lineHeight - (source.clientHeight / 2) + lineHeight);
+    syncHighlight();
+    renderSearchHighlights();
+  }
+  function findText() {
+    activeMatch = 0;
+    renderSearchHighlights();
+    selectSearchMatch();
+  }
+  function showFind() { findBar.classList.add("open"); findInput.focus(); findInput.select(); }
+  findInput.addEventListener("input", findText);
+  findInput.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || !searchMatches.length) return;
+    event.preventDefault();
+    activeMatch = (activeMatch + 1) % searchMatches.length;
+    selectSearchMatch();
+  });
+  source.addEventListener("input", renderSearchHighlights);
+  findBar.querySelector(".find-previous").addEventListener("click", () => { if (!searchMatches.length) return; activeMatch = (activeMatch - 1 + searchMatches.length) % searchMatches.length; selectSearchMatch(); findInput.focus(); });
+  findBar.querySelector(".find-next").addEventListener("click", () => { if (!searchMatches.length) return; activeMatch = (activeMatch + 1) % searchMatches.length; selectSearchMatch(); findInput.focus(); });
+  findBar.querySelector(".find-close").addEventListener("click", () => {
+    findInput.value = "";
+    activeMatch = 0;
+    renderSearchHighlights();
+    findBar.classList.remove("open");
+  });
+  document.querySelector("#find-button")?.addEventListener("click", showFind);
+  window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") { event.preventDefault(); showFind(); } });
 
   function currentHandoutTitle() {
     const heading = source.value.match(/^ {0,3}#(?!#)\s+(.+?)\s*#*\s*$/m);
@@ -771,12 +1175,48 @@ if (window.handoutDesktop) {
     if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
     if (dirty) await saveCurrent();
     try {
-      setSourceContent(await desktop.readFile(node.path)); selectedFile = node; currentHandoutTitle(); clearActive(); if (button) button.classList.add("active"); markDirty(false); render(); source.focus();
+      const content = await desktop.readFile(node.path); addDocument(node, content, folder ? folder.assets : []); clearActive(); if (button) button.classList.add("active");
     } catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
+  }
+  async function loadStandalone(file) {
+    if (!file) return;
+    if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
+    if (dirty && !await saveCurrent()) return;
+    const documentFile = { type: "file", name: file.name, path: file.path, markdown: true };
+    addDocument(documentFile, file.content, file.assets || []);
+    folderName.textContent = file.name; folder = null; clearActive();
+  }
+  async function chooseFile() {
+    try { await loadStandalone(await desktop.openFile()); }
+    catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
+  }
+  async function chooseRecent() {
+    const recent = await desktop.recentFiles();
+    if (!recent.length) { statusText.textContent = "No recent Markdown files"; return; }
+    const menu = document.createElement("div");
+    menu.className = "recent-menu";
+    recent.forEach(file => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "recent-item";
+      item.textContent = file.name;
+      item.title = file.path;
+      item.addEventListener("click", async () => {
+        menu.remove();
+        try { await loadStandalone(await desktop.openRecent(file.path)); }
+        catch (error) { statusText.textContent = `Could not open recent file: ${error.message}`; }
+      });
+      menu.append(item);
+    });
+    document.body.append(menu);
+    const buttonRect = recentButton.getBoundingClientRect();
+    menu.style.top = `${buttonRect.bottom + 6}px`;
+    menu.style.left = `${Math.max(8, buttonRect.right - menu.offsetWidth)}px`;
+    window.setTimeout(() => document.addEventListener("pointerdown", event => { if (!menu.contains(event.target) && event.target !== recentButton) menu.remove(); }, { once: true }), 0);
   }
   async function saveCurrent() {
     if (!selectedFile) return false;
-    try { await desktop.saveFile(selectedFile.path, source.value); markDirty(false); return true; }
+    try { await desktop.saveFile(selectedFile.path, source.value); dirty = false; const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = false; } markDirty(false); drawTabs(); return true; }
     catch (error) { statusText.textContent = `Could not save: ${error.message}`; return false; }
   }
   function setAssets(assets) { assetMap.clear(); assets.forEach(asset => { assetMap.set(asset.relative, asset.url); assetMap.set(asset.relative.split("/").pop(), asset.url); }); }
@@ -785,7 +1225,7 @@ if (window.handoutDesktop) {
     if (dirty && !await saveCurrent()) return;
     const next = await desktop.openFolder();
     if (!next) return;
-    folder = next; selectedFile = null; source.value = ""; folderName.textContent = next.name; setAssets(next.assets); drawTree(); markDirty(false); render();
+    saveActiveState(); folder = next; selectedFile = null; activePath = null; documents.clear(); source.value = ""; folderName.textContent = next.name; setAssets(next.assets); drawTabs(); drawTree(); markDirty(false); render();
   }
   async function makeNewHandout() {
     if (!folder) return chooseFolder();
@@ -793,8 +1233,10 @@ if (window.handoutDesktop) {
     const node = { type: "file", name: filePath.split(/[\\/]/).pop(), path: filePath, markdown: true };
     folder.tree.push(node); folder.tree.sort((a,b) => a.name.localeCompare(b.name)); drawTree(); await openFile(node, [...tree.querySelectorAll(".file-entry")].find(button => button.title === filePath));
   }
-  source.addEventListener("input", () => { currentHandoutTitle(); markDirty(true); });
+  source.addEventListener("input", () => { if (loadingDocument) return; currentHandoutTitle(); dirty = true; if (selectedFile) { const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = true; } } markDirty(true); drawTabs(); });
   openFolderButton.addEventListener("click", chooseFolder);
+  openFileButton.addEventListener("click", chooseFile);
+  recentButton.addEventListener("click", chooseRecent);
   newHandoutButton.addEventListener("click", makeNewHandout);
   saveButton.addEventListener("click", saveCurrent);
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });

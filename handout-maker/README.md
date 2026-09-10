@@ -63,6 +63,12 @@ on the school network.
 
 The folder picker loads the first Markdown file it finds and embeds the folder's images in the preview and exported HTML. Opening a single Markdown file works best when it has no local images.
 
+The **Handout syntax** menu at the bottom of the editor inserts templates at
+the cursor for headings, questions, answers, drawing spaces, wrapped images,
+grids, card columns, page breaks, and custom styles. Its table picker can
+insert either a Markdown table or an HTML table. HTML tables include a
+`<colgroup>`; change the percentage on a `<col>` to resize that column.
+
 ## Page sizes and print layouts
 
 You can set a document's starting layout with YAML-style front matter at the
@@ -217,6 +223,20 @@ Content in the right column
 ```
 
 Grids support one to four columns. Normal Markdown may be used inside cells.
+
+Use proportional columns with comma-separated fractions:
+
+```text
+:::grid widths=1/3,2/3
+:::cell
+Narrow column
+:::cell
+Wide column
+:::
+```
+
+Questions, answer blocks, image wraps, and nested grids can be placed inside a
+cell. The syntax menu can generate Markdown or HTML versions of these layouts.
 
 To render each cell as an outlined card with slightly rounded corners and
 internal padding, add the `cards` modifier:
