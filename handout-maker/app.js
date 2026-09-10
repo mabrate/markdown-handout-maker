@@ -13,6 +13,7 @@ let liveAssetVersion = "";
 let showAnswers = false;
 let questionCounter = 1;
 let activeHandoutTitle = "handout";
+let totalPoints = 0;
 
 const snippets = {
   heading: "## New section\n\n",
@@ -64,7 +65,39 @@ function makeTable(format, rows, columns) {
   return `${header}\n${separator}\n${body}\n\n`;
 }
 
+function makeQuestion(type, prompt, points, lines, choices, correct, answer) {
+  const pointAttr = points ? ` points=${Math.max(0, Number(points) || 0)}` : "";
+  const safePrompt = prompt.trim() || "Write your response here.";
+  if (type === "mc") {
+    const options = choices.split("\n").map(item => item.trim()).filter(Boolean);
+    const marked = options.map((item, index) => `- ${item}${index === Number(correct) ? " *" : ""}`).join("\n");
+    return `:::question type=mc${pointAttr}\n${safePrompt}\n${marked || "- Choice 1\n- Choice 2 *\n- Choice 3"}\n:::\n\n`;
+  }
+  if (type === "true-false") {
+    const answerText = ["1", "false"].includes(correct) ? "False" : "True";
+    return `:::question type=true-false${pointAttr}\n${safePrompt}\n- True${answerText === "True" ? " *" : ""}\n- False${answerText === "False" ? " *" : ""}\n:::\n\n`;
+  }
+  return `:::question type=short lines=${Math.max(1, Number(lines) || 3)}${pointAttr}\n${safePrompt}${answer.trim() ? `\n:::answer\n${answer.trim()}\n:::` : ""}\n:::\n\n`;
+}
+
+function makeRubric(title, criteria) {
+  const rows = criteria.split("\n").map(row => row.trim()).filter(Boolean).map(row => {
+    const cells = row.split("|").map(cell => cell.trim());
+    return `| ${[cells[0] || "Criterion", cells[1] || "Exceeds", cells[2] || "Meets", cells[3] || "Beginning"].join(" | ")} |`;
+  });
+  return `## ${title.trim() || "Rubric"}\n\n| Criterion | Exceeds | Meets | Beginning |\n| --- | --- | --- | --- |\n${rows.length ? rows.join("\n") : "| Criterion 1 |  |  |  |"}\n\n`;
+}
+
+function addSnippetForm(className, html, target = ".snippet-picker") {
+  const form = document.createElement("div");
+  form.className = `snippet-picker ${className}`;
+  form.innerHTML = html;
+  document.querySelector(target)?.append(form);
+  return form;
+}
+
 function setupSnippetPalette() {
+  document.querySelectorAll('[data-snippet="question"], [data-snippet="multiple-choice"]').forEach(button => { button.hidden = true; });
   const snippetGrid = document.querySelector(".snippet-grid");
   if (snippetGrid && !snippetGrid.querySelector('[data-snippet="checklist"]')) {
     const checklist = document.createElement("button");
@@ -73,14 +106,6 @@ function setupSnippetPalette() {
     checklist.dataset.snippet = "checklist";
     checklist.textContent = "Checklist";
     snippetGrid.insertBefore(checklist, snippetGrid.firstChild?.nextSibling || null);
-  }
-  if (snippetGrid && !snippetGrid.querySelector('[data-snippet="multiple-choice"]')) {
-    const multipleChoice = document.createElement("button");
-    multipleChoice.type = "button";
-    multipleChoice.className = "snippet-button";
-    multipleChoice.dataset.snippet = "multiple-choice";
-    multipleChoice.textContent = "Multiple choice";
-    snippetGrid.insertBefore(multipleChoice, snippetGrid.children[2] || null);
   }
   if (!document.querySelector("#insert-columns")) {
     const picker = document.createElement("div");
@@ -102,6 +127,23 @@ function setupSnippetPalette() {
   if (columnsButton) columnsButton.addEventListener("click", () => {
     insertSnippet(makeColumns(document.querySelector("#column-format").value, document.querySelector("#column-layout").value, document.querySelector("#column-cards").checked));
   });
+  const questionForm = addSnippetForm("question-picker", '<label>Question type <select id="question-type"><option value="short">Short answer</option><option value="mc">Multiple choice</option><option value="true-false">True / false</option></select></label><label>Points <input id="question-points" type="number" min="0" placeholder="optional"></label><label>Lines <input id="question-lines" type="number" min="1" max="30" value="3"></label><label class="wide-field">Prompt <input id="question-prompt" type="text" value="Write your response here."></label><label class="wide-field">Choices / answer <textarea id="question-content" rows="2" placeholder="One choice per line"></textarea></label><label id="question-correct-label">Correct choice <select id="question-correct"><option value="0">First choice</option><option value="1">Second choice</option><option value="2">Third choice</option><option value="3">Fourth choice</option></select></label><button type="button" class="snippet-button" id="insert-question">Insert question</button>', ".question-tools");
+  const rubricForm = addSnippetForm("rubric-picker", '<label>Rubric title <input id="rubric-title" type="text" value="Assessment Rubric"></label><label class="wide-field">Criteria <textarea id="rubric-criteria" rows="3" placeholder="Criterion | Exceeds description | Meets description | Beginning description"></textarea></label><button type="button" class="snippet-button" id="insert-rubric">Insert rubric</button>', ".question-tools");
+  const scoreForm = addSnippetForm("score-picker", '<button type="button" class="snippet-button" id="insert-total-points">Insert total points</button><button type="button" class="snippet-button" id="insert-grade-box">Insert grade box</button><small>Syntax: {{total-points}} and {{grade}}</small>', ".score-tools");
+  const typeSelect = questionForm.querySelector("#question-type");
+  const correctLabel = questionForm.querySelector("#question-correct-label");
+  const contentLabel = questionForm.querySelector("#question-content").closest("label");
+  typeSelect.addEventListener("change", () => {
+    const choiceType = ["mc", "true-false"].includes(typeSelect.value);
+    correctLabel.hidden = !choiceType;
+    contentLabel.hidden = typeSelect.value === "true-false";
+    questionForm.querySelector("#question-correct").innerHTML = typeSelect.value === "true-false" ? '<option value="0">True</option><option value="1">False</option>' : '<option value="0">First choice</option><option value="1">Second choice</option><option value="2">Third choice</option><option value="3">Fourth choice</option>';
+  });
+  typeSelect.dispatchEvent(new Event("change"));
+  questionForm.querySelector("#insert-question").addEventListener("click", () => insertSnippet(makeQuestion(typeSelect.value, questionForm.querySelector("#question-prompt").value, questionForm.querySelector("#question-points").value, questionForm.querySelector("#question-lines").value, questionForm.querySelector("#question-content").value, questionForm.querySelector("#question-correct").value, questionForm.querySelector("#question-content").value)));
+  rubricForm.querySelector("#insert-rubric").addEventListener("click", () => insertSnippet(makeRubric(rubricForm.querySelector("#rubric-title").value, rubricForm.querySelector("#rubric-criteria").value)));
+  scoreForm.querySelector("#insert-total-points").addEventListener("click", () => insertSnippet("{{total-points}}"));
+  scoreForm.querySelector("#insert-grade-box").addEventListener("click", () => insertSnippet("{{grade}}"));
 }
 
 setupSnippetPalette();
@@ -296,7 +338,9 @@ function renderTextBlock(text) {
   if (spaceOnly) return drawingSpaceMarkup(spaceOnly[1], spaceOnly[2]);
   const html = inlineMarkdown(text)
     .replace(/\{\{lines:(\d+)(?::(inline|new))?\}\}/g, (_, count, mode) => answerMarkup(count, mode))
-    .replace(/\{\{space:(\d+)(?::(blank|box|dots))?\}\}/g, (_, count, style) => drawingSpaceMarkup(count, style));
+    .replace(/\{\{space:(\d+)(?::(blank|box|dots))?\}\}/g, (_, count, style) => drawingSpaceMarkup(count, style))
+    .replace(/\{\{total-points\}\}/g, String(totalPoints))
+    .replace(/\{\{grade\}\}/g, `<span class="grade-box">____ / ${totalPoints}</span>`);
   return `<div class="paragraph">${html}</div>`;
 }
 
@@ -484,7 +528,9 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       const match = trimmed.match(/^\{\{space:(\d+)(?::(blank|box|dots))?\}\}$/);
       return drawingSpaceMarkup(Number(match[1]), match[2] || "blank");
     }
-    return line;
+    return line
+      .replace(/\{\{total-points\}\}/g, String(totalPoints))
+      .replace(/\{\{grade\}\}/g, `<span class="grade-box">____ / ${totalPoints}</span>`);
   }).join("\n");
   const md = window.markdownit ? window.markdownit({ html: true }) : null;
   const rendered = md ? md.render(preprocessLegacyMarkdown(custommdSource)) : preprocessLegacyMarkdown(custommdSource);
@@ -575,11 +621,11 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
 
       if (choices.length) {
         qHtml += '<ul class="mc-choices">';
-        for (const choice of choices) {
+        choices.forEach((choice, choiceIndex) => {
           const choiceHtml = inlineMarkdown(choice.content);
           const correctClass = (choice.isCorrect && showAnswers) ? " correct-answer" : "";
-          qHtml += `<li class="mc-choice${correctClass}" data-correct="${choice.isCorrect ? "true" : "false"}">${choiceHtml}</li>`;
-        }
+          qHtml += `<li class="mc-choice${correctClass}" data-correct="${choice.isCorrect ? "true" : "false"}><span class="choice-letter">${String.fromCharCode(65 + choiceIndex)}.</span>${choiceHtml}</li>`;
+        });
         qHtml += '</ul>';
       } else {
         const linesCount = Number(attrs.lines) || 3;
@@ -751,6 +797,11 @@ function paginate(blocks) {
 
 function render() {
   const previousScroll = previewPanel.scrollTop;
+  totalPoints = [...source.value.matchAll(/:::question(?:\s+[^\n]*)?/g)].reduce((sum, match) => {
+    const points = match[0].match(/(?:^|\s)points=(\d+(?:\.\d+)?)(?:\s|$)/);
+    return sum + (points ? Number(points[1]) : 0);
+  }, 0);
+  questionCounter = 1;
   applyLayout();
   paginate(parseBlocks(withoutDocumentSettings(source.value)));
   statusText.textContent = "Preview updated";

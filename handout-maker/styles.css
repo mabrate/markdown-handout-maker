@@ -146,10 +146,16 @@ body {
 .snippet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
 .snippet-button { min-height: 28px; border: 1px solid #b5c3c9; border-radius: 4px; padding: 4px 7px; color: #27414d; background: #fff; font: 650 11px inherit; text-align: left; cursor: pointer; }
 .snippet-button:hover, .snippet-button:focus { outline: 0; border-color: var(--accent); color: #fff; background: var(--accent); }
+.snippet-category { margin-top: 8px; border-top: 1px solid #c8d0d4; }
+.snippet-category > summary { padding: 7px 2px; color: #27414d; font-size: 11px; font-weight: 700; cursor: pointer; }
+.snippet-category:first-of-type { margin-top: 0; border-top: 0; }
 .snippet-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 6px; margin-top: 9px; padding-top: 8px; border-top: 1px solid #c8d0d4; }
 .snippet-picker label { display: flex; flex-direction: column; gap: 2px; color: #52636e; font-size: 10px; font-weight: 700; }
 .snippet-picker .check-control { flex-direction: row; align-items: center; height: 26px; }
 .snippet-picker select { height: 26px; border: 1px solid #b5c3c9; border-radius: 4px; padding: 0 18px 0 5px; color: #273943; background: #fff; font: 12px inherit; }
+.snippet-picker input, .snippet-picker textarea { border: 1px solid #b5c3c9; border-radius: 4px; padding: 4px 5px; color: #273943; background: #fff; font: 12px inherit; }
+.snippet-picker textarea { min-width: 220px; resize: vertical; }
+.snippet-picker .wide-field { flex: 1 1 220px; }
 .snippet-picker .snippet-button { min-height: 26px; }
 .snippet-note { display: block; margin-top: 7px; color: #607080; font-size: 10px; line-height: 1.35; }
 .preview-panel { min-width: 0; overflow: auto; }
@@ -274,6 +280,9 @@ body {
 }
 .question-prompt { display: flex; gap: .12in; align-items: flex-start; }
 .question-num { font-weight: 700; min-width: 1.1em; }
+.choice-letter { display: inline-block; width: .24in; font-weight: 700; }
+.mc-choices { list-style: none; padding-left: 0; }
+.grade-box { display: inline-block; min-width: 1.35in; padding: .08in .12in; border: 1px solid #555; font-weight: 700; text-align: center; white-space: nowrap; }
 .oversize-warning::after {
   content: "This block is taller than a page"; position: absolute; right: .1in; bottom: .1in;
   padding: 3px 5px; color: #8a1c1c; background: #ffe5e5; font: 9px Arial, sans-serif;
