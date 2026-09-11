@@ -103,6 +103,9 @@ body {
 .ai-question-preview li { margin: 5px 0; }
 .ai-dialog footer { justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 12px; }
 .ai-model-path { overflow-wrap: anywhere; color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ai-download-status { margin: 12px 0; }
+.ai-download-status progress { width: 100%; }
+.ai-download-status p { margin: 6px 0 0; color: var(--muted); }
 
 .workspace {
   --file-width: 18vw; --editor-width: 32vw;

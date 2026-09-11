@@ -1166,15 +1166,37 @@ if (window.handoutDesktop) {
   async function showAISettings() {
     const overlay = document.createElement("div");
     overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = '<section class="ai-dialog" role="dialog" aria-modal="true"><header><h2>AI Settings</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="ai-settings-status"></div><footer><button type="button" class="button primary ai-select-model">Select GGUF model</button><button type="button" class="button secondary ai-cancel">Close</button></footer></section>';
+    overlay.innerHTML = '<section class="ai-dialog" role="dialog" aria-modal="true"><header><h2>AI Settings</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="ai-settings-status"></div><div class="ai-download-status" hidden><progress max="100" value="0"></progress><p role="status">Preparing download…</p></div><footer><button type="button" class="button primary ai-download-model">Download recommended model</button><button type="button" class="button secondary ai-cancel-download" hidden>Cancel download</button><button type="button" class="button secondary ai-select-model">Select another GGUF model</button><button type="button" class="button secondary ai-cancel">Close</button></footer></section>';
     document.body.append(overlay);
     const status = overlay.querySelector(".ai-settings-status");
-    const renderStatus = model => { const stateLabels = { installed: "Installed", "not-installed": "Not Installed", loading: "Loading", error: "Error" }; status.innerHTML = `<p><strong>Local AI:</strong> ${escapeAIHtml(stateLabels[model.state] || model.state)}</p><p><strong>Model:</strong> ${escapeAIHtml(model.modelName || "None selected")}</p><p class="ai-model-path">${escapeAIHtml(model.modelPath || "Choose a compatible .gguf file to enable AI tools.")}</p>${model.message ? `<p class="ai-error">${escapeAIHtml(model.message)}</p>` : ""}`; };
-    renderStatus(await desktop.aiStatus());
-    const close = () => overlay.remove();
+    const downloadStatus = overlay.querySelector(".ai-download-status");
+    const downloadButton = overlay.querySelector(".ai-download-model");
+    const cancelDownloadButton = overlay.querySelector(".ai-cancel-download");
+    const selectButton = overlay.querySelector(".ai-select-model");
+    const renderStatus = model => { const stateLabels = { installed: "Installed", "not-installed": "Not Installed", loading: "Loading", error: "Error" }; status.innerHTML = `<p><strong>Local AI:</strong> ${escapeAIHtml(stateLabels[model.state] || model.state)}</p><p><strong>Model:</strong> ${escapeAIHtml(model.modelName || "None selected")}</p><p class="ai-model-path">${escapeAIHtml(model.modelPath || "Download the recommended model or choose a compatible .gguf file.")}</p>${model.message ? `<p class="ai-error">${escapeAIHtml(model.message)}</p>` : ""}`; };
+    const [currentModel, recommendedModel] = await Promise.all([desktop.aiStatus(), desktop.recommendedAIModel()]);
+    renderStatus(currentModel);
+    status.insertAdjacentHTML('beforeend', `<p><strong>Recommended download:</strong> ${escapeAIHtml(recommendedModel.name)} (about 3 GB)</p>`);
+    const close = () => { stopDownloadProgress(); overlay.remove(); };
     overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
     overlay.querySelector(".ai-cancel").addEventListener("click", close);
-    overlay.querySelector(".ai-select-model").addEventListener("click", async event => { event.currentTarget.disabled = true; try { const model = await desktop.selectAIModel(); if (model) renderStatus(model); } catch (error) { status.innerHTML += `<p class="ai-error">${escapeAIHtml(error.message)}</p>`; } finally { event.currentTarget.disabled = false; } });
+    selectButton.addEventListener("click", async event => { event.currentTarget.disabled = true; try { const model = await desktop.selectAIModel(); if (model) renderStatus(model); } catch (error) { status.innerHTML += `<p class="ai-error">${escapeAIHtml(error.message)}</p>`; } finally { event.currentTarget.disabled = false; } });
+    const stopDownloadProgress = desktop.onAIModelDownloadProgress(progress => {
+      downloadStatus.hidden = false;
+      const progressBar = downloadStatus.querySelector("progress");
+      if (progress.percent === null) progressBar.removeAttribute("value"); else progressBar.value = progress.percent;
+      const received = (progress.received / 1024 / 1024).toFixed(0);
+      const total = progress.total ? ` of ${(progress.total / 1024 / 1024).toFixed(0)} MB` : ' MB';
+      downloadStatus.querySelector("p").textContent = `Downloading… ${received}${total}${progress.percent !== null ? ` (${progress.percent}%)` : ''}`;
+    });
+    downloadButton.addEventListener("click", async () => {
+      downloadButton.disabled = true; selectButton.disabled = true; cancelDownloadButton.hidden = false; downloadStatus.hidden = false;
+      downloadStatus.querySelector("p").textContent = "Connecting to download…";
+      try { renderStatus(await desktop.downloadAIModel()); downloadStatus.querySelector("progress").value = 100; downloadStatus.querySelector("p").textContent = "Recommended model downloaded, verified, and selected."; }
+      catch (error) { downloadStatus.querySelector("p").innerHTML = `<span class="ai-error">${escapeAIHtml(error.message)}</span>`; }
+      finally { downloadButton.disabled = false; selectButton.disabled = false; cancelDownloadButton.hidden = true; cancelDownloadButton.disabled = false; }
+    });
+    cancelDownloadButton.addEventListener("click", async () => { cancelDownloadButton.disabled = true; await desktop.cancelAIModelDownload(); downloadStatus.querySelector("p").textContent = "Cancelling download…"; });
   }
 
   const aiMenu = makeToolbarMenu("AI Tools", [makeActionButton("AI Settings", showAISettings)]);

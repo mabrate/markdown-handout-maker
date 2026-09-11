@@ -25,10 +25,12 @@ Build macOS output on macOS for the most dependable signing/notarization path.
 ### Optional local AI
 
 The desktop app includes optional local AI tools powered by `node-llama-cpp`.
-No API key or network service is required. The first time you use **AI Tools**,
-open **AI Settings** and choose a compatible instruction-tuned `.gguf` model.
-The model path is saved in the application's user settings; the model is loaded
-only when an AI action is run and reused for later actions.
+No API key is required after setup. The first time you use **AI Tools**, open
+**AI Settings** and choose **Download recommended model**. The app downloads the
+model to its per-user data folder, verifies its SHA-256 checksum, and selects it
+automatically. You can instead choose any compatible instruction-tuned `.gguf`
+file with **Select another GGUF model**. The model is loaded only when an AI
+action is run and reused for later actions.
 
 Available actions include **Create Vocabulary Table**, **Create Vocabulary Table
 with Examples**, and **Generate Multiple-Choice Distractors**. The vocabulary

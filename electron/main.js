@@ -1,7 +1,9 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const fs = require('fs/promises'); const path = require('path'); const { pathToFileURL } = require('url');
 const { getAction, listActions } = require('./ai/aiActions'); const { LocalAIService } = require('./ai/aiService');
+const { RECOMMENDED_MODEL, downloadRecommendedModel } = require('./ai/modelDownload');
 let mainWindow; let currentRoot = null;
+let modelDownloadController = null;
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const recentLimit = 12;
@@ -24,9 +26,20 @@ ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExt
 ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,'','utf8'); return result.filePath; });
 ipcMain.handle('ai:actions', () => listActions());
 ipcMain.handle('ai:status', () => aiService.status());
+ipcMain.handle('ai:recommended-model', () => ({ name: RECOMMENDED_MODEL.name }));
+ipcMain.handle('ai:download-model', async event => {
+  if (modelDownloadController) throw new Error('A model download is already running.');
+  modelDownloadController = new AbortController();
+  try {
+    const modelsFolder = path.join(app.getPath('userData'), 'models');
+    const modelPath = await downloadRecommendedModel(modelsFolder, progress => event.sender.send('ai:model-download-progress', progress), modelDownloadController.signal);
+    return aiService.selectModel(modelPath);
+  } finally { modelDownloadController = null; }
+});
+ipcMain.handle('ai:cancel-model-download', () => { if (!modelDownloadController) return false; modelDownloadController.abort(); return true; });
 ipcMain.handle('ai:prepare', async (_event, actionId, selectedText = '', options = {}) => { if (typeof actionId !== 'string' || typeof selectedText !== 'string' || selectedText.length > 12000 || !options || typeof options !== 'object') throw new Error('Invalid local AI request.'); const action = getAction(actionId); const safeOptions = { questionCount: Math.max(1, Math.min(20, Number(options.questionCount) || 5)), defaultPoints: Math.max(0, Math.min(100, Number(options.defaultPoints) || 1)), aiContext: typeof options.aiContext === 'string' ? options.aiContext.slice(0, 6000) : '', additionalContext: typeof options.additionalContext === 'string' ? options.additionalContext.slice(0, 6000) : '' }; return `${action.buildPrompt(selectedText, safeOptions)}\n/no_think\nUse English only in every JSON string value. The response must be complete JSON. Do not stop before the final closing brace.`; });
 ipcMain.handle('ai:select-model', async () => { const result = await dialog.showOpenDialog(mainWindow, { title: 'Choose local GGUF model', properties: ['openFile'], filters: [{ name: 'GGUF model', extensions: ['gguf'] }] }); if (result.canceled) return null; return aiService.selectModel(result.filePaths[0]); });
 ipcMain.handle('ai:generate', async (event, actionId, selectedText = '', options = {}) => { if (typeof actionId !== 'string' || typeof selectedText !== 'string' || selectedText.length > 12000 || !options || typeof options !== 'object') throw new Error('Invalid local AI request.'); const action = getAction(actionId); const requestId = typeof options.requestId === 'string' ? options.requestId.slice(0, 100) : ''; const safeOptions = { questionCount: Math.max(1, Math.min(20, Number(options.questionCount) || 5)), defaultPoints: Math.max(0, Math.min(100, Number(options.defaultPoints) || 1)), aiContext: typeof options.aiContext === 'string' ? options.aiContext.slice(0, 6000) : '', additionalContext: typeof options.additionalContext === 'string' ? options.additionalContext.slice(0, 6000) : '', prompt: typeof options.prompt === 'string' ? options.prompt.slice(0, 20000) : '', requestId }; if (!safeOptions.prompt.trim()) throw new Error('Enter a prompt before sending it to AI.'); return aiService.generate(action, selectedText, safeOptions, progress => event.sender.send('ai:progress', requestId, progress)); });
 ipcMain.handle('ai:stop', (_event, requestId) => aiService.stop(typeof requestId === 'string' ? requestId.slice(0, 100) : ''));
 ipcMain.handle('handout:print', (_e, title) => { mainWindow.setTitle(safeDocumentName(title)); return new Promise(resolve => mainWindow.webContents.print({silent:false,printBackground:true},(success,failureReason) => resolve({success,failureReason}))); }); ipcMain.handle('handout:pdf', async (_e,layout,title) => { const documentName=safeDocumentName(title); const result=await dialog.showSaveDialog(mainWindow,{title:'Export handout PDF',defaultPath:`${documentName}.pdf`,filters:[{name:'PDF',extensions:['pdf']}]}); if(result.canceled) return null; await fs.writeFile(result.filePath,await mainWindow.webContents.printToPDF(pdfOptions(layout))); return result.filePath; });
-app.on('before-quit', () => { aiService.dispose(); });
+app.on('before-quit', () => { modelDownloadController?.abort(); aiService.dispose(); });
