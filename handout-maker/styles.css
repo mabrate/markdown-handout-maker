@@ -85,6 +85,12 @@ body {
 .quiz-context-label { grid-column: 1 / -1; }
 .ai-dialog-source { margin: 12px 0; }
 .ai-dialog-source pre { max-height: 120px; overflow: auto; margin: 5px 0 0; padding: 9px; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 4px; background: #f4f6f7; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ai-debug { margin: 12px 0; border: 1px solid var(--line); border-radius: 4px; background: #f8fafb; }
+.ai-debug summary { padding: 8px 10px; cursor: pointer; color: var(--accent-dark); font-weight: 650; }
+.ai-debug pre { max-height: 180px; overflow: auto; margin: 0; padding: 9px; white-space: pre-wrap; border-top: 1px solid var(--line); font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ai-output-label { display: block; padding: 8px 10px 0; color: var(--accent-dark); font-size: 13px; }
+.ai-debug .ai-output { max-height: 240px; background: #fff; }
+.ai-debug .ai-activity { max-height: 110px; color: var(--muted); }
 .ai-status { min-height: 22px; margin: 10px 0; color: var(--accent-dark); font-weight: 650; }
 .ai-error { color: #8a1c1c; }
 .ai-result { min-height: 80px; margin: 12px 0 18px; overflow: auto; }
