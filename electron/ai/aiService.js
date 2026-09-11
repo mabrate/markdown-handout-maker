@@ -78,8 +78,8 @@ class LocalAIService {
     try { return await this.loading; } finally { this.loading = null; }
   }
 
-  async generate(action, selectedText) {
-    if (typeof selectedText !== 'string' || !selectedText.trim()) throw new Error('Select text in the Markdown editor first.');
+  async generate(action, selectedText = '', options = {}) {
+    if (action.requiresSelection && (typeof selectedText !== 'string' || !selectedText.trim())) throw new Error('Select text in the Markdown editor first.');
     const model = await this.ensureLoaded();
     let context;
     let session;
@@ -92,7 +92,7 @@ class LocalAIService {
       if (this.chatWrapper) sessionOptions.chatWrapper = this.chatWrapper;
       session = new this.LlamaChatSession(sessionOptions);
       const grammar = await this.llama.createGrammarForJsonSchema(action.schema);
-      const prompt = `${action.buildPrompt(selectedText.slice(0, 12000))}\n/no_think\nThe response must be complete JSON. Do not stop before the final closing brace.`;
+      const prompt = `${action.buildPrompt(String(selectedText).slice(0, 12000), options)}\n/no_think\nThe response must be complete JSON. Do not stop before the final closing brace.`;
       let responseMeta = await session.promptWithMeta(prompt, { grammar, temperature: 0, maxTokens: 4096, trimWhitespaceSuffix: true });
       let response = responseMeta.responseText;
       if (!response) throw new Error(`The local model produced no JSON response (stop reason: ${responseMeta.stopReason}).`);
@@ -106,7 +106,7 @@ class LocalAIService {
         if (!response) throw new Error(`The local model produced no JSON response (stop reason: ${responseMeta.stopReason}).`);
         parsed = parseJsonResponse(response);
       }
-      const validationError = action.validate(parsed);
+      const validationError = action.validate(parsed, options);
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {

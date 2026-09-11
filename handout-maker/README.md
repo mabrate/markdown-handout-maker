@@ -38,6 +38,21 @@ are validated and shown in a preview dialog. The document is not changed until
 you click **Insert/Replace**. If no model is installed, the rest of the desktop
 application remains fully usable.
 
+Add optional context to a handout's YAML front matter:
+
+```markdown
+---
+ai_context: |
+  This is a middle-school greenhouse lesson about seed starting.
+  Prefer practical examples and short student-friendly language.
+---
+```
+
+The **Generate Quiz Questions** action opens a form for question count, default
+points, and additional teacher direction. It combines that information with
+`ai_context`, previews the generated questions, and only inserts them after
+approval.
+
 ## Use it
 
 ### Edit in a code editor with automatic preview

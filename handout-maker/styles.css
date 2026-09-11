@@ -79,6 +79,10 @@ body {
 .ai-dialog h2 { margin: 0; color: var(--accent-dark); font-size: 18px; }
 .ai-dialog-close { border: 0; color: var(--muted); background: transparent; font-size: 24px; cursor: pointer; }
 .ai-dialog-description { color: var(--muted); }
+.quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+.quiz-options label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.quiz-options input, .quiz-options textarea { border: 1px solid var(--line); border-radius: 4px; padding: 7px; color: var(--ink); background: #fff; font: 13px inherit; }
+.quiz-context-label { grid-column: 1 / -1; }
 .ai-dialog-source { margin: 12px 0; }
 .ai-dialog-source pre { max-height: 120px; overflow: auto; margin: 5px 0 0; padding: 9px; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 4px; background: #f4f6f7; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ai-status { min-height: 22px; margin: 10px 0; color: var(--accent-dark); font-weight: 650; }

@@ -227,6 +227,22 @@ function withoutDocumentSettings(markdown) {
   return markdown.replace(/^---\s*\n[\s\S]*?\n---\s*(?:\n|$)/, "");
 }
 
+function currentAIContext(markdown) {
+  const frontMatter = markdown.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
+  if (!frontMatter) return "";
+  const lines = frontMatter[1].split(/\r?\n/);
+  const start = lines.findIndex(line => /^ai_context\s*:/i.test(line));
+  if (start === -1) return "";
+  const value = lines[start].replace(/^ai_context\s*:\s*/i, "").trim();
+  if (value && !/^[|>]\-?\+?$/.test(value)) return value.replace(/^['"]|['"]$/g, "");
+  const contextLines = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line && !/^\s+/.test(line)) break;
+    contextLines.push(line.replace(/^\s{2}/, "").trimEnd());
+  }
+  return contextLines.join("\n").trim();
+}
+
 const example = `# Ecosystems Review
 
 **Name:** ______________________________  **Date:** _______________
@@ -999,6 +1015,10 @@ if (window.handoutDesktop) {
   }
 
   function makeAIOutput(actionId, result) {
+    if (actionId === "quiz") {
+      const points = Math.max(0, Number(result.defaultPoints) || 1);
+      return result.previewQuestions.map(question => `:::question type=mc points=${points}\n${question.question}\n${question.choices.map(choice => `- ${choice.text}${choice.correct ? " *" : ""}`).join("\n")}\n:::\n`).join("\n");
+    }
     if (actionId === "vocabulary" || actionId === "vocabularyExamples") {
       const withExamples = actionId === "vocabularyExamples";
       const columns = withExamples ? '<col style="width: 22%">\n  <col style="width: 38%">\n  <col style="width: 40%">' : '<col style="width: 25%">\n  <col style="width: 75%">';
@@ -1011,6 +1031,9 @@ if (window.handoutDesktop) {
   }
 
   function showAIPreview(actionId, result) {
+    if (actionId === "quiz") {
+      return result.previewQuestions.map((question, index) => `<div class="ai-question-preview"><strong>${index + 1}. ${escapeAIHtml(question.question)}</strong><ol type="A">${question.choices.map(choice => `<li>${escapeAIHtml(choice.text)}</li>`).join("")}</ol></div>`).join("");
+    }
     if (actionId === "vocabulary" || actionId === "vocabularyExamples") {
       const withExamples = actionId === "vocabularyExamples";
       return `<table class="ai-preview-table"><colgroup>${withExamples ? '<col style="width:22%"><col style="width:38%"><col style="width:40%">' : '<col style="width:25%"><col style="width:75%">'}</colgroup><thead><tr><th>Term</th><th>Definition</th>${withExamples ? "<th>Example</th>" : ""}</tr></thead><tbody>${result.rows.map(row => `<tr><td>${escapeAIHtml(row.term)}</td><td>${escapeAIHtml(row.definition)}</td>${withExamples ? `<td>${escapeAIHtml(row.example)}</td>` : ""}</tr>`).join("")}</tbody></table>`;
@@ -1023,7 +1046,7 @@ if (window.handoutDesktop) {
     const start = source.selectionStart;
     const end = source.selectionEnd;
     const selectedText = source.value.slice(start, end).trim();
-    if (!selectedText) { statusText.textContent = "Select text in the Markdown editor first"; source.focus(); return; }
+    if (action.requiresSelection && !selectedText) { statusText.textContent = "Select text in the Markdown editor first"; source.focus(); return; }
     const overlay = document.createElement("div");
     overlay.className = "ai-dialog-overlay";
     overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-dialog-title"><header><h2 id="ai-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">${escapeAIHtml(action.description)}</p><div class="ai-dialog-source"><strong>Selected text</strong><pre>${escapeAIHtml(selectedText)}</pre></div><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-regenerate">Generate</button><button type="button" class="button primary ai-approve" disabled>Insert/Replace</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
@@ -1041,7 +1064,7 @@ if (window.handoutDesktop) {
       if (busy) return;
       busy = true; generateButton.disabled = true; approveButton.disabled = true; status.textContent = "Generating… Loading local model…"; resultArea.innerHTML = "";
       try {
-        result = await desktop.generateAI(action.id, selectedText);
+        result = await desktop.generateAI(action.id, selectedText, { aiContext: currentAIContext(source.value) });
         if (action.id === "distractors") result.previewChoices = shuffleChoices(result.correctAnswer, result.distractors);
         resultArea.innerHTML = showAIPreview(action.id, result);
         status.textContent = "Review the proposed result before inserting it.";
@@ -1050,6 +1073,43 @@ if (window.handoutDesktop) {
         result = null;
         status.textContent = error.message || "AI generation failed.";
       } finally { busy = false; generateButton.disabled = false; }
+    }
+    generateButton.addEventListener("click", generate);
+    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
+    generate();
+  }
+
+  function openQuizAction(action) {
+    const start = source.selectionStart;
+    const end = source.selectionEnd;
+    const overlay = document.createElement("div");
+    overlay.className = "ai-dialog-overlay";
+    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="quiz-dialog-title"><header><h2 id="quiz-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">Create multiple-choice questions that match this handout.</p><div class="quiz-options"><label>Number of questions <input class="quiz-count" type="number" min="1" max="20" value="5"></label><label>Default points <input class="quiz-points" type="number" min="0" max="100" value="1"></label><label class="quiz-context-label">Additional context <textarea class="quiz-context" rows="4" placeholder="Topics, standards, reading level, or directions for the quiz"></textarea></label></div><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-regenerate">Generate</button><button type="button" class="button primary ai-approve" disabled>Insert Quiz</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
+    document.body.append(overlay);
+    const status = overlay.querySelector(".ai-status");
+    const resultArea = overlay.querySelector(".ai-result");
+    const generateButton = overlay.querySelector(".ai-regenerate");
+    const approveButton = overlay.querySelector(".ai-approve");
+    let result = null;
+    let busy = false;
+    const close = () => overlay.remove();
+    overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
+    overlay.querySelector(".ai-cancel").addEventListener("click", close);
+    async function generate() {
+      if (busy) return;
+      const questionCount = Number(overlay.querySelector(".quiz-count").value) || 5;
+      const defaultPoints = Number(overlay.querySelector(".quiz-points").value) || 1;
+      const additionalContext = overlay.querySelector(".quiz-context").value;
+      busy = true; generateButton.disabled = true; approveButton.disabled = true; status.textContent = "Generating… Loading local model…"; resultArea.innerHTML = "";
+      try {
+        result = await desktop.generateAI(action.id, source.value.slice(start, end), { questionCount, defaultPoints, additionalContext, aiContext: currentAIContext(source.value) });
+        result.defaultPoints = defaultPoints;
+        result.previewQuestions = result.questions.map(question => ({ question: question.question, choices: shuffleChoices(question.correctAnswer, question.distractors) }));
+        resultArea.innerHTML = showAIPreview(action.id, result);
+        status.textContent = "Review the proposed quiz before inserting it.";
+        approveButton.disabled = false;
+      } catch (error) { result = null; status.textContent = error.message || "AI generation failed."; }
+      finally { busy = false; generateButton.disabled = false; }
     }
     generateButton.addEventListener("click", generate);
     approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
@@ -1071,7 +1131,7 @@ if (window.handoutDesktop) {
   }
 
   const aiMenu = makeToolbarMenu("AI Tools", [makeActionButton("AI Settings", showAISettings)]);
-  desktop.aiActions().then(actions => actions.reverse().forEach(action => aiMenu.panel.insertBefore(makeActionButton(action.label, () => openAIAction(action)), aiMenu.panel.firstChild))).catch(error => { console.error("[local-ai] Could not load actions", error); });
+  desktop.aiActions().then(actions => actions.reverse().forEach(action => aiMenu.panel.insertBefore(makeActionButton(action.label, () => action.id === "quiz" ? openQuizAction(action) : openAIAction(action)), aiMenu.panel.firstChild))).catch(error => { console.error("[local-ai] Could not load actions", error); });
 
   function jumpToPreviewSource(block, target) {
     const normalizePreviewText = text => text.replace(/^\s*\d+\.\s*/, "").replace(/\s+/g, " ").trim();

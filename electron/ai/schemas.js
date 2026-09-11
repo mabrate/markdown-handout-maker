@@ -25,6 +25,19 @@ function validateDistractors(value) {
   return null;
 }
 
+function validateQuiz(value, options = {}) {
+  const requested = Math.max(1, Math.min(20, Number(options.questionCount) || 5));
+  if (!value || !Array.isArray(value.questions) || value.questions.length !== requested) return `The model must return exactly ${requested} quiz questions.`;
+  for (const question of value.questions) {
+    if (!question || !isNonEmptyString(question.question) || !isNonEmptyString(question.correctAnswer) || !Array.isArray(question.distractors) || question.distractors.length !== 3) {
+      return 'Each quiz question needs a question, correct answer, and exactly three distractors.';
+    }
+    const answers = [question.correctAnswer, ...question.distractors].map(item => String(item).trim().toLowerCase());
+    if (answers.some(item => !item) || new Set(answers).size !== answers.length) return 'The quiz contains duplicate or empty answer choices.';
+  }
+  return null;
+}
+
 const schemas = {
   vocabulary: {
     type: 'object', additionalProperties: false, required: ['rows'],
@@ -37,7 +50,11 @@ const schemas = {
   distractors: {
     type: 'object', additionalProperties: false, required: ['question', 'correctAnswer', 'distractors'],
     properties: { question: { type: 'string' }, correctAnswer: { type: 'string' }, distractors: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'string' } } }
+  },
+  quiz: {
+    type: 'object', additionalProperties: false, required: ['questions'],
+    properties: { questions: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'object', additionalProperties: false, required: ['question', 'correctAnswer', 'distractors'], properties: { question: { type: 'string' }, correctAnswer: { type: 'string' }, distractors: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'string' } } } } } }
   }
 };
 
-module.exports = { schemas, validators: { vocabulary: value => validateVocabulary(value, false), vocabularyExamples: value => validateVocabulary(value, true), distractors: validateDistractors } };
+module.exports = { schemas, validators: { vocabulary: value => validateVocabulary(value, false), vocabularyExamples: value => validateVocabulary(value, true), distractors: validateDistractors, quiz: validateQuiz } };
