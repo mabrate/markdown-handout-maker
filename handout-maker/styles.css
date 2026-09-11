@@ -82,6 +82,8 @@ body {
 .quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
 .quiz-options label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
 .quiz-options input, .quiz-options textarea { border: 1px solid var(--line); border-radius: 4px; padding: 7px; color: var(--ink); background: #fff; font: 13px inherit; }
+.ai-prompt-label { display: flex; flex-direction: column; gap: 4px; margin: 14px 0; color: var(--muted); font-size: 12px; font-weight: 650; }
+.ai-prompt { min-height: 150px; resize: vertical; border: 1px solid var(--line); border-radius: 4px; padding: 9px; color: var(--ink); background: #fff; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .quiz-context-label { grid-column: 1 / -1; }
 .ai-dialog-source { margin: 12px 0; }
 .ai-dialog-source pre { max-height: 120px; overflow: auto; margin: 5px 0 0; padding: 9px; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 4px; background: #f4f6f7; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }

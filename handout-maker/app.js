@@ -1074,26 +1074,31 @@ if (window.handoutDesktop) {
     if (action.requiresSelection && !selectedText) { statusText.textContent = "Select text in the Markdown editor first"; source.focus(); return; }
     const overlay = document.createElement("div");
     overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-dialog-title"><header><h2 id="ai-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">${escapeAIHtml(action.description)}</p><div class="ai-dialog-source"><strong>Selected text</strong><pre>${escapeAIHtml(selectedText)}</pre></div><details class="ai-debug"><summary>Model context & activity</summary><pre class="ai-context">Waiting for the request to be prepared…</pre><strong class="ai-output-label">Live model output (not yet parsed)</strong><pre class="ai-output" aria-live="polite">Waiting for generated text…</pre><pre class="ai-activity" aria-live="polite"></pre></details><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-regenerate">Generate</button><button type="button" class="button primary ai-approve" disabled>Insert/Replace</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
+    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-dialog-title"><header><h2 id="ai-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">${escapeAIHtml(action.description)}</p><div class="ai-dialog-source"><strong>Selected text</strong><pre>${escapeAIHtml(selectedText)}</pre></div><label class="ai-prompt-label">Prompt to send <textarea class="ai-prompt" rows="10" spellcheck="true" aria-label="Prompt to send to AI"></textarea></label><details class="ai-debug"><summary>Model context & activity</summary><pre class="ai-context">Waiting for the request to be prepared…</pre><strong class="ai-output-label">Live model output (not yet parsed)</strong><pre class="ai-output" aria-live="polite">Waiting for generated text…</pre><pre class="ai-activity" aria-live="polite"></pre></details><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-reset-prompt">Reset prompt</button><button type="button" class="button primary ai-regenerate">Send to AI</button><button type="button" class="button secondary ai-stop" disabled>Stop AI</button><button type="button" class="button primary ai-approve" disabled>Insert/Replace</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
     document.body.append(overlay);
     overlay.querySelector('.ai-debug').open = true;
     const status = overlay.querySelector(".ai-status");
     const resultArea = overlay.querySelector(".ai-result");
     const generateButton = overlay.querySelector(".ai-regenerate");
+    const promptInput = overlay.querySelector(".ai-prompt");
+    const stopButton = overlay.querySelector(".ai-stop");
     const approveButton = overlay.querySelector(".ai-approve");
     const updateActivity = setupAIActivity(overlay, status);
     let result = null;
     let busy = false;
-    const close = () => overlay.remove();
+    let activeRequestId = null;
+    const preparePrompt = async () => { promptInput.value = await desktop.prepareAI(action.id, selectedText, { aiContext: currentAIContext(source.value) }); status.textContent = "Edit the prompt if needed, then choose Send to AI."; };
+    const close = () => { if (activeRequestId) void desktop.stopAI(activeRequestId); overlay.remove(); };
     overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
     overlay.querySelector(".ai-cancel").addEventListener("click", close);
     async function generate() {
       if (busy) return;
-      busy = true; generateButton.disabled = true; approveButton.disabled = true; status.textContent = "Preparing local AI request…"; resultArea.innerHTML = "";
+      busy = true; generateButton.disabled = true; stopButton.disabled = false; approveButton.disabled = true; status.textContent = "Preparing local AI request…"; resultArea.innerHTML = "";
       const requestId = createAIRequestId();
+      activeRequestId = requestId;
       const stopProgress = desktop.onAIProgress((progressRequestId, progress) => { if (progressRequestId === requestId) updateActivity(progress); });
       try {
-        result = await desktop.generateAI(action.id, selectedText, { aiContext: currentAIContext(source.value), requestId });
+        result = await desktop.generateAI(action.id, selectedText, { aiContext: currentAIContext(source.value), prompt: promptInput.value, requestId });
         if (action.id === "distractors") result.previewChoices = shuffleChoices(result.correctAnswer, result.distractors);
         resultArea.innerHTML = showAIPreview(action.id, result);
         status.textContent = "Review the proposed result before inserting it.";
@@ -1101,11 +1106,13 @@ if (window.handoutDesktop) {
       } catch (error) {
         result = null;
         status.textContent = error.message || "AI generation failed.";
-      } finally { stopProgress(); busy = false; generateButton.disabled = false; }
+      } finally { stopProgress(); busy = false; activeRequestId = null; generateButton.disabled = false; stopButton.disabled = true; }
     }
     generateButton.addEventListener("click", generate);
+    overlay.querySelector(".ai-reset-prompt").addEventListener("click", () => preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; }));
+    stopButton.addEventListener("click", async () => { if (activeRequestId) { stopButton.disabled = true; status.textContent = "Stopping AI generation…"; await desktop.stopAI(activeRequestId); } });
     approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
-    generate();
+    preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; });
   }
 
   function openQuizAction(action) {
@@ -1113,17 +1120,21 @@ if (window.handoutDesktop) {
     const end = source.selectionEnd;
     const overlay = document.createElement("div");
     overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="quiz-dialog-title"><header><h2 id="quiz-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">Create multiple-choice questions that match this handout.</p><div class="quiz-options"><label>Number of questions <input class="quiz-count" type="number" min="1" max="20" value="5"></label><label>Default points <input class="quiz-points" type="number" min="0" max="100" value="1"></label><label class="quiz-context-label">Additional context <textarea class="quiz-context" rows="4" placeholder="Topics, standards, reading level, or directions for the quiz"></textarea></label></div><details class="ai-debug"><summary>Model context & activity</summary><pre class="ai-context">Waiting for the request to be prepared…</pre><strong class="ai-output-label">Live model output (not yet parsed)</strong><pre class="ai-output" aria-live="polite">Waiting for generated text…</pre><pre class="ai-activity" aria-live="polite"></pre></details><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-regenerate">Generate</button><button type="button" class="button primary ai-approve" disabled>Insert Quiz</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
+    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="quiz-dialog-title"><header><h2 id="quiz-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">Create multiple-choice questions that match this handout.</p><div class="quiz-options"><label>Number of questions <input class="quiz-count" type="number" min="1" max="20" value="5"></label><label>Default points <input class="quiz-points" type="number" min="0" max="100" value="1"></label><label class="quiz-context-label">Additional context <textarea class="quiz-context" rows="4" placeholder="Topics, standards, reading level, or directions for the quiz"></textarea></label></div><label class="ai-prompt-label">Prompt to send <textarea class="ai-prompt" rows="10" spellcheck="true" aria-label="Prompt to send to AI"></textarea></label><details class="ai-debug"><summary>Model context & activity</summary><pre class="ai-context">Waiting for the request to be prepared…</pre><strong class="ai-output-label">Live model output (not yet parsed)</strong><pre class="ai-output" aria-live="polite">Waiting for generated text…</pre><pre class="ai-activity" aria-live="polite"></pre></details><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-reset-prompt">Reset prompt</button><button type="button" class="button primary ai-regenerate">Send to AI</button><button type="button" class="button secondary ai-stop" disabled>Stop AI</button><button type="button" class="button primary ai-approve" disabled>Insert Quiz</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
     document.body.append(overlay);
     overlay.querySelector('.ai-debug').open = true;
     const status = overlay.querySelector(".ai-status");
     const resultArea = overlay.querySelector(".ai-result");
     const generateButton = overlay.querySelector(".ai-regenerate");
+    const promptInput = overlay.querySelector(".ai-prompt");
+    const stopButton = overlay.querySelector(".ai-stop");
     const approveButton = overlay.querySelector(".ai-approve");
     const updateActivity = setupAIActivity(overlay, status);
     let result = null;
     let busy = false;
-    const close = () => overlay.remove();
+    let activeRequestId = null;
+    const preparePrompt = async () => { promptInput.value = await desktop.prepareAI(action.id, source.value, { questionCount: Number(overlay.querySelector(".quiz-count").value) || 5, defaultPoints: Number(overlay.querySelector(".quiz-points").value) || 1, additionalContext: overlay.querySelector(".quiz-context").value, aiContext: currentAIContext(source.value) }); status.textContent = "Edit the prompt if needed, then choose Send to AI."; };
+    const close = () => { if (activeRequestId) void desktop.stopAI(activeRequestId); overlay.remove(); };
     overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
     overlay.querySelector(".ai-cancel").addEventListener("click", close);
     async function generate() {
@@ -1131,22 +1142,25 @@ if (window.handoutDesktop) {
       const questionCount = Number(overlay.querySelector(".quiz-count").value) || 5;
       const defaultPoints = Number(overlay.querySelector(".quiz-points").value) || 1;
       const additionalContext = overlay.querySelector(".quiz-context").value;
-      busy = true; generateButton.disabled = true; approveButton.disabled = true; status.textContent = "Preparing local AI request…"; resultArea.innerHTML = "";
+      busy = true; generateButton.disabled = true; stopButton.disabled = false; approveButton.disabled = true; status.textContent = "Preparing local AI request…"; resultArea.innerHTML = "";
       const requestId = createAIRequestId();
+      activeRequestId = requestId;
       const stopProgress = desktop.onAIProgress((progressRequestId, progress) => { if (progressRequestId === requestId) updateActivity(progress); });
       try {
-        result = await desktop.generateAI(action.id, source.value, { questionCount, defaultPoints, additionalContext, aiContext: currentAIContext(source.value), requestId });
+        result = await desktop.generateAI(action.id, source.value, { questionCount, defaultPoints, additionalContext, aiContext: currentAIContext(source.value), prompt: promptInput.value, requestId });
         result.defaultPoints = defaultPoints;
         result.previewQuestions = result.questions.map(question => ({ question: question.question, choices: shuffleChoices(question.correctAnswer, question.distractors) }));
         resultArea.innerHTML = showAIPreview(action.id, result);
         status.textContent = "Review the proposed quiz before inserting it.";
         approveButton.disabled = false;
       } catch (error) { result = null; status.textContent = error.message || "AI generation failed."; }
-      finally { stopProgress(); busy = false; generateButton.disabled = false; }
+      finally { stopProgress(); busy = false; activeRequestId = null; generateButton.disabled = false; stopButton.disabled = true; }
     }
     generateButton.addEventListener("click", generate);
+    overlay.querySelector(".ai-reset-prompt").addEventListener("click", () => preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; }));
+    stopButton.addEventListener("click", async () => { if (activeRequestId) { stopButton.disabled = true; status.textContent = "Stopping AI generation…"; await desktop.stopAI(activeRequestId); } });
     approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
-    generate();
+    preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; });
   }
 
   async function showAISettings() {

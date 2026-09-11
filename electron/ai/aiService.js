@@ -36,6 +36,7 @@ class LocalAIService {
     this.inferenceBackend = '';
     this.loading = null;
     this.statusMessage = '';
+    this.activeRequests = new Map();
   }
 
   async status() {
@@ -101,6 +102,9 @@ class LocalAIService {
 
   async generate(action, selectedText = '', options = {}, onProgress = () => {}) {
     if (action.requiresSelection && (typeof selectedText !== 'string' || !selectedText.trim())) throw new Error('Select text in the Markdown editor first.');
+    const requestId = typeof options.requestId === 'string' ? options.requestId : '';
+    const abortController = new AbortController();
+    if (requestId) this.activeRequests.set(requestId, abortController);
     onProgress({ stage: 'preparing', message: 'Preparing the local AI request…' });
     const model = await this.ensureLoaded(onProgress);
     let context;
@@ -115,7 +119,7 @@ class LocalAIService {
       if (this.chatWrapper) sessionOptions.chatWrapper = this.chatWrapper;
       session = new this.LlamaChatSession(sessionOptions);
       const grammar = await this.llama.createGrammarForJsonSchema(action.schema);
-      const prompt = `${action.buildPrompt(String(selectedText).slice(0, 12000), options)}\n/no_think\nUse English only in every JSON string value. The response must be complete JSON. Do not stop before the final closing brace.`;
+      const prompt = String(options.prompt || `${action.buildPrompt(String(selectedText).slice(0, 12000), options)}\n/no_think\nUse English only in every JSON string value. The response must be complete JSON. Do not stop before the final closing brace.`).trim();
       const maxTokens = maxTokensForAction(action.id, options);
       onProgress({ stage: 'context-ready', message: 'Model context is ready.', prompt, selectedCharacters: String(selectedText).slice(0, 12000).length, contextSize: context.contextSize, maxTokens, inferenceBackend: this.inferenceBackend });
       let responseMeta;
@@ -133,7 +137,8 @@ class LocalAIService {
         }
       };
       onProgress({ stage: 'generating', message: 'Generating locally… waiting for the first response token.', generatedCharacters });
-      responseMeta = await session.promptWithMeta(prompt, { grammar, temperature: 0, maxTokens, trimWhitespaceSuffix: true, onTextChunk: reportTextProgress });
+      responseMeta = await session.promptWithMeta(prompt, { grammar, temperature: 0, maxTokens, trimWhitespaceSuffix: true, onTextChunk: reportTextProgress, signal: abortController.signal, stopOnAbortSignal: true });
+      if (abortController.signal.aborted || responseMeta.stopReason === 'abort') throw new Error('AI generation stopped.');
       let response = responseMeta.responseText;
       onProgress({ stage: 'response-complete', message: `Received ${response.length} characters; checking the response…`, generatedCharacters, generatedText: response });
       if (!response) throw new Error(`The local model produced no JSON response (stop reason: ${responseMeta.stopReason}).`);
@@ -145,7 +150,8 @@ class LocalAIService {
         onProgress({ stage: 'retrying', message: 'The first response was incomplete; retrying once.' });
         generatedCharacters = 0;
         generatedText = '';
-        responseMeta = await session.promptWithMeta('/no_think\nReturn the complete JSON object again. Use English only in every JSON string value. Output JSON only, including the final closing brace.', { grammar, temperature: 0, maxTokens, trimWhitespaceSuffix: true, onTextChunk: reportTextProgress });
+        responseMeta = await session.promptWithMeta('/no_think\nReturn the complete JSON object again. Use English only in every JSON string value. Output JSON only, including the final closing brace.', { grammar, temperature: 0, maxTokens, trimWhitespaceSuffix: true, onTextChunk: reportTextProgress, signal: abortController.signal, stopOnAbortSignal: true });
+        if (abortController.signal.aborted || responseMeta.stopReason === 'abort') throw new Error('AI generation stopped.');
         response = responseMeta.responseText;
         onProgress({ stage: 'response-complete', message: `Received ${response.length} characters from the retry; checking the response…`, generatedCharacters, generatedText: response });
         if (!response) throw new Error(`The local model produced no JSON response (stop reason: ${responseMeta.stopReason}).`);
@@ -159,9 +165,17 @@ class LocalAIService {
       console.error(`[local-ai] ${action.id} failed`, error);
       throw new Error(error.message || 'AI generation failed.');
     } finally {
+      if (requestId) this.activeRequests.delete(requestId);
       session?.dispose?.({ disposeSequence: true });
       context?.dispose?.();
     }
+  }
+
+  stop(requestId) {
+    const controller = this.activeRequests.get(requestId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
   }
 
   async dispose() {
