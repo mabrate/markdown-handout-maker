@@ -47,6 +47,11 @@ async function refreshApplicationMenu() {
       { type: 'separator' }, { label: 'Page Layout', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
     ] },
+    { label: 'AI', submenu: [
+      { label: 'AI Settings…', click: () => sendMenuCommand('ai-settings') },
+      { type: 'separator' },
+      ...listActions().map(action => ({ label: action.label, click: () => sendMenuCommand('ai-action', action) }))
+    ] },
     { role: 'windowMenu' },
     { role: 'help', submenu: [{ label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
   ]));
@@ -60,7 +65,6 @@ ipcMain.handle('files:recent', async () => { const settings = await readSettings
 ipcMain.handle('files:open-recent', async (_e, filePath) => { if (!markdownExtension.test(filePath)) throw Error('Only Markdown files can be opened.'); const content=await fs.readFile(filePath,'utf8'); currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {path:filePath,name:path.basename(filePath),content,assets:await assetsIn(currentRoot),recentFiles}; });
 ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExtension.test(p)) throw Error('File is outside selected folder.'); await addRecent(p); return fs.readFile(p,'utf8'); }); ipcMain.handle('files:save', async (_e,p,content) => { if(!markdownExtension.test(p)||(!isInsideRoot(p)&&path.dirname(p)!==currentRoot)) throw Error('File is outside selected folder.'); await fs.writeFile(p,content,'utf8'); return true; });
 ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,'','utf8'); return result.filePath; });
-ipcMain.handle('ai:actions', () => listActions());
 ipcMain.handle('ai:status', () => aiService.status());
 ipcMain.handle('ai:recommended-model', () => ({ name: RECOMMENDED_MODEL.name }));
 ipcMain.handle('ai:download-model', async event => {

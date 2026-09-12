@@ -149,22 +149,6 @@ function setupSnippetPalette() {
 setupSnippetPalette();
 
 function setupPanelControls() {
-  const actions = document.querySelector(".actions");
-  const restores = {};
-  for (const panel of ["file", "editor"]) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "button panel-restore";
-    button.textContent = panel === "file" ? "Show files" : "Show editor";
-    button.hidden = true;
-    button.addEventListener("click", () => {
-      workspace.classList.remove(`${panel}-collapsed`);
-      button.hidden = true;
-      document.querySelector(`.panel-toggle[data-panel="${panel}"]`).textContent = "Hide";
-    });
-    actions?.append(button);
-    restores[panel] = button;
-  }
   for (const toggle of document.querySelectorAll(".panel-toggle")) {
     if (!toggle.dataset.panel) continue;
     toggle.addEventListener("click", () => {
@@ -173,7 +157,6 @@ function setupPanelControls() {
       const collapsed = workspace.classList.toggle(collapsedClass);
       toggle.textContent = collapsed ? "Show" : "Hide";
       toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${panel === "file" ? "handout files" : "Markdown editor"}`);
-      restores[panel].hidden = !collapsed;
     });
   }
 
@@ -955,32 +938,6 @@ if (window.handoutDesktop) {
   let activePath = null;
   let loadingDocument = false;
 
-  function makeToolbarMenu(label, controls) {
-    const menu = document.createElement("div");
-    menu.className = "toolbar-menu";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "button menu-button";
-    button.textContent = label;
-    const panel = document.createElement("div");
-    panel.className = "toolbar-menu-panel";
-    controls.forEach(control => control && panel.append(control));
-    menu.append(button, panel);
-    button.addEventListener("click", event => { event.stopPropagation(); panel.classList.toggle("open"); });
-    document.addEventListener("click", event => { if (!menu.contains(event.target)) panel.classList.remove("open"); });
-    document.querySelector(".actions").append(menu);
-    return { menu, panel };
-  }
-
-  function makeActionButton(label, handler) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "button";
-    button.textContent = label;
-    button.addEventListener("click", handler);
-    return button;
-  }
-
   function escapeAIHtml(value) {
     return escapeHtml(String(value));
   }
@@ -1178,9 +1135,6 @@ if (window.handoutDesktop) {
     });
     cancelDownloadButton.addEventListener("click", async () => { cancelDownloadButton.disabled = true; await desktop.cancelAIModelDownload(); downloadStatus.querySelector("p").textContent = "Cancelling download…"; });
   }
-
-  const aiMenu = makeToolbarMenu("AI Tools", [makeActionButton("AI Settings", showAISettings)]);
-  desktop.aiActions().then(actions => actions.reverse().forEach(action => aiMenu.panel.insertBefore(makeActionButton(action.label, () => action.id === "quiz" ? openQuizAction(action) : openAIAction(action)), aiMenu.panel.firstChild))).catch(error => { console.error("[local-ai] Could not load actions", error); });
 
   function jumpToPreviewSource(block, target) {
     const normalizePreviewText = text => text.replace(/^\s*\d+\.\s*/, "").replace(/\s+/g, " ").trim();
@@ -1482,6 +1436,8 @@ if (window.handoutDesktop) {
     if (command === 'set-layout' && layouts[payload]) { layoutSelect.value = payload; return render(); }
     if (command === 'find') return showFind();
     if (command === 'open-handout-guide') return openRecentPath(payload);
+    if (command === 'ai-settings') return showAISettings();
+    if (command === 'ai-action' && payload?.id) return payload.id === 'quiz' ? openQuizAction(payload) : openAIAction(payload);
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
