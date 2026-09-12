@@ -1137,6 +1137,17 @@ if (window.handoutDesktop) {
   }
 
   function jumpToPreviewSource(block, target) {
+    function selectAndRevealLine(lines, lineIndex) {
+      const start = lines.slice(0, lineIndex).join("\n").length + (lineIndex ? 1 : 0);
+      source.focus();
+      source.setSelectionRange(start, start + lines[lineIndex].length);
+      const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
+      source.scrollTop = Math.max(0, lineIndex * lineHeight - source.clientHeight / 3);
+      // Focusing a textarea can adjust its scroll position after this handler.
+      // Sync on the next frame so the visual overlays follow the final position.
+      requestAnimationFrame(syncHighlight);
+    }
+
     const normalizePreviewText = text => text.replace(/^\s*\d+\.\s*/, "").replace(/\s+/g, " ").trim();
     const clickedSpecial = target.closest(".answer-lines, .inline-answer, .drawing-space");
     if (clickedSpecial) {
@@ -1156,12 +1167,7 @@ if (window.handoutDesktop) {
         if (anchorLine !== -1 && index > anchorLine + 20) break;
       }
       if (specialLine !== -1) {
-        const start = sourceLines.slice(0, specialLine).join("\n").length + (specialLine ? 1 : 0);
-        source.focus();
-        source.setSelectionRange(start, start + sourceLines[specialLine].length);
-        const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
-        source.scrollTop = Math.max(0, specialLine * lineHeight - source.clientHeight / 3);
-        syncHighlight();
+        selectAndRevealLine(sourceLines, specialLine);
         statusText.textContent = `Editing line ${specialLine + 1}`;
         return;
       }
@@ -1176,12 +1182,7 @@ if (window.handoutDesktop) {
     const candidate = candidates.find(text => lines.some(line => line.toLowerCase().includes(text.toLowerCase().slice(0, 80))));
     if (!candidate) { statusText.textContent = "Could not locate this preview block in the Markdown"; return; }
     const matchIndex = lines.findIndex(line => line.toLowerCase().includes(candidate.toLowerCase().slice(0, 80)));
-    const start = lines.slice(0, matchIndex).join("\n").length + (matchIndex ? 1 : 0);
-    source.focus();
-    source.setSelectionRange(start, start + lines[matchIndex].length);
-    const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
-    source.scrollTop = Math.max(0, matchIndex * lineHeight - source.clientHeight / 3);
-    syncHighlight();
+    selectAndRevealLine(lines, matchIndex);
     statusText.textContent = `Editing line ${matchIndex + 1}`;
   }
   preview.addEventListener("click", event => {
