@@ -7,6 +7,7 @@ let modelDownloadController = null;
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const recentLimit = 12;
+const productName = 'The Markdown Handout Maker';
 async function readSettings() { try { return JSON.parse(await fs.readFile(settingsPath(), 'utf8')); } catch { return {}; } }
 async function saveSettings(settings) { await fs.mkdir(app.getPath('userData'), { recursive: true }); await fs.writeFile(settingsPath(), JSON.stringify(settings), 'utf8'); }
 function isInsideRoot(filePath) { return currentRoot && (filePath === currentRoot || filePath.startsWith(currentRoot + path.sep)); }
@@ -27,6 +28,8 @@ async function refreshApplicationMenu() {
     ['Half letter landscape', 'half-landscape'], ['Two portrait half-sheet copies', 'half-duplicate-portrait'],
     ['Two landscape half-sheet copies', 'half-duplicate-landscape'], ['11×17 booklet', 'booklet']
   ];
+  const quickSnippet = (label, id, accelerator) => ({ label, ...(accelerator ? { accelerator } : {}), click: () => sendMenuCommand('insert-snippet', id) });
+  const snippetDialog = (label, id) => ({ label, click: () => sendMenuCommand('open-snippet-dialog', id) });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
@@ -40,6 +43,21 @@ async function refreshApplicationMenu() {
       { type: 'separator' }, ...(process.platform === 'darwin' ? [{ role: 'close' }] : [{ role: 'quit' }])
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, { type: 'separator' }, { label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => sendMenuCommand('find') }] },
+    { label: 'Snippets', submenu: [
+      { label: 'Basics', submenu: [
+        quickSnippet('Heading', 'heading'), quickSnippet('Checklist', 'checklist'),
+        quickSnippet('Answer Lines', 'lines'), quickSnippet('Inline Answer', 'inline-lines'),
+        quickSnippet('Drawing Space', 'space'), quickSnippet('Box Space', 'box'), quickSnippet('Dot-grid Space', 'dots')
+      ] },
+      { label: 'Questions & Assessment', submenu: [
+        snippetDialog('Question…', 'question'), snippetDialog('Rubric…', 'rubric'),
+        { type: 'separator' }, quickSnippet('Total Points', 'total-points'), quickSnippet('Grade Box', 'grade-box')
+      ] },
+      { label: 'Layout', submenu: [
+        quickSnippet('Image + Text Wrap', 'wrap'), snippetDialog('Columns…', 'columns'),
+        snippetDialog('Table…', 'table'), quickSnippet('Page Break', 'pagebreak'), quickSnippet('Style Block', 'style')
+      ] }
+    ] },
     { label: 'View', submenu: [
       { label: 'Toggle Answers', click: () => sendMenuCommand('toggle-answers') },
       { label: 'Toggle Handout Files Panel', click: () => sendMenuCommand('toggle-panel', 'file') },
@@ -54,11 +72,12 @@ async function refreshApplicationMenu() {
       ...listActions().map(action => ({ label: action.label, click: () => sendMenuCommand('ai-action', action) }))
     ] },
     { role: 'windowMenu' },
-    { role: 'help', submenu: [{ label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
+    { role: 'help', submenu: [{ label: 'Markdown Handout Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
   ]));
 }
 async function addRecent(filePath) { const settings = await readSettings(); const recentFiles = [filePath, ...(settings.recentFiles || []).filter(item => item !== filePath)].slice(0, recentLimit); await saveSettings({...settings, recentFiles}); await refreshApplicationMenu(); return recentFiles; }
-function createWindow() { mainWindow = new BrowserWindow({ width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } }); mainWindow.loadFile(path.join(__dirname,'..','renderer','index.html')); }
+function createWindow() { mainWindow = new BrowserWindow({ title:productName, icon:path.join(__dirname,'..','assets','markdown-handout-maker-icon.png'), width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } }); mainWindow.loadFile(path.join(__dirname,'..','renderer','index.html')); }
+app.setName(productName);
 app.whenReady().then(async () => { await refreshApplicationMenu(); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); }); app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 ipcMain.handle('folders:open', async () => { const settings = await readSettings(); const result = await dialog.showOpenDialog(mainWindow,{title:'Choose handout folder',defaultPath:settings.lastFolder,properties:['openDirectory']}); if(result.canceled) return null; currentRoot=result.filePaths[0]; await saveSettings({...settings,lastFolder:currentRoot}); return {path:currentRoot,name:path.basename(currentRoot),tree:await readTree(currentRoot),assets:await assetsIn(currentRoot)}; });
 ipcMain.handle('files:open-dialog', async () => { const settings = await readSettings(); const result = await dialog.showOpenDialog(mainWindow,{title:'Open Markdown file',defaultPath:settings.lastFolder,properties:['openFile'],filters:[{name:'Markdown',extensions:['md','markdown','mdown']}]}); if(result.canceled) return null; const filePath=result.filePaths[0]; currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {path:filePath,name:path.basename(filePath),content:await fs.readFile(filePath,'utf8'),assets:await assetsIn(currentRoot),recentFiles}; });

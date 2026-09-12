@@ -1,11 +1,11 @@
-# Handout Maker Desktop
+# The Markdown Handout Maker
 
 An offline-first desktop editor for creating printable classroom handouts from
 Markdown. It combines a local file browser, Markdown editor, live paginated
 preview, native printing, and PDF export in one Electron application for
 Linux and macOS.
 
-Handout Maker works with local files. Your handouts stay in folders you choose;
+The Markdown Handout Maker works with local files. Your handouts stay in folders you choose;
 they are not uploaded to a service.
 
 ## Features

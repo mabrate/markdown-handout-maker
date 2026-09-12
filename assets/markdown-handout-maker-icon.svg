@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="The Markdown Handout Maker logo">
+  <rect width="512" height="512" rx="112" fill="#174458"/>
+  <path d="M142 92h154l82 82v246H142z" fill="#fff"/>
+  <path d="M296 92v82h82" fill="#bfe7e8"/>
+  <path d="M188 236h136M188 286h98" fill="none" stroke="#9ab1bb" stroke-width="24" stroke-linecap="round"/>
+  <path d="m190 354 39 39 94-106" fill="none" stroke="#ef8b3a" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -29,7 +29,9 @@ const snippets = {
   grid: ":::grid columns=2\n:::cell\nColumn one\n:::cell\nColumn two\n:::\n\n",
   cards: ":::grid columns=2 cards\n:::cell\n### Box one\nContent\n:::cell\n### Box two\nContent\n:::\n\n",
   pagebreak: ":::pagebreak\n\n",
-  style: "<style>\n/* Custom styles for this handout */\n.handout-page h1 { color: #215b75; }\n</style>\n\n"
+  style: "<style>\n/* Custom styles for this handout */\n.handout-page h1 { color: #215b75; }\n</style>\n\n",
+  "total-points": "{{total-points}}",
+  "grade-box": "{{grade}}"
 };
 
 function makeColumns(format, widths, cards = false) {
@@ -77,7 +79,7 @@ function makeQuestion(type, prompt, points, lines, choices, correct, answer) {
   const safePrompt = prompt.trim() || "Write your response here.";
   if (type === "mc") {
     const options = choices.split("\n").map(item => item.trim()).filter(Boolean);
-    const marked = options.map((item, index) => `- ${item}${index === Number(correct) ? " *" : ""}`).join("\n");
+    const marked = options.map(item => `- ${item.replace(/^[-*+]\s+/, "")}`).join("\n");
     return `:::question type=mc${pointAttr}\n${safePrompt}\n${marked || "- Choice 1\n- Choice 2 *\n- Choice 3"}\n:::\n\n`;
   }
   if (type === "true-false") {
@@ -95,65 +97,50 @@ function makeRubric(title, criteria) {
   return `## ${title.trim() || "Rubric"}\n\n| Criterion | Exceeds | Meets | Beginning |\n| --- | --- | --- | --- |\n${rows.length ? rows.join("\n") : "| Criterion 1 |  |  |  |"}\n\n`;
 }
 
-function addSnippetForm(className, html, target = ".snippet-picker") {
-  const form = document.createElement("div");
-  form.className = `snippet-picker ${className}`;
-  form.innerHTML = html;
-  document.querySelector(target)?.append(form);
-  return form;
-}
-
-function setupSnippetPalette() {
-  document.querySelectorAll('[data-snippet="question"], [data-snippet="multiple-choice"]').forEach(button => { button.hidden = true; });
-  const snippetGrid = document.querySelector(".snippet-grid");
-  if (snippetGrid && !snippetGrid.querySelector('[data-snippet="checklist"]')) {
-    const checklist = document.createElement("button");
-    checklist.type = "button";
-    checklist.className = "snippet-button";
-    checklist.dataset.snippet = "checklist";
-    checklist.textContent = "Checklist";
-    snippetGrid.insertBefore(checklist, snippetGrid.firstChild?.nextSibling || null);
+function openSnippetDialog(kind) {
+  const overlay = document.createElement("div");
+  overlay.className = "ai-dialog-overlay snippet-dialog-overlay";
+  const close = () => { overlay.remove(); source.focus(); };
+  const submit = event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (kind === "question") insertSnippet(makeQuestion(form.elements.type.value, form.elements.prompt.value, form.elements.points.value, form.elements.lines?.value, form.elements.content?.value || "", form.elements.correct?.value || "0", form.elements.answer?.value || ""));
+    else if (kind === "rubric") insertSnippet(makeRubric(form.elements.title.value, form.elements.criteria.value));
+    else if (kind === "columns") insertSnippet(makeColumns(form.elements.format.value, form.elements.widths.value, form.elements.cards.checked));
+    else if (kind === "table") insertSnippet(makeTable(form.elements.format.value, Number(form.elements.rows.value), Number(form.elements.columns.value)));
+    close();
+  };
+  const shells = {
+    question: `<h2 id="snippet-dialog-title">Insert a question</h2><p class="ai-dialog-description" id="question-guidance">Choose a question type. The options below will adapt to match it.</p><div class="form-grid question-form-grid"><div class="form-wide question-control-row"><label class="question-type-field">Question type<select name="type"><option value="short">Short answer</option><option value="mc">Multiple choice</option><option value="true-false">True / false</option></select></label><label class="compact-field">Points <span class="field-hint">optional</span><input name="points" type="number" min="0" max="100" placeholder="0"></label><label class="compact-field" data-question-field="lines">Answer lines<input name="lines" type="number" min="1" max="30" value="3"></label></div><label class="form-wide">Question prompt<input name="prompt" value="Write your response here." required></label><label class="form-wide" data-question-field="answer">Teacher answer <span class="field-hint">shown only when answers are toggled on</span><textarea name="answer" rows="3" placeholder="Enter the expected answer (optional)"></textarea></label><label class="form-wide" data-question-field="choices" hidden>Answer choices <span class="field-hint">one choice per line; add an asterisk (*) after the correct answer</span><textarea name="content" rows="5" placeholder="Choice 1&#10;Correct choice *&#10;Choice 3"></textarea></label><fieldset class="form-wide true-false-answer" data-question-field="true-false" hidden><legend>Correct answer</legend><label><input name="correct" type="radio" value="0" checked> True</label><label><input name="correct" type="radio" value="1"> False</label></fieldset></div>`,
+    rubric: `<h2 id="snippet-dialog-title">Insert a rubric</h2><p class="ai-dialog-description">Add one criterion per line. Separate the four columns with vertical bars.</p><div class="form-grid"><label class="form-wide">Rubric title<input name="title" value="Assessment Rubric"></label><label class="form-wide">Criteria<textarea name="criteria" rows="6" placeholder="Scientific reasoning | Thorough explanation | Clear explanation | Needs support"></textarea></label></div>`,
+    columns: `<h2 id="snippet-dialog-title">Insert columns</h2><p class="ai-dialog-description">Choose a layout, then decide whether each column needs a visible box.</p><div class="form-grid"><label>Format<select name="format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Column widths<select name="widths"><option value="1/2,1/2">Two equal</option><option value="1/3,2/3">One third + two thirds</option><option value="2/3,1/3">Two thirds + one third</option><option value="1/4,1/4,1/2">Quarter + quarter + half</option><option value="1/4,1/4,1/4,1/4">Four equal</option></select></label><label class="checkbox-field form-wide"><input name="cards" type="checkbox"> Draw a box around each column</label></div>`,
+    table: `<h2 id="snippet-dialog-title">Insert a table</h2><p class="ai-dialog-description">Set the table size. HTML format allows custom column widths in the generated markup.</p><div class="form-grid"><label>Format<select name="format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Body rows<input name="rows" type="number" min="1" max="20" value="3"></label><label>Columns<input name="columns" type="number" min="2" max="10" value="3"></label></div>`
+  };
+  const actionLabels = { question: "Insert question", rubric: "Insert rubric", columns: "Insert columns", table: "Insert table" };
+  overlay.innerHTML = `<form class="ai-dialog snippet-dialog" role="dialog" aria-modal="true" aria-labelledby="snippet-dialog-title"><header>${shells[kind].match(/<h2[\s\S]*?<\/h2>/)?.[0] || ""}<button type="button" class="ai-dialog-close" aria-label="Close">×</button></header>${shells[kind].replace(/<h2[\s\S]*?<\/h2>/, "")}<footer><button type="button" class="button secondary snippet-cancel">Cancel</button><button type="submit" class="button primary">${actionLabels[kind]}</button></footer></form>`;
+  document.body.append(overlay);
+  const form = overlay.querySelector("form");
+  form.addEventListener("submit", submit);
+  overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
+  overlay.querySelector(".snippet-cancel").addEventListener("click", close);
+  overlay.addEventListener("mousedown", event => { if (event.target === overlay) close(); });
+  overlay.addEventListener("keydown", event => { if (event.key === "Escape") close(); });
+  if (kind === "question") {
+    const type = form.elements.type;
+    const updateQuestionFields = () => {
+      const isShort = type.value === "short";
+      const isMultipleChoice = type.value === "mc";
+      form.querySelector('[data-question-field="lines"]').hidden = !isShort;
+      form.querySelector('[data-question-field="answer"]').hidden = !isShort;
+      form.querySelector('[data-question-field="choices"]').hidden = !isMultipleChoice;
+      form.querySelector('[data-question-field="true-false"]').hidden = type.value !== "true-false";
+      overlay.querySelector("#question-guidance").textContent = isShort ? "Students receive writing lines. Add an optional teacher answer for the answer key." : isMultipleChoice ? "Enter one answer choice per line. Mark the correct answer with an asterisk (*)." : "Choose whether True or False is the correct answer.";
+    };
+    type.addEventListener("change", updateQuestionFields);
+    updateQuestionFields();
   }
-  if (!document.querySelector("#insert-columns")) {
-    const picker = document.createElement("div");
-    picker.className = "snippet-picker";
-    picker.innerHTML = '<label>Columns <select id="column-format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Widths <select id="column-layout"><option value="1/2,1/2">1/2 + 1/2</option><option value="1/3,2/3">1/3 + 2/3</option><option value="2/3,1/3">2/3 + 1/3</option><option value="1/4,3/4">1/4 + 3/4</option><option value="3/4,1/4">3/4 + 1/4</option><option value="1/4,1/4,1/2">1/4 + 1/4 + 1/2</option><option value="1/4,1/4,1/4,1/4">Four equal</option></select></label><label class="check-control"><input id="column-cards" type="checkbox"> Boxes</label><button type="button" class="snippet-button" id="insert-columns">Insert columns</button>';
-    document.querySelector(".snippet-picker")?.after(picker);
-  }
-  document.querySelectorAll(".snippet-button[data-snippet]").forEach(button => {
-    button.addEventListener("click", () => insertSnippet(snippets[button.dataset.snippet]));
-  });
-  const tableButton = document.querySelector("#insert-table");
-  if (tableButton) tableButton.addEventListener("click", () => {
-    const format = document.querySelector("#table-format").value;
-    const rows = Number(document.querySelector("#table-rows").value);
-    const columns = Number(document.querySelector("#table-columns").value);
-    insertSnippet(makeTable(format, rows, columns));
-  });
-  const columnsButton = document.querySelector("#insert-columns");
-  if (columnsButton) columnsButton.addEventListener("click", () => {
-    insertSnippet(makeColumns(document.querySelector("#column-format").value, document.querySelector("#column-layout").value, document.querySelector("#column-cards").checked));
-  });
-  const questionForm = addSnippetForm("question-picker", '<label>Question type <select id="question-type"><option value="short">Short answer</option><option value="mc">Multiple choice</option><option value="true-false">True / false</option></select></label><label>Points <input id="question-points" type="number" min="0" placeholder="optional"></label><label>Lines <input id="question-lines" type="number" min="1" max="30" value="3"></label><label class="wide-field">Prompt <input id="question-prompt" type="text" value="Write your response here."></label><label class="wide-field">Choices / answer <textarea id="question-content" rows="2" placeholder="One choice per line"></textarea></label><label id="question-correct-label">Correct choice <select id="question-correct"><option value="0">First choice</option><option value="1">Second choice</option><option value="2">Third choice</option><option value="3">Fourth choice</option></select></label><button type="button" class="snippet-button" id="insert-question">Insert question</button>', ".question-tools");
-  const rubricForm = addSnippetForm("rubric-picker", '<label>Rubric title <input id="rubric-title" type="text" value="Assessment Rubric"></label><label class="wide-field">Criteria <textarea id="rubric-criteria" rows="3" placeholder="Criterion | Exceeds description | Meets description | Beginning description"></textarea></label><button type="button" class="snippet-button" id="insert-rubric">Insert rubric</button>', ".question-tools");
-  const scoreForm = addSnippetForm("score-picker", '<button type="button" class="snippet-button" id="insert-total-points">Insert total points</button><button type="button" class="snippet-button" id="insert-grade-box">Insert grade box</button><small>Syntax: {{total-points}} and {{grade}}</small>', ".score-tools");
-  const typeSelect = questionForm.querySelector("#question-type");
-  const correctLabel = questionForm.querySelector("#question-correct-label");
-  const contentLabel = questionForm.querySelector("#question-content").closest("label");
-  typeSelect.addEventListener("change", () => {
-    const choiceType = ["mc", "true-false"].includes(typeSelect.value);
-    correctLabel.hidden = !choiceType;
-    contentLabel.hidden = typeSelect.value === "true-false";
-    questionForm.querySelector("#question-correct").innerHTML = typeSelect.value === "true-false" ? '<option value="0">True</option><option value="1">False</option>' : '<option value="0">First choice</option><option value="1">Second choice</option><option value="2">Third choice</option><option value="3">Fourth choice</option>';
-  });
-  typeSelect.dispatchEvent(new Event("change"));
-  questionForm.querySelector("#insert-question").addEventListener("click", () => insertSnippet(makeQuestion(typeSelect.value, questionForm.querySelector("#question-prompt").value, questionForm.querySelector("#question-points").value, questionForm.querySelector("#question-lines").value, questionForm.querySelector("#question-content").value, questionForm.querySelector("#question-correct").value, questionForm.querySelector("#question-content").value)));
-  rubricForm.querySelector("#insert-rubric").addEventListener("click", () => insertSnippet(makeRubric(rubricForm.querySelector("#rubric-title").value, rubricForm.querySelector("#rubric-criteria").value)));
-  scoreForm.querySelector("#insert-total-points").addEventListener("click", () => insertSnippet("{{total-points}}"));
-  scoreForm.querySelector("#insert-grade-box").addEventListener("click", () => insertSnippet("{{grade}}"));
+  form.querySelector("input, select, textarea")?.focus();
 }
-
-setupSnippetPalette();
 
 function setupPanelControls() {
   for (const toggle of document.querySelectorAll(".panel-toggle")) {
@@ -1426,7 +1413,7 @@ if (window.handoutDesktop) {
     const fallback = selectedFile ? selectedFile.name.replace(/\.(md|markdown|mdown)$/i, "") : "handout";
     const title = headingText || fallback;
     activeHandoutTitle = title;
-    document.title = title;
+    document.title = `${title} — The Markdown Handout Maker`;
     return title;
   }
 
@@ -1507,6 +1494,8 @@ if (window.handoutDesktop) {
     if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
     if (command === 'set-layout' && layouts[payload]) { layoutSelect.value = payload; return render(); }
     if (command === 'find') return showFind();
+    if (command === 'insert-snippet' && snippets[payload]) return insertSnippet(snippets[payload]);
+    if (command === 'open-snippet-dialog' && ['question', 'rubric', 'columns', 'table'].includes(payload)) return openSnippetDialog(payload);
     if (command === 'open-handout-guide') return openRecentPath(payload);
     if (command === 'ai-settings') return showAISettings();
     if (command === 'ai-action' && payload?.id) return payload.id === 'quiz' ? openQuizAction(payload) : openAIAction(payload);
