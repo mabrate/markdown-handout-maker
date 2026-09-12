@@ -67,7 +67,7 @@ Git.
 
 ```text
 electron/          Electron main process, isolated preload bridge, and local AI services
-handout-maker/     Renderer, styles, preview logic, and bundled Markdown support
+renderer/           Renderer, styles, preview logic, and bundled Markdown support
 demo/              Example handouts and the Handout Markdown authoring guide
 tests/             Focused Node-based checks
 ```

@@ -14,8 +14,8 @@
     "appId": "org.classroom.handoutmaker",
     "productName": "Handout Maker",
     "files": [
-      "handout-maker/**/*",
-      "!handout-maker/**/*.gguf",
+      "renderer/**/*",
+      "!renderer/**/*.gguf",
       "electron/**/*",
       "package.json"
     ],

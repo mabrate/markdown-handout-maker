@@ -247,18 +247,14 @@ const example = `# Ecosystems Review
 
 **Name:** ______________________________  **Date:** _______________
 
-:::wrap
-![A pond ecosystem](examples/pond-example.svg){.float-right width=2in}
-
 An ecosystem includes living things and their physical environment.
 
 Plants, animals, water, sunlight, and soil interact within this pond. Changes
 to one part of the system can affect the other parts.
-:::
 
 ## 1. Observing an ecosystem
 
-Name two living and two nonliving parts of the pond shown here.
+Name two living and two nonliving parts of a pond ecosystem.
 
 {{lines:3}}
 
