@@ -134,10 +134,14 @@ body {
   position: relative; z-index: 1; width: 100%; min-height: 0; flex: 1; resize: none; border: 0; outline: 0;
   padding: 20px 20px 20px 58px; color: #21303a; background: transparent;
   font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Keep physical lines identical to the visual overlays. */
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
 }
 .editor-surface { position: relative; display: flex; min-height: 0; flex: 1; background: #fafbfb; overflow: hidden; }
-.source-highlight { position: absolute; z-index: 0; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: #21303a; background: #fafbfb; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: break-word; pointer-events: none; }
-.search-highlight { position: absolute; z-index: 1; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: break-word; pointer-events: none; }
+.source-highlight { position: absolute; z-index: 0; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: #21303a; background: #fafbfb; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
+.search-highlight { position: absolute; z-index: 1; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
 .search-highlight mark { color: transparent; background: #f2d36b99; border-radius: 2px; }
 .search-highlight mark.active { background: #ef9f3dcc; outline: 1px solid #b86b18; }
 .line-numbers { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: 45px; overflow: hidden; margin: 0; padding: 20px 8px 20px 0; border-right: 1px solid #d7dfe2; color: #8a9aa3; background: #f0f4f5; font: 12px/1.8667 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: right; user-select: none; pointer-events: none; }
