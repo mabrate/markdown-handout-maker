@@ -45,6 +45,7 @@ async function refreshApplicationMenu() {
       { label: 'Toggle Handout Files Panel', click: () => sendMenuCommand('toggle-panel', 'file') },
       { label: 'Toggle Markdown Editor Panel', click: () => sendMenuCommand('toggle-panel', 'editor') },
       { type: 'separator' }, { label: 'Page Layout', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
+      { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
     ] },
     { label: 'AI', submenu: [
