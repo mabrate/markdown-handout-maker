@@ -4,11 +4,7 @@
 <body class="desktop-app">
   <header class="toolbar">
     <div class="brand"><span class="brand-mark">H</span><div><strong>Handout Maker</strong><small>Markdown to classroom-ready pages</small></div></div>
-    <div class="actions">
-      <button id="open-folder-button" class="button secondary">Open Folder</button><button id="open-file-button" class="button secondary">Open File</button><button id="recent-button" class="button secondary">Open Recent</button><button id="new-handout-button" class="button secondary">New Handout</button><button id="save-button" class="button secondary">Save</button>
-      <label class="layout-control">Page Settings <select id="layout-select" title="Page size and print layout"><option value="letter">Letter</option><option value="letter-landscape">Letter landscape</option><option value="a4">A4</option><option value="half-portrait">Half letter portrait</option><option value="half-landscape">Half letter landscape</option><option value="half-duplicate-portrait">Two portrait half-sheet copies</option><option value="half-duplicate-landscape">Two landscape half-sheet copies</option><option value="booklet">11×17 booklet</option></select></label>
-      <button id="export-button" class="button secondary">Export PDF</button><button id="print-button" class="button primary">Print</button>
-    </div>
+    <div class="actions"><select id="layout-select" hidden><option value="letter">Letter</option><option value="letter-landscape">Letter landscape</option><option value="a4">A4</option><option value="half-portrait">Half letter portrait</option><option value="half-landscape">Half letter landscape</option><option value="half-duplicate-portrait">Two portrait half-sheet copies</option><option value="half-duplicate-landscape">Two landscape half-sheet copies</option><option value="booklet">11×17 booklet</option></select></div>
   </header>
   <main class="workspace">
     <aside class="file-panel"><div class="panel-heading"><label>Handout files</label><span id="folder-name">No folder</span><button class="panel-toggle" data-panel="file" type="button" aria-label="Collapse handout files">Hide</button></div><div id="file-tree" class="file-tree"><p class="empty-tree">Choose a folder to begin.</p></div></aside>

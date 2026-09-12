@@ -861,24 +861,15 @@ document.querySelector("#file-input").addEventListener("change", event => loadFi
 document.querySelector("#folder-input").addEventListener("change", event => loadFiles([...event.target.files]));
 source.addEventListener("input", scheduleRender);
 layoutSelect.addEventListener("change", render);
-let toggleAnswersBtn = document.querySelector('#toggle-answers');
-if (!toggleAnswersBtn && window.handoutDesktop) {
-  toggleAnswersBtn = document.createElement("button");
-  toggleAnswersBtn.id = "toggle-answers";
-  toggleAnswersBtn.className = "button";
-  toggleAnswersBtn.textContent = "Show answers";
-  document.querySelector(".actions").insertBefore(toggleAnswersBtn, document.querySelector("#print-button"));
-}
-if (toggleAnswersBtn) toggleAnswersBtn.addEventListener('click', () => { showAnswers = !showAnswers; toggleAnswersBtn.classList.toggle('active', showAnswers); toggleAnswersBtn.textContent = showAnswers ? 'Hide answers' : 'Show answers'; render(); });
-document.querySelector("#print-button").addEventListener("click", async () => {
+async function printHandout() {
   if (window.handoutDesktop) {
     const result = await window.handoutDesktop.print(activeHandoutTitle);
     statusText.textContent = result.success ? "Print job sent" : `Could not print: ${result.failureReason || "unknown error"}`;
     return;
   }
   window.print();
-});
-document.querySelector("#export-button").addEventListener("click", async () => {
+}
+async function exportHandout() {
   if (window.handoutDesktop) {
     const savedPath = await window.handoutDesktop.exportPdf(layoutSelect.value, activeHandoutTitle);
     if (savedPath) statusText.textContent = "PDF exported";
@@ -899,7 +890,7 @@ document.querySelector("#export-button").addEventListener("click", async () => {
   link.download = "handout.html";
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-});
+}
 
 async function checkLiveSource(initial = false) {
   try {
@@ -938,11 +929,6 @@ if (window.handoutDesktop) {
   const desktop = window.handoutDesktop;
   const tree = document.querySelector("#file-tree");
   const folderName = document.querySelector("#folder-name");
-  const openFolderButton = document.querySelector("#open-folder-button");
-  const newHandoutButton = document.querySelector("#new-handout-button");
-  const saveButton = document.querySelector("#save-button");
-  const openFileButton = document.querySelector("#open-file-button");
-  const recentButton = document.querySelector("#recent-button");
   const editorPanel = document.querySelector(".editor-panel");
   const tabBar = document.createElement("div");
   tabBar.className = "document-tabs";
@@ -982,11 +968,9 @@ if (window.handoutDesktop) {
     menu.append(button, panel);
     button.addEventListener("click", event => { event.stopPropagation(); panel.classList.toggle("open"); });
     document.addEventListener("click", event => { if (!menu.contains(event.target)) panel.classList.remove("open"); });
-    document.querySelector(".actions").insertBefore(menu, document.querySelector(".layout-control"));
+    document.querySelector(".actions").append(menu);
     return { menu, panel };
   }
-  makeToolbarMenu("File", [openFolderButton, openFileButton, recentButton, newHandoutButton, saveButton]);
-  makeToolbarMenu("View", [toggleAnswersBtn, ...document.querySelectorAll(".panel-restore")]);
 
   function makeActionButton(label, handler) {
     const button = document.createElement("button");
@@ -1422,7 +1406,6 @@ if (window.handoutDesktop) {
 
   function markDirty(value) {
     dirty = value;
-    saveButton.classList.toggle("dirty", dirty);
     if (selectedFile) statusText.textContent = `${selectedFile.name}${dirty ? " · unsaved" : ""}`;
   }
 
@@ -1464,30 +1447,7 @@ if (window.handoutDesktop) {
     try { await loadStandalone(await desktop.openFile()); }
     catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
   }
-  async function chooseRecent() {
-    const recent = await desktop.recentFiles();
-    if (!recent.length) { statusText.textContent = "No recent Markdown files"; return; }
-    const menu = document.createElement("div");
-    menu.className = "recent-menu";
-    recent.forEach(file => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "recent-item";
-      item.textContent = file.name;
-      item.title = file.path;
-      item.addEventListener("click", async () => {
-        menu.remove();
-        try { await loadStandalone(await desktop.openRecent(file.path)); }
-        catch (error) { statusText.textContent = `Could not open recent file: ${error.message}`; }
-      });
-      menu.append(item);
-    });
-    document.body.append(menu);
-    const buttonRect = recentButton.getBoundingClientRect();
-    menu.style.top = `${buttonRect.bottom + 6}px`;
-    menu.style.left = `${Math.max(8, buttonRect.right - menu.offsetWidth)}px`;
-    window.setTimeout(() => document.addEventListener("pointerdown", event => { if (!menu.contains(event.target) && event.target !== recentButton) menu.remove(); }, { once: true }), 0);
-  }
+  async function openRecentPath(filePath) { try { await loadStandalone(await desktop.openRecent(filePath)); } catch (error) { statusText.textContent = `Could not open recent file: ${error.message}`; } }
   async function saveCurrent() {
     if (!selectedFile) return false;
     try { await desktop.saveFile(selectedFile.path, source.value); dirty = false; const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = false; } markDirty(false); drawTabs(); return true; }
@@ -1508,11 +1468,21 @@ if (window.handoutDesktop) {
     folder.tree.push(node); folder.tree.sort((a,b) => a.name.localeCompare(b.name)); drawTree(); await openFile(node, [...tree.querySelectorAll(".file-entry")].find(button => button.title === filePath));
   }
   source.addEventListener("input", () => { if (loadingDocument) return; currentHandoutTitle(); dirty = true; if (selectedFile) { const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = true; } } markDirty(true); drawTabs(); });
-  openFolderButton.addEventListener("click", chooseFolder);
-  openFileButton.addEventListener("click", chooseFile);
-  recentButton.addEventListener("click", chooseRecent);
-  newHandoutButton.addEventListener("click", makeNewHandout);
-  saveButton.addEventListener("click", saveCurrent);
+  function toggleAnswers() { showAnswers = !showAnswers; render(); }
+  desktop.onMenuCommand(async ({ command, payload }) => {
+    if (command === 'new-handout') return makeNewHandout();
+    if (command === 'open-file') return chooseFile();
+    if (command === 'open-folder') return chooseFolder();
+    if (command === 'open-recent') return openRecentPath(payload);
+    if (command === 'save') return saveCurrent();
+    if (command === 'print') return printHandout();
+    if (command === 'export-pdf') return exportHandout();
+    if (command === 'toggle-answers') return toggleAnswers();
+    if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
+    if (command === 'set-layout' && layouts[payload]) { layoutSelect.value = payload; return render(); }
+    if (command === 'find') return showFind();
+    if (command === 'open-handout-guide') return openRecentPath(payload);
+  });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
 }

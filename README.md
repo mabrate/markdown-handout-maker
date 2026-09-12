@@ -30,9 +30,9 @@ npm install
 npm start
 ```
 
-In the app, choose **Open Folder** to work with a folder of Markdown handouts,
-or choose **Open File** for one handout. Use **Save** or Ctrl/Cmd+S to write
-changes back to the selected file.
+In the app, choose **File → Open Folder…** to work with a folder of Markdown
+handouts, or **File → Open File…** for one handout. Use **File → Save** or
+Ctrl/Cmd+S to write changes back to the selected file.
 
 ## Local AI
 
