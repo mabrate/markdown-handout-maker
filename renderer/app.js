@@ -43,12 +43,16 @@ function makeColumns(format, widths, cards = false) {
   return `:::grid widths=${widths}${cards ? " cards" : ""}\n${values.map((_, index) => `:::cell\nColumn ${index + 1}`).join("\n")}\n:::\n\n`;
 }
 
-function insertSnippet(text) {
+function replaceEditorSelection(text) {
   const start = source.selectionStart;
   const end = source.selectionEnd;
   source.setRangeText(text, start, end, "end");
   source.dispatchEvent(new Event("input", { bubbles: true }));
   source.focus();
+}
+
+function insertSnippet(text) {
+  replaceEditorSelection(text);
 }
 
 function makeTable(format, rows, columns) {
@@ -201,6 +205,7 @@ if (requestedLayout && layouts[requestedLayout]) layoutSelect.value = requestedL
 function setSourceContent(content) {
   source.value = content;
   source.dispatchEvent(new Event("input", { bubbles: true }));
+  source.dispatchEvent(new Event("editor:content-loaded"));
   const frontMatter = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
   const layoutSetting = frontMatter && frontMatter[1].match(/^layout\s*:\s*([\w-]+)\s*$/m);
   if (layoutSetting && layouts[layoutSetting[1]]) layoutSelect.value = layoutSetting[1];
@@ -937,6 +942,68 @@ if (window.handoutDesktop) {
   const documents = new Map();
   let activePath = null;
   let loadingDocument = false;
+  let restoringEditorHistory = false;
+  let editorHistory = [];
+  let editorRedoHistory = [];
+
+  function editorSnapshot() {
+    return {
+      value: source.value,
+      selectionStart: source.selectionStart,
+      selectionEnd: source.selectionEnd,
+      scrollTop: source.scrollTop,
+      scrollLeft: source.scrollLeft
+    };
+  }
+
+  function resetEditorHistory() {
+    editorHistory = [editorSnapshot()];
+    editorRedoHistory = [];
+  }
+
+  function recordEditorHistory() {
+    if (restoringEditorHistory) return;
+    const snapshot = editorSnapshot();
+    const previous = editorHistory.at(-1);
+    if (!previous || previous.value !== snapshot.value) {
+      editorHistory.push(snapshot);
+      editorRedoHistory = [];
+    }
+  }
+
+  function restoreEditorSnapshot(snapshot) {
+    restoringEditorHistory = true;
+    source.value = snapshot.value;
+    source.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+    source.scrollTop = snapshot.scrollTop;
+    source.scrollLeft = snapshot.scrollLeft;
+    source.dispatchEvent(new Event("input", { bubbles: true }));
+    restoringEditorHistory = false;
+  }
+
+  function undoEditorChange() {
+    if (editorHistory.length < 2) return;
+    editorRedoHistory.push(editorHistory.pop());
+    restoreEditorSnapshot(editorHistory.at(-1));
+  }
+
+  function redoEditorChange() {
+    const snapshot = editorRedoHistory.pop();
+    if (!snapshot) return;
+    editorHistory.push(snapshot);
+    restoreEditorSnapshot(snapshot);
+  }
+
+  source.addEventListener("input", recordEditorHistory);
+  source.addEventListener("editor:content-loaded", resetEditorHistory);
+  source.addEventListener("keydown", event => {
+    const key = event.key.toLowerCase();
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || !["z", "y"].includes(key)) return;
+    event.preventDefault();
+    if (key === "y" || event.shiftKey) redoEditorChange();
+    else undoEditorChange();
+  });
+  resetEditorHistory();
 
   function escapeAIHtml(value) {
     return escapeHtml(String(value));
@@ -1048,7 +1115,7 @@ if (window.handoutDesktop) {
     generateButton.addEventListener("click", generate);
     overlay.querySelector(".ai-reset-prompt").addEventListener("click", () => preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; }));
     stopButton.addEventListener("click", async () => { if (activeRequestId) { stopButton.disabled = true; status.textContent = "Stopping AI generation…"; await desktop.stopAI(activeRequestId); } });
-    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
+    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); replaceEditorSelection(makeAIOutput(action.id, result)); close(); });
     preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; });
   }
 
@@ -1096,7 +1163,7 @@ if (window.handoutDesktop) {
     generateButton.addEventListener("click", generate);
     overlay.querySelector(".ai-reset-prompt").addEventListener("click", () => preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; }));
     stopButton.addEventListener("click", async () => { if (activeRequestId) { stopButton.disabled = true; status.textContent = "Stopping AI generation…"; await desktop.stopAI(activeRequestId); } });
-    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); source.setRangeText(makeAIOutput(action.id, result), start, end, "end"); source.dispatchEvent(new Event("input", { bubbles: true })); close(); });
+    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); replaceEditorSelection(makeAIOutput(action.id, result)); close(); });
     preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; });
   }
 
