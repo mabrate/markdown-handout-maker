@@ -49,6 +49,9 @@ function replaceEditorSelection(text) {
   source.setRangeText(text, start, end, "end");
   source.dispatchEvent(new Event("input", { bubbles: true }));
   source.focus();
+  // Textareas can finish scrolling the new caret after the input event.
+  // Let Electron's editor overlays copy that final position on the next frame.
+  requestAnimationFrame(() => source.dispatchEvent(new Event("editor:programmatic-edit-complete")));
 }
 
 function insertSnippet(text) {
@@ -996,6 +999,7 @@ if (window.handoutDesktop) {
 
   source.addEventListener("input", recordEditorHistory);
   source.addEventListener("editor:content-loaded", resetEditorHistory);
+  source.addEventListener("editor:programmatic-edit-complete", () => requestAnimationFrame(syncHighlight));
   source.addEventListener("keydown", event => {
     const key = event.key.toLowerCase();
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !["z", "y"].includes(key)) return;
