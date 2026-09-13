@@ -36,6 +36,16 @@ Later paragraphs continue wrapping until they pass the image.
 
 Use .float-left for a left image. Image widths may use in, cm, mm, px, or %.
 
+QR codes can float inside the same wrap block:
+
+```md
+:::wrap
+[qr:https://example.com]{.float-right width=1.25in}
+
+Text wraps beside the QR code. Use `.float-left` to place it on the other side.
+:::
+```
+
 Create a one-to-four-column grid:
 
 :::grid columns=2
@@ -109,6 +119,8 @@ Question and answer-key syntax (teacher features)
   :::
 
 - Use relative image filenames and keep those images with the Markdown file.
+- Create a locally generated, print-sharp QR code by putting a complete web URL on its own line: `[qr:https://example.com]`.
+- Set a QR code's printed width with the same attribute style as images: `[qr:https://example.com]{width=1.25in}`.
 
 Scoring and rubrics
 

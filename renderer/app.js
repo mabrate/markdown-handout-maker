@@ -26,6 +26,7 @@ const snippets = {
   box: "{{space:6:box}}\n\n",
   dots: "{{space:6:dots}}\n\n",
   wrap: ":::wrap\n![Alt text](image.png){.float-right width=2in}\n\nText that wraps beside the image.\n:::\n\n",
+  qr: "[qr:https://example.com]\n\n",
   grid: ":::grid columns=2\n:::cell\nColumn one\n:::cell\nColumn two\n:::\n\n",
   cards: ":::grid columns=2 cards\n:::cell\n### Box one\nContent\n:::cell\n### Box two\nContent\n:::\n\n",
   pagebreak: ":::pagebreak\n\n",
@@ -284,7 +285,7 @@ function inlineMarkdown(text) {
       ? `/handout-assets/${path.split("/").map(part => encodeURIComponent(decodeURIComponent(part))).join("/")}?v=${encodeURIComponent(liveAssetVersion)}`
       : path;
     const src = localAsset || servedAsset;
-    return `<img src="${escapeHtml(src)}" alt="${alt}"${title ? ` title="${title}"` : ""} class="${classes}"${width ? ` style="width:${width[1]}"` : ""}>`;
+    return `<img src="${escapeHtml(src)}" alt="${alt}"${title ? ` title="${title}"` : ""} class="${classes}" data-image-path="${escapeHtml(path)}"${width ? ` style="width:${width[1]}"` : ""}>`;
   });
   safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
   safe = safe.replace(/\*\*([^*]+)\*\*/g, (_, value) => `@@STRONG${strong.push(`<strong>${value}</strong>`) - 1}@@`);
@@ -346,7 +347,7 @@ function preprocessLegacyMarkdown(markdown) {
       ? `/handout-assets/${path.split("/").map(part => encodeURIComponent(decodeURIComponent(part))).join("/")}?v=${encodeURIComponent(liveAssetVersion)}`
       : path;
     const src = localAsset || servedAsset;
-    return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}"${title ? ` title="${escapeHtml(title)}"` : ""} class="${classes}"${width ? ` style="width:${width[1]}"` : ""}>`;
+    return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}"${title ? ` title="${escapeHtml(title)}"` : ""} class="${classes}" data-image-path="${escapeHtml(path)}"${width ? ` style="width:${width[1]}"` : ""}>`;
   });
   return text.replace(/@@LEGACY_BR_(\d+)@@/g, (_, index) => brTokens[Number(index)]);
 }
@@ -378,6 +379,15 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
     const line = lines[i];
     if (!line.trim()) { outLines.push(""); i++; continue; }
     if (/^ {0,3}#{1,2}(?:\s|$)/.test(line)) outLines.push("<!--HANDOUT_QUESTION_RESET-->");
+
+    const qrMatch = line.match(/^\s*\[qr:([^\]]*)\](?:\{([^}]*)\})?\s*$/i);
+    if (qrMatch) {
+      const token = `@@BLOCK${placeholders.length}@@`;
+      placeholders.push({ type: "qr", value: qrMatch[1], attributes: qrMatch[2] || '' });
+      outLines.push(token);
+      i++;
+      continue;
+    }
 
     if (/^:::pagebreak\s*$/.test(line.trim())) {
       const token = `@@BLOCK${placeholders.length}@@`;
@@ -535,6 +545,10 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
 
     if (block.type === "pagebreak") {
       return '<div class="handout-pagebreak" aria-hidden="true"></div>';
+    }
+
+    if (block.type === "qr") {
+      return window.HandoutQr.renderQrBlock(block.value, block.attributes);
     }
 
     if (block.type === "wrap") {
@@ -776,6 +790,8 @@ function paginate(blocks) {
     }
     if (content.scrollHeight > content.clientHeight + 1) node.classList.add("oversize-warning");
   }
+  preview.querySelectorAll('img[data-image-path]').forEach((image, index) => { image.dataset.imageIndex = index; });
+  preview.querySelectorAll('.qr-code').forEach((qrCode, index) => { qrCode.dataset.qrIndex = index; });
   const logicalPages = [...preview.children];
   const count = logicalPages.length;
   if (layoutSelect.value.startsWith("half-duplicate-") || layoutSelect.value === "booklet") {
@@ -786,6 +802,7 @@ function paginate(blocks) {
 }
 
 function render() {
+  document.querySelector('.media-resize-outline')?.remove();
   const previousScroll = previewPanel.scrollTop;
   totalPoints = [...source.value.matchAll(/:::question(?:\s+[^\n]*)?/g)].reduce((sum, match) => {
     const points = match[0].match(/(?:^|\s)points=(\d+(?:\.\d+)?)(?:\s|$)/);
@@ -921,6 +938,9 @@ if (window.handoutDesktop) {
   const lineNumbers = document.createElement("pre");
   lineNumbers.className = "line-numbers";
   lineNumbers.setAttribute("aria-hidden", "true");
+  const lineNumberContent = document.createElement('span');
+  lineNumberContent.className = 'line-numbers-content';
+  lineNumbers.append(lineNumberContent);
   const searchHighlight = document.createElement("pre");
   searchHighlight.className = "search-highlight";
   searchHighlight.setAttribute("aria-hidden", "true");
@@ -1161,20 +1181,86 @@ if (window.handoutDesktop) {
   async function showAISettings() {
     const overlay = document.createElement("div");
     overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = '<section class="ai-dialog" role="dialog" aria-modal="true"><header><h2>AI Settings</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="ai-settings-status"></div><div class="ai-download-status" hidden><progress max="100" value="0"></progress><p role="status">Preparing download…</p></div><footer><button type="button" class="button primary ai-select-model">Choose an AI model file…</button><button type="button" class="button secondary ai-download-model">Download recommended model</button><button type="button" class="button secondary ai-cancel-download" hidden>Cancel download</button><button type="button" class="button secondary ai-cancel">Close</button></footer></section>';
+    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true"><header><h2>AI Settings</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="ai-settings-status"></div><section class="ai-global-prompt-settings"><label class="ai-prompt-label">Global default prompt <span class="field-hint">Added before every action-specific prompt and its content.</span><textarea class="ai-global-prompt" rows="7" maxlength="10000" spellcheck="true"></textarea></label><div class="ai-global-prompt-actions"><button type="button" class="button secondary ai-reset-global-prompt">Reset to default</button><button type="button" class="button primary ai-save-global-prompt">Save global prompt</button><span class="ai-global-prompt-status" role="status"></span></div></section><details class="ai-action-prompt-settings"><summary>Action prompt defaults</summary><p class="field-hint">Available placeholders: <code>{{selectedText}}</code>, <code>{{handoutText}}</code>, <code>{{aiContext}}</code>, <code>{{additionalContext}}</code>, and <code>{{questionCount}}</code>.</p><div class="ai-action-prompt-list"></div><div class="ai-action-prompt-actions"><button type="button" class="button primary ai-save-action-prompts">Save action prompts</button><span class="ai-action-prompt-status" role="status"></span></div></details><details class="ai-advanced-settings"><summary>Advanced AI settings</summary><div class="ai-context-size-settings"><label>Context window <input class="ai-context-size" type="number" step="1"></label><p class="field-hint">Input and instruction capacity in tokens. Larger values use more memory. This is separate from each action's maximum generated tokens. The previous automatic range was 2,048–3,072 tokens; the default remains 3,072.</p><div class="ai-context-size-actions"><button type="button" class="button secondary ai-reset-context-size">Reset to default</button><button type="button" class="button primary ai-save-context-size">Save context size</button><span class="ai-context-size-status" role="status"></span></div></div></details><div class="ai-download-status" hidden><progress max="100" value="0"></progress><p role="status">Preparing download…</p></div><footer><button type="button" class="button primary ai-select-model">Choose an AI model file…</button><button type="button" class="button secondary ai-download-model">Download recommended model</button><button type="button" class="button secondary ai-cancel-download" hidden>Cancel download</button><button type="button" class="button secondary ai-cancel">Close</button></footer></section>`;
     document.body.append(overlay);
     const status = overlay.querySelector(".ai-settings-status");
     const downloadStatus = overlay.querySelector(".ai-download-status");
     const downloadButton = overlay.querySelector(".ai-download-model");
     const cancelDownloadButton = overlay.querySelector(".ai-cancel-download");
     const selectButton = overlay.querySelector(".ai-select-model");
+    const globalPromptInput = overlay.querySelector('.ai-global-prompt');
+    const globalPromptStatus = overlay.querySelector('.ai-global-prompt-status');
+    const saveGlobalPromptButton = overlay.querySelector('.ai-save-global-prompt');
+    const resetGlobalPromptButton = overlay.querySelector('.ai-reset-global-prompt');
+    const actionPromptList = overlay.querySelector('.ai-action-prompt-list');
+    const saveActionPromptsButton = overlay.querySelector('.ai-save-action-prompts');
+    const actionPromptStatus = overlay.querySelector('.ai-action-prompt-status');
+    const contextSizeInput = overlay.querySelector('.ai-context-size');
+    const contextSizeStatus = overlay.querySelector('.ai-context-size-status');
+    const saveContextSizeButton = overlay.querySelector('.ai-save-context-size');
+    const resetContextSizeButton = overlay.querySelector('.ai-reset-context-size');
     const renderStatus = model => { const stateLabels = { installed: "Installed", "not-installed": "Not Installed", loading: "Loading", error: "Error" }; status.innerHTML = `<p><strong>Local AI:</strong> ${escapeAIHtml(stateLabels[model.state] || model.state)}</p><p><strong>Model:</strong> ${escapeAIHtml(model.modelName || "None selected")}</p><p class="ai-model-path">${escapeAIHtml(model.modelPath || "Download the recommended model or choose a compatible .gguf file.")}</p>${model.message ? `<p class="ai-error">${escapeAIHtml(model.message)}</p>` : ""}`; };
-    const [currentModel, recommendedModel] = await Promise.all([desktop.aiStatus(), desktop.recommendedAIModel()]);
+    const [currentModel, recommendedModel, promptSettings] = await Promise.all([desktop.aiStatus(), desktop.recommendedAIModel(), desktop.aiPromptSettings()]);
     renderStatus(currentModel);
+    globalPromptInput.value = promptSettings.globalPrompt;
+    contextSizeInput.min = promptSettings.minContextSize;
+    contextSizeInput.max = promptSettings.maxContextSize;
+    contextSizeInput.value = promptSettings.contextSize;
+    for (const action of promptSettings.actions) {
+      const field = document.createElement('section');
+      field.className = 'ai-action-prompt-field';
+      field.innerHTML = `<label>${escapeAIHtml(action.label)}<textarea rows="8" maxlength="20000" spellcheck="true" data-action-id="${escapeAIHtml(action.id)}"></textarea></label><div class="ai-token-limit-row"><label>Maximum generated tokens <input type="number" min="${promptSettings.minGeneratedTokens}" max="${promptSettings.maxGeneratedTokens}" step="1" value="${action.maxTokens}" data-token-action-id="${escapeAIHtml(action.id)}"></label><span class="field-hint">Controls response length, not input capacity.</span></div><button type="button" class="button secondary">Reset this action</button>`;
+      field.querySelector('textarea').value = action.prompt;
+      field.querySelector('button').addEventListener('click', () => { field.querySelector('textarea').value = action.defaultPrompt; field.querySelector('[data-token-action-id]').value = action.defaultMaxTokens; actionPromptStatus.textContent = `${action.label} reset locally. Save to keep this change.`; });
+      actionPromptList.append(field);
+    }
     status.insertAdjacentHTML('beforeend', `<p><strong>Recommended download:</strong> ${escapeAIHtml(recommendedModel.name)} (about 3 GB)</p>`);
     const close = () => { stopDownloadProgress(); overlay.remove(); };
     overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
     overlay.querySelector(".ai-cancel").addEventListener("click", close);
+    async function saveGlobalPrompt(value, message) {
+      saveGlobalPromptButton.disabled = true;
+      resetGlobalPromptButton.disabled = true;
+      globalPromptStatus.textContent = 'Saving…';
+      try {
+        const saved = await desktop.saveGlobalAIPrompt(value);
+        globalPromptInput.value = saved.globalPrompt;
+        globalPromptStatus.textContent = message;
+      } catch (error) {
+        globalPromptStatus.textContent = error.message || 'Could not save the global prompt.';
+      } finally {
+        saveGlobalPromptButton.disabled = false;
+        resetGlobalPromptButton.disabled = false;
+      }
+    }
+    saveGlobalPromptButton.addEventListener('click', () => saveGlobalPrompt(globalPromptInput.value, 'Global prompt saved.'));
+    resetGlobalPromptButton.addEventListener('click', () => saveGlobalPrompt(promptSettings.defaultGlobalPrompt, 'Default restored and saved.'));
+    async function saveContextSize(value, message) {
+      saveContextSizeButton.disabled = true;
+      resetContextSizeButton.disabled = true;
+      contextSizeStatus.textContent = 'Saving…';
+      try {
+        const saved = await desktop.saveAIContextSize(Number(value));
+        contextSizeInput.value = saved.contextSize;
+        contextSizeStatus.textContent = message;
+      } catch (error) {
+        contextSizeStatus.textContent = error.message || 'Could not save the context size.';
+      } finally {
+        saveContextSizeButton.disabled = false;
+        resetContextSizeButton.disabled = false;
+      }
+    }
+    saveContextSizeButton.addEventListener('click', () => saveContextSize(contextSizeInput.value, 'Context size saved. It will apply to the next AI request.'));
+    resetContextSizeButton.addEventListener('click', () => saveContextSize(promptSettings.defaultContextSize, 'Default context size restored and saved.'));
+    saveActionPromptsButton.addEventListener('click', async () => {
+      saveActionPromptsButton.disabled = true;
+      actionPromptStatus.textContent = 'Saving…';
+      const actionPrompts = Object.fromEntries([...actionPromptList.querySelectorAll('textarea')].map(input => [input.dataset.actionId, input.value]));
+      const tokenLimits = Object.fromEntries([...actionPromptList.querySelectorAll('[data-token-action-id]')].map(input => [input.dataset.tokenActionId, Number(input.value)]));
+      try { await desktop.saveAIActionPrompts(actionPrompts); await desktop.saveAIActionTokenLimits(tokenLimits); actionPromptStatus.textContent = 'Action prompts and output limits saved.'; }
+      catch (error) { actionPromptStatus.textContent = error.message || 'Could not save action prompts.'; }
+      finally { saveActionPromptsButton.disabled = false; }
+    });
     selectButton.addEventListener("click", async event => { event.currentTarget.disabled = true; try { const model = await desktop.selectAIModel(); if (model) renderStatus(model); } catch (error) { status.innerHTML += `<p class="ai-error">${escapeAIHtml(error.message)}</p>`; } finally { event.currentTarget.disabled = false; } });
     const stopDownloadProgress = desktop.onAIModelDownloadProgress(progress => {
       downloadStatus.hidden = false;
@@ -1243,7 +1329,78 @@ if (window.handoutDesktop) {
     selectAndRevealLine(lines, matchIndex);
     statusText.textContent = `Editing line ${matchIndex + 1}`;
   }
+  function selectResizableMedia(media) {
+    document.querySelector('.media-resize-outline')?.remove();
+    const isQrCode = media.classList.contains('qr-code');
+    const mediaIndex = Number(isQrCode ? media.dataset.qrIndex : media.dataset.imageIndex);
+    if (!Number.isInteger(mediaIndex)) return;
+    const rect = media.getBoundingClientRect();
+    const outline = document.createElement('div');
+    const handle = document.createElement('button');
+    const sizeLabel = document.createElement('span');
+    const resizeFromLeft = media.classList.contains('float-right');
+    outline.className = 'media-resize-outline';
+    handle.className = `media-resize-handle${resizeFromLeft ? ' from-left' : ''}`;
+    handle.type = 'button';
+    handle.setAttribute('aria-label', `Resize ${isQrCode ? 'QR code' : 'image'} proportionally`);
+    sizeLabel.className = 'media-resize-size';
+    outline.append(handle, sizeLabel);
+    document.body.append(outline);
+    const placeOutline = (left = rect.left, top = rect.top, width = rect.width, height = rect.height) => {
+      Object.assign(outline.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+      const scale = rect.width / Math.max(1, media.offsetWidth);
+      sizeLabel.textContent = `${(width / scale / 96).toFixed(2)} in × ${(height / scale / 96).toFixed(2)} in`;
+    };
+    placeOutline();
+    handle.addEventListener('pointerdown', pointerEvent => {
+      pointerEvent.preventDefault();
+      pointerEvent.stopPropagation();
+      const contentRect = media.closest('.page-content').getBoundingClientRect();
+      const scale = rect.width / Math.max(1, media.offsetWidth);
+      const aspect = rect.width / Math.max(1, rect.height);
+      const maximumWidthByPage = resizeFromLeft ? rect.right - contentRect.left : contentRect.right - rect.left;
+      const maximumWidthByHeight = (contentRect.bottom - rect.top) * aspect;
+      const minimumInches = isQrCode ? 0.75 : 0.5;
+      const minimumPixels = minimumInches * 96 * scale;
+      const maximumWidth = Math.max(minimumPixels, Math.min(maximumWidthByPage, maximumWidthByHeight));
+      const minimumWidth = Math.min(maximumWidth, minimumPixels);
+      const startX = pointerEvent.clientX;
+      let displayedWidth = rect.width;
+      handle.setPointerCapture(pointerEvent.pointerId);
+      const resize = moveEvent => {
+        const delta = (moveEvent.clientX - startX) * (resizeFromLeft ? -1 : 1);
+        displayedWidth = Math.max(minimumWidth, Math.min(maximumWidth, rect.width + delta));
+        const displayedHeight = displayedWidth / aspect;
+        const left = resizeFromLeft ? rect.right - displayedWidth : rect.left;
+        media.style.width = `${displayedWidth / scale}px`;
+        placeOutline(left, rect.top, displayedWidth, displayedHeight);
+      };
+      const stop = stopEvent => {
+        handle.removeEventListener('pointermove', resize);
+        handle.removeEventListener('pointerup', stop);
+        handle.removeEventListener('pointercancel', cancel);
+        if (stopEvent.type !== 'pointerup') return;
+        const widthInches = Math.max(minimumInches, displayedWidth / scale / 96).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+        const updated = isQrCode
+          ? window.HandoutMediaSizing.updateQrWidth(source.value, mediaIndex, `${widthInches}in`)
+          : window.HandoutMediaSizing.updateImageWidth(source.value, mediaIndex, `${widthInches}in`);
+        if (updated !== source.value) {
+          source.value = updated;
+          source.dispatchEvent(new Event('input', { bubbles: true }));
+          statusText.textContent = `${isQrCode ? 'QR code' : 'Image'} width set to ${widthInches} in`;
+        }
+      };
+      const cancel = cancelEvent => { stop(cancelEvent); render(); };
+      handle.addEventListener('pointermove', resize);
+      handle.addEventListener('pointerup', stop);
+      handle.addEventListener('pointercancel', cancel);
+    });
+  }
+  previewPanel.addEventListener('scroll', () => document.querySelector('.media-resize-outline')?.remove());
   preview.addEventListener("click", event => {
+    const media = event.target.closest('img[data-image-index], .qr-code[data-qr-index]');
+    if (media) { event.stopPropagation(); selectResizableMedia(media); return; }
+    document.querySelector('.media-resize-outline')?.remove();
     const block = event.target.closest(".handout-block");
     if (block) jumpToPreviewSource(block, event.target);
   });
@@ -1251,7 +1408,7 @@ if (window.handoutDesktop) {
   function saveActiveState() {
     if (!selectedFile) return;
     const documentState = documents.get(selectedFile.path);
-    if (documentState) { documentState.content = source.value; documentState.dirty = dirty; }
+    if (documentState) { documentState.content = source.value; documentState.dirty = dirty; documentState.scrollTop = source.scrollTop; documentState.scrollLeft = source.scrollLeft; }
   }
   function drawTabs() {
     tabBar.innerHTML = "";
@@ -1303,18 +1460,21 @@ if (window.handoutDesktop) {
     dirty = documentState.dirty;
     loadingDocument = true;
     setSourceContent(documentState.content);
+    source.scrollTop = documentState.scrollTop || 0;
+    source.scrollLeft = documentState.scrollLeft || 0;
     loadingDocument = false;
     setAssets(documentState.assets || []);
     currentHandoutTitle();
     markDirty(dirty);
     drawTabs();
     render();
+    requestAnimationFrame(syncHighlight);
     source.focus();
   }
   function addDocument(file, content, assets) {
     const existing = documents.get(file.path);
     if (existing) { activateDocument(file.path); return; }
-    documents.set(file.path, { file, content, assets, dirty: false });
+    documents.set(file.path, { file, content, assets, dirty: false, scrollTop: 0, scrollLeft: 0 });
     activateDocument(file.path);
   }
 
@@ -1335,16 +1495,26 @@ if (window.handoutDesktop) {
   }
   function syncHighlight() {
     highlight.innerHTML = `${highlightMarkdown(source.value)}\n`;
-    lineNumbers.textContent = Array.from({ length: Math.max(1, source.value.split("\n").length) }, (_, index) => index + 1).join("\n");
+    lineNumberContent.textContent = `${Array.from({ length: Math.max(1, source.value.split("\n").length) }, (_, index) => index + 1).join("\n")}\n`;
     highlight.scrollTop = source.scrollTop;
     highlight.scrollLeft = source.scrollLeft;
     searchHighlight.scrollTop = source.scrollTop;
     searchHighlight.scrollLeft = source.scrollLeft;
-    lineNumbers.scrollTop = source.scrollTop;
+    lineNumberContent.style.transform = `translateY(${-source.scrollTop}px)`;
+  }
+  function syncNativeSelection() {
+    const hasSelection = source.selectionStart !== source.selectionEnd;
+    source.classList.toggle('show-native-selection', hasSelection);
+    editorSurface.classList.toggle('native-selection', hasSelection);
   }
   syncHighlight();
   source.addEventListener("input", syncHighlight);
+  source.addEventListener('input', syncNativeSelection);
   source.addEventListener("scroll", syncHighlight);
+  source.addEventListener('select', syncNativeSelection);
+  source.addEventListener('keyup', syncNativeSelection);
+  source.addEventListener('pointerup', syncNativeSelection);
+  source.addEventListener('editor:content-loaded', syncNativeSelection);
 
   const findBar = document.createElement("div");
   findBar.className = "find-bar";
@@ -1423,6 +1593,117 @@ if (window.handoutDesktop) {
   }
 
   function clearActive() { tree.querySelectorAll(".file-entry.active").forEach(node => node.classList.remove("active")); }
+  function encodedMarkdownPath(relativePath) {
+    return relativePath.split('/').map(part => part === '..' ? part : encodeURIComponent(part).replace(/[()]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)).join('/');
+  }
+  function imageAltText(name) {
+    return name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/[\[\]\\]/g, '').trim() || 'image';
+  }
+  async function insertTreeImage(node) {
+    if (!selectedFile) throw new Error('Open a Markdown handout before inserting an image.');
+    const relative = await desktop.imageReference(selectedFile.path, node.path);
+    replaceEditorSelection(`![${imageAltText(node.name)}](${encodedMarkdownPath(relative)})`);
+    statusText.textContent = `Inserted ${node.name}`;
+  }
+  function showImagePreview(node) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ai-dialog-overlay image-preview-overlay';
+    const close = () => overlay.remove();
+    overlay.innerHTML = `<section class="image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview"><header><strong>${escapeHtml(node.name)}</strong><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="image-preview-stage"><img src="${escapeHtml(node.url)}" alt="Preview of ${escapeHtml(node.name)}"></div><footer><button type="button" class="button secondary image-preview-rename">Rename…</button><button type="button" class="button primary image-preview-insert">Insert into Markdown</button></footer></section>`;
+    document.body.append(overlay);
+    overlay.querySelector('.ai-dialog-close').addEventListener('click', close);
+    overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
+    overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+    overlay.querySelector('.image-preview-insert').addEventListener('click', () => insertTreeImage(node).then(close).catch(error => { statusText.textContent = `Could not insert image: ${error.message}`; }));
+    overlay.querySelector('.image-preview-rename').addEventListener('click', () => { close(); renameTreeImage(node); });
+    overlay.querySelector('.ai-dialog-close').focus();
+  }
+  async function refreshFolderTreeAndAssets() {
+    if (!folder) return;
+    const refreshed = await desktop.refreshFolder();
+    if (!refreshed) return;
+    folder.tree = refreshed.tree;
+    folder.assets = refreshed.assets;
+    for (const documentState of documents.values()) documentState.assets = refreshed.assets;
+    setAssets(refreshed.assets);
+    drawTree();
+  }
+  function replaceCurrentImageReferences(oldReference, newReference) {
+    const decodePath = value => { try { return decodeURIComponent(value); } catch { return value; } };
+    const normalizePath = value => decodePath(value).replace(/\\/g, '/').replace(/^\.\/+/, '');
+    const oldDecoded = normalizePath(oldReference);
+    const replacement = encodedMarkdownPath(newReference);
+    const updated = source.value.replace(/(!\[[^\]]*\]\()([^\s)]+)((?:\s+"[^"]*")?\)(?:\{[^}]*\})?)/g, (match, opening, imagePath, closing) => {
+      return normalizePath(imagePath) === oldDecoded ? `${opening}${replacement}${closing}` : match;
+    });
+    if (updated !== source.value) {
+      source.value = updated;
+      source.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  function renameTreeImage(node) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ai-dialog-overlay image-rename-overlay';
+    overlay.innerHTML = `<form class="image-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="image-rename-title"><header><strong id="image-rename-title">Rename image</strong><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><label>Filename<input name="filename" value="${escapeHtml(node.name)}" autocomplete="off" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary image-rename-cancel">Cancel</button><button type="submit" class="button primary">Rename</button></footer></form>`;
+    document.body.append(overlay);
+    const form = overlay.querySelector('form');
+    const input = form.elements.filename;
+    const errorMessage = overlay.querySelector('.image-rename-error');
+    const close = () => overlay.remove();
+    overlay.querySelector('.ai-dialog-close').addEventListener('click', close);
+    overlay.querySelector('.image-rename-cancel').addEventListener('click', close);
+    overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
+    overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const submit = form.querySelector('[type="submit"]');
+      submit.disabled = true;
+      errorMessage.textContent = '';
+      try {
+        const oldReference = selectedFile ? await desktop.imageReference(selectedFile.path, node.path) : '';
+        const renamed = await desktop.renameImage(node.path, input.value);
+        if (selectedFile && renamed.path !== node.path) {
+          const newReference = await desktop.imageReference(selectedFile.path, renamed.path);
+          replaceCurrentImageReferences(oldReference, newReference);
+        }
+        await refreshFolderTreeAndAssets();
+        close();
+        statusText.textContent = `Renamed image to ${renamed.name}`;
+      } catch (error) {
+        errorMessage.textContent = error.message || 'Could not rename image.';
+        submit.disabled = false;
+        input.focus();
+      }
+    });
+    input.focus();
+    input.select();
+  }
+  function showImageContextMenu(node, event) {
+    document.querySelector('.image-context-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'image-context-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = '<button type="button" data-action="insert">Insert into Markdown</button><button type="button" data-action="preview">Preview</button><button type="button" data-action="rename">Rename…</button>';
+    document.body.append(menu);
+    menu.style.left = `${Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8)}px`;
+    menu.style.top = `${Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8)}px`;
+    const close = () => {
+      window.removeEventListener('pointerdown', closeFromOutside);
+      menu.remove();
+    };
+    const closeFromOutside = pointerEvent => {
+      if (!menu.contains(pointerEvent.target)) close();
+    };
+    menu.addEventListener('click', clickEvent => {
+      const action = clickEvent.target.dataset.action;
+      close();
+      if (action === 'insert') insertTreeImage(node).catch(error => { statusText.textContent = `Could not insert image: ${error.message}`; });
+      else if (action === 'preview') showImagePreview(node);
+      else if (action === 'rename') renameTreeImage(node);
+    });
+    window.addEventListener('pointerdown', closeFromOutside);
+    menu.querySelector('button').focus();
+  }
   function addTree(nodes, parent) {
     const list = document.createElement("ul");
     for (const node of nodes) {
@@ -1434,12 +1715,19 @@ if (window.handoutDesktop) {
       } else if (node.markdown) {
         const button = document.createElement("button"); button.className = "file-entry"; button.textContent = node.name; button.title = node.path;
         button.addEventListener("click", () => openFile(node, button)); item.append(button);
+      } else if (node.image) {
+        const asset = document.createElement("span"); asset.className = "file-entry image-entry"; asset.textContent = node.name; asset.title = node.path;
+        asset.tabIndex = 0;
+        asset.addEventListener('contextmenu', event => { event.preventDefault(); showImageContextMenu(node, event); });
+        asset.addEventListener('dblclick', () => showImagePreview(node));
+        asset.addEventListener('keydown', event => { if (event.key === 'Enter') showImagePreview(node); });
+        item.append(asset);
       }
       if (item.childNodes.length) list.append(item);
     }
     parent.append(list);
   }
-  function drawTree() { tree.innerHTML = ""; if (folder) addTree(folder.tree, tree); if (!tree.childNodes.length) tree.innerHTML = '<p class="empty-tree">No Markdown files in this folder.</p>'; }
+  function drawTree() { tree.innerHTML = ""; if (folder) addTree(folder.tree, tree); if (!tree.childNodes.length) tree.innerHTML = '<p class="empty-tree">No Markdown or image files in this folder.</p>'; }
   async function openFile(node, button) {
     if (selectedFile && node.path === selectedFile.path) return;
     if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
@@ -1467,6 +1755,88 @@ if (window.handoutDesktop) {
     catch (error) { statusText.textContent = `Could not save: ${error.message}`; return false; }
   }
   function setAssets(assets) { assetMap.clear(); assets.forEach(asset => { assetMap.set(asset.relative, asset.url); assetMap.set(asset.relative.split("/").pop(), asset.url); }); }
+  function addImageToFolderTree(imported) {
+    if (!folder || !imported.path) return;
+    const separatorIndex = Math.max(imported.path.lastIndexOf('/'), imported.path.lastIndexOf('\\'));
+    const parentPath = imported.path.slice(0, separatorIndex);
+    const imageNode = { type: 'file', name: imported.path.slice(separatorIndex + 1), path: imported.path, url: imported.url, image: true, markdown: false };
+    const addTo = nodes => {
+      for (const node of nodes) {
+        if (node.type !== 'folder') continue;
+        if (node.path === parentPath) { node.children.push(imageNode); node.children.sort((a, b) => a.name.localeCompare(b.name)); return true; }
+        if (addTo(node.children)) return true;
+      }
+      return false;
+    };
+    if (parentPath === folder.path) { folder.tree.push(imageNode); folder.tree.sort((a, b) => a.name.localeCompare(b.name)); }
+    else addTo(folder.tree);
+    drawTree();
+  }
+  async function importEditorImage(file, selectionStart, selectionEnd, action = 'Pasted', trailingText = '') {
+    if (!selectedFile) throw new Error('Open a saved Markdown handout before importing an image.');
+    const imported = await desktop.importImage(selectedFile.path, new Uint8Array(await file.arrayBuffer()));
+    const documentState = documents.get(selectedFile.path);
+    if (documentState) documentState.assets = [...(documentState.assets || []), imported];
+    assetMap.set(imported.relative, imported.url);
+    assetMap.set(imported.relative.split('/').pop(), imported.url);
+    addImageToFolderTree(imported);
+    source.setSelectionRange(selectionStart, selectionEnd);
+    replaceEditorSelection(`![${imageAltText(file.name || 'image')}](${encodedMarkdownPath(imported.relative)})${trailingText}`);
+    statusText.textContent = `${action} image as ${imported.relative}`;
+    return imported;
+  }
+  source.addEventListener('paste', event => {
+    const imageItem = [...(event.clipboardData?.items || [])].find(item => item.kind === 'file' && item.type.startsWith('image/'));
+    if (!imageItem) return;
+    event.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) { statusText.textContent = 'Could not read the clipboard image.'; return; }
+    const selectionStart = source.selectionStart;
+    const selectionEnd = source.selectionEnd;
+    importEditorImage(file, selectionStart, selectionEnd).catch(error => {
+      statusText.textContent = `Could not paste image: ${error.message}`;
+    });
+  });
+  function editorOffsetFromPoint(clientX, clientY) {
+    const rect = source.getBoundingClientRect();
+    const style = getComputedStyle(source);
+    const lineHeight = parseFloat(style.lineHeight) || 22;
+    const canvas = editorOffsetFromPoint.canvas || (editorOffsetFromPoint.canvas = document.createElement('canvas'));
+    const context = canvas.getContext('2d');
+    context.font = style.font;
+    const characterWidth = context.measureText('0').width || 8;
+    const lines = source.value.split('\n');
+    const lineIndex = Math.max(0, Math.min(lines.length - 1, Math.floor((clientY - rect.top - parseFloat(style.paddingTop) + source.scrollTop) / lineHeight)));
+    const column = Math.max(0, Math.min(lines[lineIndex].length, Math.round((clientX - rect.left - parseFloat(style.paddingLeft) + source.scrollLeft) / characterWidth)));
+    return lines.slice(0, lineIndex).reduce((total, line) => total + line.length + 1, 0) + column;
+  }
+  const draggedImageFiles = event => [...(event.dataTransfer?.files || [])].filter(file => file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name));
+  const hasDraggedImage = event => draggedImageFiles(event).length || [...(event.dataTransfer?.items || [])].some(item => item.kind === 'file' && item.type.startsWith('image/'));
+  source.addEventListener('dragover', event => {
+    if (!hasDraggedImage(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    source.classList.add('image-drag-target');
+  });
+  source.addEventListener('dragleave', event => {
+    if (!source.contains(event.relatedTarget)) source.classList.remove('image-drag-target');
+  });
+  source.addEventListener('drop', async event => {
+    const files = draggedImageFiles(event);
+    if (!files.length) return;
+    event.preventDefault();
+    source.classList.remove('image-drag-target');
+    let insertionPoint = editorOffsetFromPoint(event.clientX, event.clientY);
+    try {
+      for (let index = 0; index < files.length; index++) {
+        await importEditorImage(files[index], insertionPoint, insertionPoint, 'Dropped', index < files.length - 1 ? '\n' : '');
+        insertionPoint = source.selectionStart;
+      }
+    } catch (error) {
+      statusText.textContent = `Could not drop image: ${error.message}`;
+    }
+  });
+  window.addEventListener('dragend', () => source.classList.remove('image-drag-target'));
   async function chooseFolder() {
     if (dirty && !window.confirm("Save changes to the current handout before changing folders?")) return;
     if (dirty && !await saveCurrent()) return;

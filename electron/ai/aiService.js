@@ -18,6 +18,7 @@ function parseJsonResponse(response) {
 }
 
 function maxTokensForAction(actionId, options = {}) {
+  if (Number.isInteger(options.maxTokens)) return options.maxTokens;
   if (actionId === 'distractors') return 320;
   if (actionId === 'vocabulary') return 768;
   if (actionId === 'vocabularyExamples') return 1024;
@@ -110,10 +111,10 @@ class LocalAIService {
     let context;
     let session;
     try {
-      // These actions only need short prompts and structured responses. A bounded
-      // context avoids allocating the model's full training context on small GPUs.
+      // Use the configured bounded context rather than allocating the model's
+      // full training context, which can consume substantial memory.
       onProgress({ stage: 'creating-context', message: 'Creating the model context…' });
-      context = await model.createContext({ contextSize: { min: 2048, max: 3072 }, batchSize: 128 });
+      context = await model.createContext({ contextSize: options.contextSize || 3072, batchSize: 128 });
       const sequence = context.getSequence();
       const sessionOptions = { contextSequence: sequence };
       if (this.chatWrapper) sessionOptions.chatWrapper = this.chatWrapper;
@@ -188,4 +189,4 @@ class LocalAIService {
   }
 }
 
-module.exports = { LocalAIService };
+module.exports = { LocalAIService, maxTokensForAction };
