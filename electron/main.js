@@ -6,6 +6,8 @@ const { DEFAULT_CONTEXT_SIZE, DEFAULT_GLOBAL_AI_PROMPT, MAX_CONTEXT_SIZE, MAX_GE
 const { importImageAsset, renameImageAsset } = require('./assetImport');
 let mainWindow; let currentRoot = null;
 let modelDownloadController = null;
+let editorWrapLines = false;
+let editorShowWhitespace = false;
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const recentLimit = 12;
@@ -64,6 +66,9 @@ async function refreshApplicationMenu() {
       { label: 'Toggle Answers', click: () => sendMenuCommand('toggle-answers') },
       { label: 'Toggle Handout Files Panel', click: () => sendMenuCommand('toggle-panel', 'file') },
       { label: 'Toggle Markdown Editor Panel', click: () => sendMenuCommand('toggle-panel', 'editor') },
+      { type: 'separator' },
+      { label: 'Wrap Lines', type: 'checkbox', checked: editorWrapLines, click: menuItem => { editorWrapLines = menuItem.checked; sendMenuCommand('wrap-lines', editorWrapLines); } },
+      { label: 'Show Whitespace', type: 'checkbox', checked: editorShowWhitespace, click: menuItem => { editorShowWhitespace = menuItem.checked; sendMenuCommand('show-whitespace', editorShowWhitespace); } },
       { type: 'separator' }, { label: 'Page Layout', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
       { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }

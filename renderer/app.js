@@ -66,12 +66,12 @@ function makeTable(format, rows, columns) {
     const width = (100 / columns).toFixed(2);
     const cols = Array.from({ length: columns }, () => `    <col style="width: ${width}%">`).join("\n");
     const header = Array.from({ length: columns }, (_, index) => `      <th>Header ${index + 1}</th>`).join("\n");
-    const body = Array.from({ length: rows }, (_, row) => `    <tr>\n${Array.from({ length: columns }, (_, column) => `      <td>Row ${row + 1}, column ${column + 1}</td>`).join("\n")}\n    </tr>`).join("\n");
+    const body = Array.from({ length: rows }, () => `    <tr>\n${Array.from({ length: columns }, () => "      <td></td>").join("\n")}\n    </tr>`).join("\n");
     return `<table class="worksheet-table">\n  <colgroup>\n${cols}\n  </colgroup>\n  <thead>\n    <tr>\n${header}\n    </tr>\n  </thead>\n  <tbody>\n${body}\n  </tbody>\n</table>\n\n`;
   }
   const header = `| ${Array.from({ length: columns }, (_, index) => `Header ${index + 1}`).join(" | ")} |`;
   const separator = `| ${Array.from({ length: columns }, () => "---").join(" | ")} |`;
-  const body = Array.from({ length: rows }, (_, row) => `| ${Array.from({ length: columns }, (_, column) => `Row ${row + 1}, column ${column + 1}`).join(" | ")} |`).join("\n");
+  const body = Array.from({ length: rows }, () => `| ${Array.from({ length: columns }, () => "").join(" | ")} |`).join("\n");
   return `${header}\n${separator}\n${body}\n\n`;
 }
 
@@ -944,7 +944,13 @@ if (window.handoutDesktop) {
   const searchHighlight = document.createElement("pre");
   searchHighlight.className = "search-highlight";
   searchHighlight.setAttribute("aria-hidden", "true");
-  editorSurface.append(lineNumbers, highlight, searchHighlight, source);
+  const whitespaceHighlight = document.createElement("pre");
+  whitespaceHighlight.className = "whitespace-highlight";
+  whitespaceHighlight.setAttribute("aria-hidden", "true");
+  const lineMeasure = document.createElement("div");
+  lineMeasure.className = "line-measure";
+  lineMeasure.setAttribute("aria-hidden", "true");
+  editorSurface.append(lineNumbers, highlight, searchHighlight, whitespaceHighlight, lineMeasure, source);
   source.classList.add("highlighted-source");
   let selectedFile = null;
   let dirty = false;
@@ -955,6 +961,8 @@ if (window.handoutDesktop) {
   let restoringEditorHistory = false;
   let editorHistory = [];
   let editorRedoHistory = [];
+  let wrapLines = false;
+  let showWhitespace = false;
   source.disabled = true;
 
   function editorSnapshot() {
@@ -1495,14 +1503,57 @@ if (window.handoutDesktop) {
       }) + `<span class="${lineClass.trim()}"></span>`;
     }).join("\n");
   }
+  function whitespaceHtml(value) {
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/ /g, '<span class="whitespace-space"> </span>')
+      .replace(/\t/g, '<span class="whitespace-tab">\t</span>')
+      .replace(/\n/g, '<span class="whitespace-eol"></span>\n');
+  }
+  function syncLineNumbers() {
+    const lines = source.value.split("\n");
+    if (!wrapLines) {
+      lineNumberContent.textContent = `${Array.from({ length: Math.max(1, lines.length) }, (_, index) => index + 1).join("\n")}\n`;
+      return;
+    }
+    const sourceStyle = getComputedStyle(source);
+    const contentWidth = Math.max(1, source.clientWidth - parseFloat(sourceStyle.paddingLeft) - parseFloat(sourceStyle.paddingRight));
+    lineMeasure.style.width = `${contentWidth}px`;
+    lineMeasure.replaceChildren(...lines.map(line => {
+      const row = document.createElement("div");
+      row.textContent = line || "\u200b";
+      return row;
+    }));
+    lineNumberContent.replaceChildren(...[...lineMeasure.children].map((row, index) => {
+      const number = document.createElement("span");
+      number.className = "line-number-row";
+      number.style.height = `${Math.max(parseFloat(sourceStyle.lineHeight) || 22, row.getBoundingClientRect().height)}px`;
+      number.textContent = index + 1;
+      return number;
+    }));
+  }
   function syncHighlight() {
     highlight.innerHTML = `${highlightMarkdown(source.value)}\n`;
-    lineNumberContent.textContent = `${Array.from({ length: Math.max(1, source.value.split("\n").length) }, (_, index) => index + 1).join("\n")}\n`;
+    whitespaceHighlight.innerHTML = showWhitespace ? whitespaceHtml(source.value) : "";
+    syncLineNumbers();
     highlight.scrollTop = source.scrollTop;
     highlight.scrollLeft = source.scrollLeft;
     searchHighlight.scrollTop = source.scrollTop;
     searchHighlight.scrollLeft = source.scrollLeft;
+    whitespaceHighlight.scrollTop = source.scrollTop;
+    whitespaceHighlight.scrollLeft = source.scrollLeft;
     lineNumberContent.style.transform = `translateY(${-source.scrollTop}px)`;
+  }
+  function setWrapLines(value) {
+    wrapLines = Boolean(value);
+    source.wrap = wrapLines ? "soft" : "off";
+    editorSurface.classList.toggle("wrap-lines", wrapLines);
+    source.scrollLeft = 0;
+    requestAnimationFrame(syncHighlight);
+  }
+  function setShowWhitespace(value) {
+    showWhitespace = Boolean(value);
+    editorSurface.classList.toggle("show-whitespace", showWhitespace);
+    syncHighlight();
   }
   function syncNativeSelection() {
     const hasSelection = source.selectionStart !== source.selectionEnd;
@@ -1517,6 +1568,7 @@ if (window.handoutDesktop) {
   source.addEventListener('keyup', syncNativeSelection);
   source.addEventListener('pointerup', syncNativeSelection);
   source.addEventListener('editor:content-loaded', syncNativeSelection);
+  new ResizeObserver(() => requestAnimationFrame(syncHighlight)).observe(source);
 
   const findBar = document.createElement("div");
   findBar.className = "find-bar";
@@ -1865,6 +1917,8 @@ if (window.handoutDesktop) {
     if (command === 'export-pdf') return exportHandout();
     if (command === 'toggle-answers') return toggleAnswers();
     if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
+    if (command === 'wrap-lines') return setWrapLines(payload);
+    if (command === 'show-whitespace') return setShowWhitespace(payload);
     if (command === 'set-layout' && layouts[payload]) { layoutSelect.value = payload; return render(); }
     if (command === 'find') return showFind();
     if (command === 'insert-snippet' && snippets[payload]) return insertSnippet(snippets[payload]);

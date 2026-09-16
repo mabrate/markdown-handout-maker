@@ -182,13 +182,28 @@ body {
   overflow-wrap: normal;
   tab-size: 2;
 }
+.editor-surface.wrap-lines #source,
+.editor-surface.wrap-lines .source-highlight,
+.editor-surface.wrap-lines .search-highlight,
+.editor-surface.wrap-lines .whitespace-highlight {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .editor-surface { position: relative; display: flex; min-height: 0; flex: 1; background: #fafbfb; overflow: hidden; }
 .source-highlight { position: absolute; z-index: 0; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: #21303a; background: #fafbfb; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
 .search-highlight { position: absolute; z-index: 1; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
+.whitespace-highlight { position: absolute; z-index: 2; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
+.whitespace-space, .whitespace-tab, .whitespace-eol { position: relative; }
+.whitespace-space::before, .whitespace-tab::before, .whitespace-eol::before { position: absolute; color: #91a0a8; font-weight: 400; }
+.whitespace-space::before { content: "·"; }
+.whitespace-tab::before { content: "→"; }
+.whitespace-eol::before { content: "↵"; }
+.line-measure { position: absolute; left: -10000px; top: 0; visibility: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
 .search-highlight mark { color: transparent; background: #f2d36b99; border-radius: 2px; }
 .search-highlight mark.active { background: #ef9f3dcc; outline: 1px solid #b86b18; }
 .line-numbers { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: 45px; overflow: hidden; margin: 0; padding: 20px 8px 20px 0; border-right: 1px solid #d7dfe2; color: #8a9aa3; background: #f0f4f5; font: 12px/1.8667 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: right; user-select: none; pointer-events: none; }
 .line-numbers-content { display: block; will-change: transform; }
+.line-number-row { display: block; line-height: 22.4px; }
 .highlighted-source { color: transparent !important; caret-color: #21303a; background: transparent !important; }
 .highlighted-source:focus,
 .highlighted-source.show-native-selection { color: #21303a !important; }
@@ -319,6 +334,8 @@ body {
 .handout-page table.worksheet-table { table-layout: fixed; }
 .handout-page th, .handout-page td { padding: .045in .06in; border: 1px solid #555; text-align: left; }
 .handout-page td, .handout-page th { overflow-wrap: anywhere; }
+/* Blank body cells in worksheet tables need enough room for handwritten data. */
+.handout-page table tbody td:empty { height: .32in; }
 .handout-page img { max-width: 100%; max-height: calc(var(--page-height) - var(--page-pad-top) - var(--page-pad-bottom)); height: auto; object-fit: contain; }
 .handout-page img.float-right { float: right; width: 2.1in; margin: 0 0 .12in .18in; }
 .handout-page img.float-left { float: left; width: 2.1in; margin: 0 .18in .12in 0; }
