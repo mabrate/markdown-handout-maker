@@ -955,6 +955,7 @@ if (window.handoutDesktop) {
   let restoringEditorHistory = false;
   let editorHistory = [];
   let editorRedoHistory = [];
+  source.disabled = true;
 
   function editorSnapshot() {
     return {
@@ -1448,7 +1449,7 @@ if (window.handoutDesktop) {
     const next = documents.values().next().value;
     if (next) activateDocument(next.file.path);
     else {
-      activePath = null; selectedFile = null; dirty = false; source.value = ""; setAssets([]); markDirty(false); drawTabs(); render();
+      activePath = null; selectedFile = null; dirty = false; source.value = ""; source.disabled = true; setAssets([]); markDirty(false); statusText.textContent = "No file open"; drawTabs(); render();
     }
   }
   function activateDocument(filePath) {
@@ -1458,6 +1459,7 @@ if (window.handoutDesktop) {
     activePath = filePath;
     selectedFile = documentState.file;
     dirty = documentState.dirty;
+    source.disabled = false;
     loadingDocument = true;
     setSourceContent(documentState.content);
     source.scrollTop = documentState.scrollTop || 0;
@@ -1838,14 +1840,15 @@ if (window.handoutDesktop) {
   });
   window.addEventListener('dragend', () => source.classList.remove('image-drag-target'));
   async function chooseFolder() {
-    if (dirty && !window.confirm("Save changes to the current handout before changing folders?")) return;
-    if (dirty && !await saveCurrent()) return;
+    if (dirty && !window.confirm("Save changes to the current handout before changing folders?")) return false;
+    if (dirty && !await saveCurrent()) return false;
     const next = await desktop.openFolder();
-    if (!next) return;
-    saveActiveState(); folder = next; selectedFile = null; activePath = null; documents.clear(); source.value = ""; folderName.textContent = next.name; setAssets(next.assets); drawTabs(); drawTree(); markDirty(false); render();
+    if (!next) return false;
+    saveActiveState(); folder = next; selectedFile = null; activePath = null; documents.clear(); source.value = ""; source.disabled = true; folderName.textContent = next.name; setAssets(next.assets); drawTabs(); drawTree(); markDirty(false); statusText.textContent = "No file open"; render();
+    return true;
   }
   async function makeNewHandout() {
-    if (!folder) return chooseFolder();
+    if (!folder && !await chooseFolder()) return;
     const filePath = await desktop.newFile(); if (!filePath) return;
     const node = { type: "file", name: filePath.split(/[\\/]/).pop(), path: filePath, markdown: true };
     folder.tree.push(node); folder.tree.sort((a,b) => a.name.localeCompare(b.name)); drawTree(); await openFile(node, [...tree.querySelectorAll(".file-entry")].find(button => button.title === filePath));
