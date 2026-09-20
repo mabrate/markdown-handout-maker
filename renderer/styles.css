@@ -325,6 +325,9 @@ body {
 .handout-page h3 { font-size: 12.5pt; }
 .handout-page p { margin: 0; }
 .handout-page ul, .handout-page ol { margin: .03in 0 .05in; padding-left: .28in; }
+.handout-page ul.checklist { margin: .03in 0 .05in; padding-left: 0; list-style: none; }
+.handout-page .checklist > li { position: relative; padding-left: .28in; }
+.handout-page .checklist > li::before { content: ""; position: absolute; top: .3em; left: 0; width: .13in; height: .13in; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 2px; }
 .handout-page li { margin: .025in 0; }
 .handout-page blockquote { margin: .07in 0; padding: .05in .12in; border-left: 3px solid #666; color: #333; background: #f4f4f4; }
 .handout-page pre { margin: .06in 0; padding: .08in; overflow: hidden; border: 1px solid #bbb; background: #f6f6f6; font-size: 9.5pt; white-space: pre-wrap; }

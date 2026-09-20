@@ -6,7 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/test-model-download.js && node tests/test-qr-block.js && node tests/test-asset-import.js && node tests/test-media-sizing.js && node tests/test-prompt-settings.js",
+    "test": "node tests/test-model-download.js && node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-media-sizing.js && node tests/test-prompt-settings.js",
     "package": "electron-builder --dir",
     "dist": "electron-builder"
   },

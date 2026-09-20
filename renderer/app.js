@@ -17,7 +17,7 @@ let totalPoints = 0;
 
 const snippets = {
   heading: "## New section\n\n",
-  checklist: "▢ First checklist item  \n▢ Second checklist item  \n▢ Third checklist item  \n\n",
+  checklist: ":::checklist\n- First checklist item\n- Second checklist item\n- Third checklist item\n:::\n\n",
   question: ":::question type=short lines=3\nWhat is the answer?\n:::answer\nTeacher answer\n:::\n\n",
   "multiple-choice": ":::question type=mc\nWhich answer is correct?\n- First choice\n- Correct choice *\n- Third choice\n:::\n\n",
   lines: "{{lines:3}}\n\n",
@@ -46,15 +46,23 @@ function makeColumns(format, widths, cards = false) {
   return `:::grid widths=${widths}${cards ? " cards" : ""}\n${values.map((_, index) => `:::cell\nColumn ${index + 1}`).join("\n")}\n:::\n\n`;
 }
 
-function replaceEditorSelection(text) {
+function replaceEditorSelection(text, caretOffset = text.length) {
   const start = source.selectionStart;
   const end = source.selectionEnd;
   source.setRangeText(text, start, end, "end");
+  const caret = start + Math.max(0, Math.min(text.length, caretOffset));
+  source.setSelectionRange(caret, caret);
   source.dispatchEvent(new Event("input", { bubbles: true }));
   source.focus();
   // Textareas can finish scrolling the new caret after the input event.
   // Let Electron's editor overlays copy that final position on the next frame.
   requestAnimationFrame(() => source.dispatchEvent(new Event("editor:programmatic-edit-complete")));
+}
+
+function wrapEditorSelection(opening, closing) {
+  const selected = source.value.slice(source.selectionStart, source.selectionEnd);
+  const text = `${opening}${selected}${closing}`;
+  replaceEditorSelection(text, selected ? text.length : opening.length);
 }
 
 function insertSnippet(text) {
@@ -408,6 +416,16 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       continue;
     }
 
+    if (/^:::checklist\s*$/.test(line.trim())) {
+      const start = i + 1; i++;
+      while (i < lines.length && lines[i].trim() !== ":::") i++;
+      const token = `@@BLOCK${placeholders.length}@@`;
+      placeholders.push({ type: "checklist", content: lines.slice(start, i).join("\n") });
+      outLines.push(token);
+      if (i < lines.length) i++;
+      continue;
+    }
+
     if (/^:::question(?:\s+(.*))?\s*$/.test(line.trim())) {
       const match = line.trim().match(/^:::question(?:\s+(.*))?\s*$/);
       const attrStr = match && match[1] ? match[1] : "";
@@ -448,7 +466,7 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
           i++;
           continue;
         }
-        if (/^:::(question|wrap|grid)(?:\s+.*)?$/.test(nested)) depth++;
+        if (/^:::(question|wrap|grid|checklist)(?:\s+.*)?$/.test(nested)) depth++;
         else if (nested === ":::") {
           if (depth > 0) depth--;
           else break;
@@ -555,6 +573,11 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       const innerBlocks = parseBlocks(block.content, numbering);
       const wrappedHtml = innerBlocks.map(blockItem => blockItem.html).join("");
       return `<section class="text-wrap">${wrappedHtml}</section>`;
+    }
+
+    if (block.type === "checklist") {
+      const checklistHtml = md ? md.render(preprocessLegacyMarkdown(block.content)) : preprocessLegacyMarkdown(block.content);
+      return window.HandoutChecklist.renderChecklistBlock(checklistHtml);
     }
 
     if (block.type === "grid") {
@@ -1018,10 +1041,17 @@ if (window.handoutDesktop) {
   source.addEventListener("editor:programmatic-edit-complete", () => requestAnimationFrame(syncHighlight));
   source.addEventListener("keydown", event => {
     const key = event.key.toLowerCase();
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || !["z", "y"].includes(key)) return;
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    if (["z", "y"].includes(key)) {
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) redoEditorChange();
+      else undoEditorChange();
+      return;
+    }
+    const wrappers = { b: ["**", "**"], i: ["*", "*"], "/": ["<!-- ", " -->"] };
+    if (!wrappers[key]) return;
     event.preventDefault();
-    if (key === "y" || event.shiftKey) redoEditorChange();
-    else undoEditorChange();
+    wrapEditorSelection(...wrappers[key]);
   });
   resetEditorHistory();
 
@@ -1732,6 +1762,62 @@ if (window.handoutDesktop) {
     input.focus();
     input.select();
   }
+  function renameTreeFile(node) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ai-dialog-overlay image-rename-overlay';
+    overlay.innerHTML = `<form class="image-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="file-rename-title"><header><strong id="file-rename-title">Rename handout</strong><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><label>Filename<input name="filename" value="${escapeHtml(node.name)}" autocomplete="off" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary image-rename-cancel">Cancel</button><button type="submit" class="button primary">Rename</button></footer></form>`;
+    document.body.append(overlay);
+    const form = overlay.querySelector('form');
+    const input = form.elements.filename;
+    const errorMessage = overlay.querySelector('.image-rename-error');
+    const close = () => overlay.remove();
+    overlay.querySelector('.ai-dialog-close').addEventListener('click', close);
+    overlay.querySelector('.image-rename-cancel').addEventListener('click', close);
+    overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
+    overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const submit = form.querySelector('[type="submit"]');
+      submit.disabled = true;
+      errorMessage.textContent = '';
+      try {
+        const renamed = await desktop.renameFile(node.path, input.value);
+        const documentState = documents.get(node.path);
+        if (documentState && renamed.path !== node.path) {
+          documents.delete(node.path);
+          documentState.file = { ...documentState.file, path: renamed.path, name: renamed.name };
+          documents.set(renamed.path, documentState);
+          if (activePath === node.path) { activePath = renamed.path; selectedFile = documentState.file; }
+        }
+        await refreshFolderTreeAndAssets();
+        drawTabs();
+        if (selectedFile?.path === renamed.path) currentHandoutTitle();
+        close();
+        statusText.textContent = `Renamed handout to ${renamed.name}`;
+      } catch (error) {
+        errorMessage.textContent = error.message || 'Could not rename handout.';
+        submit.disabled = false;
+        input.focus();
+      }
+    });
+    input.focus();
+    input.select();
+  }
+  function showFileContextMenu(node, event) {
+    document.querySelector('.image-context-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'image-context-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = '<button type="button">Rename…</button>';
+    document.body.append(menu);
+    menu.style.left = `${Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8)}px`;
+    menu.style.top = `${Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8)}px`;
+    const close = () => { window.removeEventListener('pointerdown', closeFromOutside); menu.remove(); };
+    const closeFromOutside = pointerEvent => { if (!menu.contains(pointerEvent.target)) close(); };
+    menu.querySelector('button').addEventListener('click', () => { close(); renameTreeFile(node); });
+    window.addEventListener('pointerdown', closeFromOutside);
+    menu.querySelector('button').focus();
+  }
   function showImageContextMenu(node, event) {
     document.querySelector('.image-context-menu')?.remove();
     const menu = document.createElement('div');
@@ -1769,6 +1855,7 @@ if (window.handoutDesktop) {
       } else if (node.markdown) {
         const button = document.createElement("button"); button.className = "file-entry"; button.textContent = node.name; button.title = node.path;
         button.addEventListener("click", () => openFile(node, button)); item.append(button);
+        button.addEventListener('contextmenu', event => { event.preventDefault(); showFileContextMenu(node, event); });
       } else if (node.image) {
         const asset = document.createElement("span"); asset.className = "file-entry image-entry"; asset.textContent = node.name; asset.title = node.path;
         asset.tabIndex = 0;

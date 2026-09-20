@@ -4,6 +4,7 @@ const { getAction, listActions } = require('./ai/aiActions'); const { LocalAISer
 const { RECOMMENDED_MODEL, downloadRecommendedModel } = require('./ai/modelDownload');
 const { DEFAULT_CONTEXT_SIZE, DEFAULT_GLOBAL_AI_PROMPT, MAX_CONTEXT_SIZE, MAX_GENERATED_TOKENS, MIN_CONTEXT_SIZE, MIN_GENERATED_TOKENS, assemblePrompt, normalizedContextSize, normalizedTokenLimit, resolvedActionMaxTokens, resolvedActionPrompt, resolvedContextSize, resolvedGlobalPrompt } = require('./ai/promptSettings');
 const { importImageAsset, renameImageAsset } = require('./assetImport');
+const { renameDocumentFile } = require('./documentFiles');
 let mainWindow; let currentRoot = null;
 let modelDownloadController = null;
 let editorWrapLines = false;
@@ -92,6 +93,10 @@ ipcMain.handle('files:recent', async () => { const settings = await readSettings
 ipcMain.handle('files:open-recent', async (_e, filePath) => { if (!markdownExtension.test(filePath)) throw Error('Only Markdown files can be opened.'); const content=await fs.readFile(filePath,'utf8'); currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {path:filePath,name:path.basename(filePath),content,assets:await assetsIn(currentRoot),recentFiles}; });
 ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExtension.test(p)) throw Error('File is outside selected folder.'); await addRecent(p); return fs.readFile(p,'utf8'); }); ipcMain.handle('files:save', async (_e,p,content) => { if(!markdownExtension.test(p)||(!isInsideRoot(p)&&path.dirname(p)!==currentRoot)) throw Error('File is outside selected folder.'); await fs.writeFile(p,content,'utf8'); return true; });
 ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,'','utf8'); return result.filePath; });
+ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
+  if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
+  return renameDocumentFile(filePath, requestedName);
+});
 ipcMain.handle('assets:import-image', async (_event, documentPath, imageBytes) => {
   if (typeof documentPath !== 'string' || !markdownExtension.test(documentPath) || !isInsideRoot(documentPath)) throw new Error('Open a saved Markdown handout before pasting an image.');
   if (!(imageBytes instanceof Uint8Array)) throw new Error('The clipboard did not provide valid image data.');

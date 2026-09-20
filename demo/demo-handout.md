@@ -19,10 +19,10 @@ Which gas do plants take in?
 
 :::question id=Q2 type=mc points=1
 Which of the following is a producer?
-- (A) Frog
-- (B) Algae *
-- (C) Fish
-- (D) Heron
+- Frog
+- Algae *
+- Fish
+- Heron
 :::
 
 ## Short answer

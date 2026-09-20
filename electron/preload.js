@@ -1,2 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
-contextBridge.exposeInMainWorld('handoutDesktop', { openFolder: () => ipcRenderer.invoke('folders:open'), refreshFolder: () => ipcRenderer.invoke('folders:refresh'), openFile: () => ipcRenderer.invoke('files:open-dialog'), recentFiles: () => ipcRenderer.invoke('files:recent'), openRecent: filePath => ipcRenderer.invoke('files:open-recent', filePath), readFile: filePath => ipcRenderer.invoke('files:read', filePath), saveFile: (filePath, content) => ipcRenderer.invoke('files:save', filePath, content), newFile: () => ipcRenderer.invoke('files:new'), importImage: (documentPath, imageBytes) => ipcRenderer.invoke('assets:import-image', documentPath, imageBytes), imageReference: (documentPath, imagePath) => ipcRenderer.invoke('assets:reference', documentPath, imagePath), renameImage: (imagePath, requestedName) => ipcRenderer.invoke('assets:rename-image', imagePath, requestedName), print: title => ipcRenderer.invoke('handout:print', title), exportPdf: (layout, title) => ipcRenderer.invoke('handout:pdf', layout, title), aiStatus: () => ipcRenderer.invoke('ai:status'), recommendedAIModel: () => ipcRenderer.invoke('ai:recommended-model'), downloadAIModel: () => ipcRenderer.invoke('ai:download-model'), cancelAIModelDownload: () => ipcRenderer.invoke('ai:cancel-model-download'), selectAIModel: () => ipcRenderer.invoke('ai:select-model'), aiPromptSettings: () => ipcRenderer.invoke('ai:prompt-settings'), saveGlobalAIPrompt: globalPrompt => ipcRenderer.invoke('ai:save-global-prompt', globalPrompt), saveAIActionPrompts: actionPrompts => ipcRenderer.invoke('ai:save-action-prompts', actionPrompts), saveAIActionTokenLimits: tokenLimits => ipcRenderer.invoke('ai:save-action-token-limits', tokenLimits), saveAIContextSize: contextSize => ipcRenderer.invoke('ai:save-context-size', contextSize), prepareAI: (actionId, selectedText, options) => ipcRenderer.invoke('ai:prepare', actionId, selectedText, options), generateAI: (actionId, selectedText, options) => ipcRenderer.invoke('ai:generate', actionId, selectedText, options), stopAI: requestId => ipcRenderer.invoke('ai:stop', requestId), onMenuCommand: callback => { const listener = (_event, command) => callback(command); ipcRenderer.on('menu:command', listener); return () => ipcRenderer.removeListener('menu:command', listener); }, onAIModelDownloadProgress: callback => { const listener = (_event, progress) => callback(progress); ipcRenderer.on('ai:model-download-progress', listener); return () => ipcRenderer.removeListener('ai:model-download-progress', listener); }, onAIProgress: callback => { const listener = (_event, requestId, progress) => callback(requestId, progress); ipcRenderer.on('ai:progress', listener); return () => ipcRenderer.removeListener('ai:progress', listener); } });
+
+const invoke = channel => (...args) => ipcRenderer.invoke(channel, ...args);
+const subscribe = channel => callback => {
+  const listener = (_event, ...args) => callback(...args);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+};
+
+contextBridge.exposeInMainWorld('handoutDesktop', {
+  openFolder: invoke('folders:open'), refreshFolder: invoke('folders:refresh'),
+  openFile: invoke('files:open-dialog'), recentFiles: invoke('files:recent'), openRecent: invoke('files:open-recent'),
+  readFile: invoke('files:read'), saveFile: invoke('files:save'), newFile: invoke('files:new'), renameFile: invoke('files:rename'),
+  importImage: invoke('assets:import-image'), imageReference: invoke('assets:reference'), renameImage: invoke('assets:rename-image'),
+  print: invoke('handout:print'), exportPdf: invoke('handout:pdf'),
+  aiStatus: invoke('ai:status'), recommendedAIModel: invoke('ai:recommended-model'), downloadAIModel: invoke('ai:download-model'),
+  cancelAIModelDownload: invoke('ai:cancel-model-download'), selectAIModel: invoke('ai:select-model'), aiPromptSettings: invoke('ai:prompt-settings'),
+  saveGlobalAIPrompt: invoke('ai:save-global-prompt'), saveAIActionPrompts: invoke('ai:save-action-prompts'),
+  saveAIActionTokenLimits: invoke('ai:save-action-token-limits'), saveAIContextSize: invoke('ai:save-context-size'),
+  prepareAI: invoke('ai:prepare'), generateAI: invoke('ai:generate'), stopAI: invoke('ai:stop'),
+  onMenuCommand: subscribe('menu:command'), onAIModelDownloadProgress: subscribe('ai:model-download-progress'), onAIProgress: subscribe('ai:progress')
+});

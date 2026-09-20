@@ -24,6 +24,18 @@ In addition to basic Markdown, The Markdown Handout Maker supports:
 - Explicit printed page break:
   :::pagebreak
 
+Checklist block:
+
+:::checklist
+- Bring a notebook
+- Record your observations
+- Explain your evidence
+:::
+
+Each Markdown list item becomes a printed empty checkbox. Keep the checklist
+items inside the block; the block is available from **Snippets → Basics →
+Checklist**. A regular unordered list remains a regular bulleted list.
+
 Wrap several paragraphs around a left- or right-floating image:
 
 :::wrap
@@ -76,6 +88,35 @@ Wide column
 Supported examples include `1/2,1/2`, `1/3,2/3`, `1/4,3/4`, and
 `1/4,1/4,1/2`. Other `:::` blocks, including questions, answer blocks,
 image wraps, and nested grids, may be placed inside a cell.
+
+Tables and worksheet tables:
+
+- Use a normal Markdown table for compact reference or response tables. Column
+  alignment follows standard Markdown markers such as `:---`, `:---:`, and
+  `---:`.
+- Insert a worksheet table from **Snippets → Layout → Table…**. Choose
+  Markdown for an editable Markdown table or HTML for fixed proportional
+  columns. Generated body cells are intentionally blank and print with extra
+  handwriting space.
+- For HTML worksheet tables, use `<table class="worksheet-table">` and blank
+  `<td></td>` body cells when you need fixed column widths and writing room.
+
+Custom styling:
+
+Add a `<style>` block when a handout needs a small, document-specific visual
+adjustment. Styles are kept with the handout and apply to the printed preview;
+scope selectors to `.handout-page` so they do not affect the editor UI.
+
+```html
+<style>
+.handout-page h1 { color: #215b75; }
+.handout-page .notice { border: 1px solid #215b75; padding: .1in; }
+</style>
+```
+
+The **Snippets → Layout → Style Block** command inserts a starter block. Raw
+HTML other than supported `<br>` and `<style>` blocks should be avoided; other
+raw HTML is escaped by the renderer.
 
 Authoring constraints:
 - Keep questions and their answer areas together when practical.
@@ -137,9 +178,8 @@ Start each handout with this (before the level 1 heading):
 
 ### Checklists
 
-▢ Start each line with the ▢ symbol.  
-▢ end each line with two spaces.
-▢ Don't use a regular unordered list.
+Prefer the `:::checklist` block described above. It produces consistent printed
+checkboxes and is easier to edit than manually typed symbols.
 
 
 My handout request follows:
