@@ -1803,18 +1803,45 @@ if (window.handoutDesktop) {
     input.focus();
     input.select();
   }
+  async function deleteTreeFile(node) {
+    const documentState = documents.get(node.path);
+    const warning = documentState?.dirty ? '\n\nUnsaved changes in this open handout will be lost.' : '';
+    if (!window.confirm(`Delete “${node.name}”? This cannot be undone.${warning}`)) return;
+    try {
+      await desktop.deleteFile(node.path);
+      const wasActive = activePath === node.path;
+      documents.delete(node.path);
+      if (wasActive) {
+        const next = documents.values().next().value;
+        if (next) activateDocument(next.file.path);
+        else {
+          activePath = null; selectedFile = null; dirty = false; source.value = ''; source.disabled = true;
+          setAssets([]); markDirty(false); statusText.textContent = 'No file open'; drawTabs(); render();
+        }
+      } else drawTabs();
+      await refreshFolderTreeAndAssets();
+      statusText.textContent = `Deleted handout ${node.name}`;
+    } catch (error) {
+      statusText.textContent = `Could not delete handout: ${error.message}`;
+    }
+  }
   function showFileContextMenu(node, event) {
     document.querySelector('.image-context-menu')?.remove();
     const menu = document.createElement('div');
     menu.className = 'image-context-menu';
     menu.setAttribute('role', 'menu');
-    menu.innerHTML = '<button type="button">Rename…</button>';
+    menu.innerHTML = '<button type="button" data-action="rename">Rename…</button><button type="button" data-action="delete">Delete…</button>';
     document.body.append(menu);
     menu.style.left = `${Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8)}px`;
     menu.style.top = `${Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8)}px`;
     const close = () => { window.removeEventListener('pointerdown', closeFromOutside); menu.remove(); };
     const closeFromOutside = pointerEvent => { if (!menu.contains(pointerEvent.target)) close(); };
-    menu.querySelector('button').addEventListener('click', () => { close(); renameTreeFile(node); });
+    menu.addEventListener('click', clickEvent => {
+      const action = clickEvent.target.dataset.action;
+      close();
+      if (action === 'rename') renameTreeFile(node);
+      else if (action === 'delete') void deleteTreeFile(node);
+    });
     window.addEventListener('pointerdown', closeFromOutside);
     menu.querySelector('button').focus();
   }

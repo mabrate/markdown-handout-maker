@@ -23,4 +23,9 @@ async function renameDocumentFile(currentPath, requestedName) {
   return { path: destination, name };
 }
 
-module.exports = { markdownExtension, safeDocumentName, renameDocumentFile };
+async function deleteDocumentFile(filePath) {
+  await fs.unlink(filePath);
+  return true;
+}
+
+module.exports = { markdownExtension, safeDocumentName, renameDocumentFile, deleteDocumentFile };

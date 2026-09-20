@@ -4,7 +4,7 @@ const { getAction, listActions } = require('./ai/aiActions'); const { LocalAISer
 const { RECOMMENDED_MODEL, downloadRecommendedModel } = require('./ai/modelDownload');
 const { DEFAULT_CONTEXT_SIZE, DEFAULT_GLOBAL_AI_PROMPT, MAX_CONTEXT_SIZE, MAX_GENERATED_TOKENS, MIN_CONTEXT_SIZE, MIN_GENERATED_TOKENS, assemblePrompt, normalizedContextSize, normalizedTokenLimit, resolvedActionMaxTokens, resolvedActionPrompt, resolvedContextSize, resolvedGlobalPrompt } = require('./ai/promptSettings');
 const { importImageAsset, renameImageAsset } = require('./assetImport');
-const { renameDocumentFile } = require('./documentFiles');
+const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
 let mainWindow; let currentRoot = null;
 let modelDownloadController = null;
 let editorWrapLines = false;
@@ -96,6 +96,10 @@ ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const re
 ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
   if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
   return renameDocumentFile(filePath, requestedName);
+});
+ipcMain.handle('files:delete', async (_event, filePath) => {
+  if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
+  return deleteDocumentFile(filePath);
 });
 ipcMain.handle('assets:import-image', async (_event, documentPath, imageBytes) => {
   if (typeof documentPath !== 'string' || !markdownExtension.test(documentPath) || !isInsideRoot(documentPath)) throw new Error('Open a saved Markdown handout before pasting an image.');

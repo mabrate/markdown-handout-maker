@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
-const { safeDocumentName, renameDocumentFile } = require('../electron/documentFiles');
+const { safeDocumentName, renameDocumentFile, deleteDocumentFile } = require('../electron/documentFiles');
 
 (async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'handout-document-test-'));
@@ -20,6 +20,8 @@ const { safeDocumentName, renameDocumentFile } = require('../electron/documentFi
     assert.strictEqual(await fs.readFile(renamed.path, 'utf8'), '# Draft');
     await fs.writeFile(path.join(root, 'existing.md'), '');
     await assert.rejects(() => renameDocumentFile(renamed.path, 'existing.md'), /already exists/);
+    await deleteDocumentFile(renamed.path);
+    await assert.rejects(() => fs.access(renamed.path), /ENOENT/);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
