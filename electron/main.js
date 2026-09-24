@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
 const fs = require('fs/promises'); const path = require('path'); const { pathToFileURL } = require('url');
 const { getAction, listActions } = require('./ai/aiActions'); const { LocalAIService } = require('./ai/aiService');
 const { RECOMMENDED_MODEL, downloadRecommendedModel } = require('./ai/modelDownload');
@@ -84,7 +84,22 @@ async function refreshApplicationMenu() {
   ]));
 }
 async function addRecent(filePath) { const settings = await readSettings(); const recentFiles = [filePath, ...(settings.recentFiles || []).filter(item => item !== filePath)].slice(0, recentLimit); await saveSettings({...settings, recentFiles}); await refreshApplicationMenu(); return recentFiles; }
-function createWindow() { mainWindow = new BrowserWindow({ title:productName, icon:path.join(__dirname,'..','assets','markdown-handout-maker-icon.png'), width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } }); mainWindow.loadFile(path.join(__dirname,'..','renderer','index.html')); }
+function openExternalLink(url) {
+  try {
+    if (['http:', 'https:'].includes(new URL(url).protocol)) void shell.openExternal(url);
+  } catch {}
+}
+function createWindow() {
+  mainWindow = new BrowserWindow({ title:productName, icon:path.join(__dirname,'..','assets','markdown-handout-maker-icon.png'), width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } });
+  const contents = mainWindow.webContents;
+  contents.on('will-navigate', (event, url) => {
+    if (url === contents.getURL() || url.startsWith(`${contents.getURL().split('#')[0]}#`)) return;
+    event.preventDefault();
+    openExternalLink(url);
+  });
+  contents.setWindowOpenHandler(({ url }) => { openExternalLink(url); return { action: 'deny' }; });
+  mainWindow.loadFile(path.join(__dirname,'..','renderer','index.html'));
+}
 app.setName(productName);
 app.whenReady().then(async () => { await refreshApplicationMenu(); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); }); app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 ipcMain.handle('folders:open', async () => { const settings = await readSettings(); const result = await dialog.showOpenDialog(mainWindow,{title:'Choose handout folder',defaultPath:settings.lastFolder,properties:['openDirectory']}); if(result.canceled) return null; currentRoot=result.filePaths[0]; await saveSettings({...settings,lastFolder:currentRoot}); return {path:currentRoot,name:path.basename(currentRoot),tree:await readTree(currentRoot),assets:await assetsIn(currentRoot)}; });
