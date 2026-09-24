@@ -1602,9 +1602,10 @@ if (window.handoutDesktop) {
 
   const findBar = document.createElement("div");
   findBar.className = "find-bar";
-  findBar.innerHTML = '<button type="button" class="find-arrow find-previous" aria-label="Previous match">&#x25B2;</button><input type="search" placeholder="Find in document" aria-label="Find in document"><span class="find-count"></span><button type="button" class="find-arrow find-next" aria-label="Next match">&#x25BC;</button><button type="button" class="panel-toggle find-close">Close</button>';
+  findBar.innerHTML = '<div class="find-row"><button type="button" class="find-arrow find-previous" aria-label="Previous match">&#x25B2;</button><input type="search" class="find-input" placeholder="Find in document" aria-label="Find in document"><span class="find-count"></span><button type="button" class="find-arrow find-next" aria-label="Next match">&#x25BC;</button><button type="button" class="panel-toggle find-close">Close</button></div><div class="find-row replace-row"><input type="text" class="replace-input" placeholder="Replace with" aria-label="Replace with"><button type="button" class="panel-toggle replace-one">Replace</button><button type="button" class="panel-toggle replace-all">Replace All</button></div>';
   editorPanel.insertBefore(findBar, editorSurface);
-  const findInput = findBar.querySelector("input");
+  const findInput = findBar.querySelector(".find-input");
+  const replaceInput = findBar.querySelector(".replace-input");
   const findCount = findBar.querySelector(".find-count");
   let searchMatches = [];
   let activeMatch = 0;
@@ -1641,7 +1642,7 @@ if (window.handoutDesktop) {
     renderSearchHighlights();
     selectSearchMatch();
   }
-  function showFind() { findBar.classList.add("open"); findInput.focus(); findInput.select(); }
+  function showFind() { findBar.classList.add("open"); editorSurface.classList.add("find-active"); findInput.focus(); findInput.select(); }
   findInput.addEventListener("input", findText);
   findInput.addEventListener("keydown", event => {
     if (event.key !== "Enter" || !searchMatches.length) return;
@@ -1652,11 +1653,38 @@ if (window.handoutDesktop) {
   source.addEventListener("input", renderSearchHighlights);
   findBar.querySelector(".find-previous").addEventListener("click", () => { if (!searchMatches.length) return; activeMatch = (activeMatch - 1 + searchMatches.length) % searchMatches.length; selectSearchMatch(); findInput.focus(); });
   findBar.querySelector(".find-next").addEventListener("click", () => { if (!searchMatches.length) return; activeMatch = (activeMatch + 1) % searchMatches.length; selectSearchMatch(); findInput.focus(); });
+  findBar.querySelector(".replace-one").addEventListener("click", () => {
+    const match = searchMatches[activeMatch];
+    if (!match || source.disabled) return;
+    const nextPosition = match.index + replaceInput.value.length;
+    source.setRangeText(replaceInput.value, match.index, match.index + match[0].length, "end");
+    source.dispatchEvent(new Event("input", { bubbles: true }));
+    const nextIndex = searchMatches.findIndex(item => item.index >= nextPosition);
+    activeMatch = nextIndex < 0 ? 0 : nextIndex;
+    selectSearchMatch();
+    replaceInput.focus();
+  });
+  findBar.querySelector(".replace-all").addEventListener("click", () => {
+    if (!searchMatches.length || source.disabled) return;
+    let cursor = 0;
+    let updated = "";
+    for (const match of searchMatches) {
+      updated += source.value.slice(cursor, match.index) + replaceInput.value;
+      cursor = match.index + match[0].length;
+    }
+    updated += source.value.slice(cursor);
+    source.setRangeText(updated, 0, source.value.length, "end");
+    source.dispatchEvent(new Event("input", { bubbles: true }));
+    activeMatch = 0;
+    renderSearchHighlights();
+    replaceInput.focus();
+  });
   findBar.querySelector(".find-close").addEventListener("click", () => {
     findInput.value = "";
     activeMatch = 0;
     renderSearchHighlights();
     findBar.classList.remove("open");
+    editorSurface.classList.remove("find-active");
   });
   document.querySelector("#find-button")?.addEventListener("click", showFind);
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") { event.preventDefault(); showFind(); } });
