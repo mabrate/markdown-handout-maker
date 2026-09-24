@@ -9,6 +9,7 @@ let mainWindow; let currentRoot = null;
 let modelDownloadController = null;
 let editorWrapLines = false;
 let editorShowWhitespace = false;
+let handoutTheme = 'default';
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const recentLimit = 12;
@@ -71,6 +72,9 @@ async function refreshApplicationMenu() {
       { label: 'Wrap Lines', type: 'checkbox', checked: editorWrapLines, click: menuItem => { editorWrapLines = menuItem.checked; sendMenuCommand('wrap-lines', editorWrapLines); } },
       { label: 'Show Whitespace', type: 'checkbox', checked: editorShowWhitespace, click: menuItem => { editorShowWhitespace = menuItem.checked; sendMenuCommand('show-whitespace', editorShowWhitespace); } },
       { type: 'separator' }, { label: 'Page Layout', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
+      { label: 'Handout Theme', submenu: [
+        ['Default', 'default'], ['Classic', 'classic'], ['Modern', 'modern'], ['Spacious', 'spacious']
+      ].map(([label, value]) => ({ label, type: 'radio', checked: handoutTheme === value, click: () => { handoutTheme = value; sendMenuCommand('set-theme', value); } })) },
       { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
     ] },
@@ -98,6 +102,7 @@ function createWindow() {
     openExternalLink(url);
   });
   contents.setWindowOpenHandler(({ url }) => { openExternalLink(url); return { action: 'deny' }; });
+  contents.on('did-finish-load', () => sendMenuCommand('set-theme', handoutTheme));
   mainWindow.loadFile(path.join(__dirname,'..','renderer','index.html'));
 }
 app.setName(productName);

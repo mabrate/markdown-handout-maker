@@ -344,6 +344,22 @@ body {
 .handout-page img { max-width: 100%; max-height: calc(var(--page-height) - var(--page-pad-top) - var(--page-pad-bottom)); height: auto; object-fit: contain; }
 .handout-page img.float-right { float: right; width: 2.1in; margin: 0 0 .12in .18in; }
 .handout-page img.float-left { float: left; width: 2.1in; margin: 0 .18in .12in 0; }
+/* Theme rules apply to preview, print, and PDF handouts. */
+body[data-handout-theme="classic"] .handout-page { font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.38; }
+body[data-handout-theme="classic"] .handout-block + .handout-block { margin-top: .12in; }
+body[data-handout-theme="classic"] .handout-page h1 { border-bottom: 1px solid #333; font-size: 21pt; }
+body[data-handout-theme="classic"] .handout-page h2 { font-size: 16pt; }
+body[data-handout-theme="classic"] .handout-page blockquote { border-left-color: #444; background: #f7f7f7; }
+body[data-handout-theme="modern"] .handout-page { font-family: "Segoe UI", Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.42; }
+body[data-handout-theme="modern"] .handout-block + .handout-block { margin-top: .13in; }
+body[data-handout-theme="modern"] .handout-page h1 { border-bottom: 3px solid #215b75; color: #174458; font-size: 22pt; }
+body[data-handout-theme="modern"] .handout-page h2, body[data-handout-theme="modern"] .handout-page h3 { color: #215b75; }
+body[data-handout-theme="modern"] .handout-page blockquote { border-left-color: #215b75; background: #eef4f6; }
+body[data-handout-theme="spacious"] .handout-page { font-family: "Playpen Sans", Arial, sans-serif; font-size: 11pt; line-height: 1.55; }
+body[data-handout-theme="spacious"] .handout-block + .handout-block { margin-top: .16in; }
+body[data-handout-theme="spacious"] .handout-page h1 { padding-bottom: .1in; font-size: 20pt; }
+body[data-handout-theme="spacious"] .handout-page h2 { font-size: 15pt; }
+body[data-handout-theme="spacious"] .handout-page li { margin: .05in 0; }
 .media-resize-outline { position: fixed; z-index: 150; border: 2px solid #1684a2; pointer-events: none; }
 .media-resize-handle { position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; border: 2px solid #fff; border-radius: 3px; padding: 0; background: #1684a2; box-shadow: 0 1px 4px #0005; cursor: nwse-resize; pointer-events: auto; }
 .media-resize-handle.from-left { right: auto; left: -8px; cursor: nesw-resize; }

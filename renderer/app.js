@@ -2062,6 +2062,10 @@ if (window.handoutDesktop) {
     if (command === 'wrap-lines') return setWrapLines(payload);
     if (command === 'show-whitespace') return setShowWhitespace(payload);
     if (command === 'set-layout' && layouts[payload]) { layoutSelect.value = payload; return render(); }
+    if (command === 'set-theme' && ['default', 'classic', 'modern', 'spacious'].includes(payload)) {
+      document.body.dataset.handoutTheme = payload;
+      return render();
+    }
     if (command === 'find') return showFind();
     if (command === 'insert-snippet' && snippets[payload]) return insertSnippet(snippets[payload]);
     if (command === 'open-snippet-dialog' && ['question', 'rubric', 'columns', 'table'].includes(payload)) return openSnippetDialog(payload);
