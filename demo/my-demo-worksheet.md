@@ -1,36 +1,42 @@
-**Name:**____________________________________________________ **Period:** _____ **Date:** __________
+---
+layout: letter
+ai_context: |
+  Subject: [Subject]
+  Grade: [Grade]
+  Learning goal: [Learning goal]
+---
 
-# My Demo Handout
+**Name:** ______________________________  **Period:** ______  **Date:** __________
 
-<!-- The workspace spacing is deliberately tight. <br> tags are an easy way to space things out. -->
-<br>
+# [Handout Title]
 
-## Informational Text
 :::wrap
-[qr:http://www.goog.com]{.float-right width=2in}
+[qr:https://example.com]{.float-right width=1.25in}
 
-This is how I would like most of my handouts to be structured. A couple of short paragraph provide necessary background knowledge. for the rest of the document. An image or QR code help make the simple worksheet experience richer.
-
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
 :::
 
-**A quick comprehension question about the text above.** {{lines:2:inline}}
-
-## columns
-
-Columns 
-
-:::grid widths=1/3,1/3,1/3 cards
+:::grid columns=2
 :::cell
-### Use Cases
-▢ Save space by putting small elements together  
-▢ Second checklist item  
-▢ Third checklist item  
-
+:::question id=Q1 type=mc points=1
+Multiple-choice question one
+- Choice A
+- Choice B *
+- Choice C
+:::
 :::cell
-### Drawing Space
-:::cell 
-Column 2
+:::question id=Q2 type=mc points=1
+Multiple-choice question two
+- Choice A *
+- Choice B
+- Choice C
+:::
 :::
 
-
+:::question id=Q3 type=short lines=4 points=2
+Open-response question
+:::answer
+Teacher answer
+:::
+:::
 

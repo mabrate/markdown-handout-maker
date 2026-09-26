@@ -44,7 +44,26 @@ Google integration requires internet access and your own Google Cloud OAuth **De
 - **Pull** replaces the local file with the literal text of the linked Doc. If the local file changed since the last sync, it saves a dated Markdown backup beside the handout before replacing it.
 - **Google Doc link and QR…** displays the link and an offline-generated QR code. The phone needs internet and permission to open the Doc.
 
-The Google Doc shows Markdown characters as ordinary text; it does not render the handout layout. Google Docs may still alter text that you edit manually on a phone, so review a pull before relying on it for a classroom handout. The sync link is stored in per-user app settings; refresh tokens are encrypted with the operating system's secure storage when available. Sign-in lasts only for the current app session if secure storage is unavailable.
+The Google Doc shows Markdown characters as ordinary text in Consolas; it does not render the handout layout. Google Docs may still alter text that you edit manually on a phone, so review a pull before relying on it for a classroom handout. The sync link is stored in per-user app settings; refresh tokens are encrypted with the operating system's secure storage when available. Sign-in lasts only for the current app session if secure storage is unavailable.
+
+## YAML front matter
+
+Put an optional YAML block at the very beginning of a handout. The app removes it from the printed preview and PDF, while using these supported settings:
+
+```md
+---
+layout: letter
+ai_context: |
+  Subject: [subject]
+  Grade: [grade]
+  Learning goal: [learning goal]
+---
+```
+
+| Parameter | Values and behavior |
+| --- | --- |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, or `booklet`. Sets the initial page layout when the handout opens. |
+| `ai_context` | A quoted one-line value or an indented YAML block. Its text is included with local AI requests to supply subject, grade, learning goal, and similar handout context. |
 
 ## Local AI
 
@@ -87,8 +106,8 @@ tests/             Focused Node-based checks
 ## Handout syntax and examples
 
 - Start with [the example handout](demo/example-handout.md).
-- See [the authoring guide](demo/HANDOUT_MARKDOWN.md) for the supported Markdown
-  extensions and classroom layout patterns.
+- See [the AI handout guide](demo/AI_HANDOUT_GUIDE.md) for supported Markdown
+  extensions, YAML settings, and classroom layout patterns.
 
 ## Contributing
 

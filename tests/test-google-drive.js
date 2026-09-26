@@ -26,12 +26,16 @@ function mockDocument(text, revisionId = 'revision-1') {
     assert.equal(drive.plainDocumentText({ body: { content: [{ sectionBreak: {} }, { paragraph: { elements: [{ textRun: { content: 'plain\n' } }] }, endIndex: 7 }] } }).text, 'plain');
     assert.equal(await drive.createPlainDoc('token', 'Lesson', markdown), 'doc123');
     const firstWrite = JSON.parse(calls[2].options.body);
-    assert.deepEqual(firstWrite.requests, [{ insertText: { location: { index: 1 }, text: markdown } }]);
+    assert.deepEqual(firstWrite.requests, [
+      { insertText: { location: { index: 1 }, text: markdown } },
+      { updateTextStyle: { range: { startIndex: 1, endIndex: markdown.length + 1 }, textStyle: { weightedFontFamily: { fontFamily: drive.PLAIN_TEXT_FONT } }, fields: 'weightedFontFamily' } }
+    ]);
     assert.equal(firstWrite.writeControl.requiredRevisionId, 'revision-1');
     await drive.writePlainMarkdown('token', mockDocument('old\n'), 'new\n');
     const replacement = JSON.parse(calls[3].options.body);
     assert.deepEqual(replacement.requests[0], { deleteContentRange: { range: { startIndex: 1, endIndex: 5 } } });
     assert.deepEqual(replacement.requests[1], { insertText: { location: { index: 1 }, text: 'new\n' } });
+    assert.deepEqual(replacement.requests[2], { updateTextStyle: { range: { startIndex: 1, endIndex: 5 }, textStyle: { weightedFontFamily: { fontFamily: drive.PLAIN_TEXT_FONT } }, fields: 'weightedFontFamily' } });
     assert.equal(drive.plainDocumentText(await drive.getDocument('token', 'doc123')).text, '# Edited on phone\n');
     assert.equal((await drive.metadata('token', 'doc123')).version, '2');
     await drive.upload('token', { name: 'Lesson.pdf', content: Buffer.from('PDF'), mimeType: drive.PDF_MIME });

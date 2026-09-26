@@ -7,6 +7,7 @@ const PDF_MIME = 'application/pdf';
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const DOCS_API = 'https://docs.googleapis.com/v1/documents';
+const PLAIN_TEXT_FONT = 'Consolas';
 
 function docUrl(id) { return `https://docs.google.com/document/d/${encodeURIComponent(id)}/edit`; }
 function digest(value) { return crypto.createHash('sha256').update(value).digest('hex'); }
@@ -69,7 +70,14 @@ async function writePlainMarkdown(token, document, content) {
   const current = plainDocumentText(document);
   const requests = [];
   if (current.endIndex > 2) requests.push({ deleteContentRange: { range: { startIndex: 1, endIndex: current.endIndex - 1 } } });
-  if (content) requests.push({ insertText: { location: { index: 1 }, text: content } });
+  if (content) {
+    requests.push({ insertText: { location: { index: 1 }, text: content } });
+    requests.push({ updateTextStyle: {
+      range: { startIndex: 1, endIndex: content.length + 1 },
+      textStyle: { weightedFontFamily: { fontFamily: PLAIN_TEXT_FONT } },
+      fields: 'weightedFontFamily'
+    } });
+  }
   if (!requests.length) return;
   const body = { requests, ...(document.revisionId ? { writeControl: { requiredRevisionId: document.revisionId } } : {}) };
   await apiRequest(`${DOCS_API}/${encodeURIComponent(document.documentId)}:batchUpdate`, token, {
@@ -124,4 +132,4 @@ async function refresh(clientId, refreshToken, clientSecret = '') {
   return tokens;
 }
 
-module.exports = { DOC_MIME, PDF_MIME, authorize, refresh, upload, metadata, getDocument, plainDocumentText, writePlainMarkdown, createPlainDoc, docUrl, digest };
+module.exports = { DOC_MIME, PDF_MIME, PLAIN_TEXT_FONT, authorize, refresh, upload, metadata, getDocument, plainDocumentText, writePlainMarkdown, createPlainDoc, docUrl, digest };

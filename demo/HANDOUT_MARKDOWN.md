@@ -5,7 +5,26 @@ File and output conventions:
 - Generated HTML and PDF files belong in exports/handouts/.
 - Return Markdown, not HTML or PDF, unless I explicitly request another format.
 - I may target a standard single-page handout, a multi-page packet, an individual half-letter handout, two duplicate half-sheets on one letter sheet, or a letter-page booklet imposed on 11x17 paper.
-- Print layout is selected in The Markdown Handout Maker, not encoded in Markdown. Write to the requested target: keep half-sheets especially compact, use intentional page breaks for packets, and organize booklet pages in normal reading order because the tool performs imposition automatically.
+- Choose print layout in the app, or set it with the optional `layout` YAML setting below. Write to the requested target: keep half-sheets especially compact, use intentional page breaks for packets, and organize booklet pages in normal reading order because the tool performs imposition automatically.
+
+## YAML front matter
+
+An optional YAML block at the first line of a handout controls its opening layout and adds context to local AI actions. It is removed from the preview, printout, and PDF:
+
+```md
+---
+layout: letter
+ai_context: |
+  Subject: [subject]
+  Grade: [grade]
+  Learning goal: [learning goal]
+---
+```
+
+| Parameter | Values and behavior |
+| --- | --- |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, or `booklet`. Selects the layout when the handout opens. |
+| `ai_context` | A quoted one-line value or an indented YAML block. Sends handout context with local AI requests. |
 
 In addition to basic Markdown, The Markdown Handout Maker supports:
 
