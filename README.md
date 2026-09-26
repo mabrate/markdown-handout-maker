@@ -5,14 +5,14 @@ Markdown. It combines a local file browser, Markdown editor, live paginated
 preview, native printing, and PDF export in one Electron application for
 Linux and macOS.
 
-The Markdown Handout Maker works with local files. Your handouts stay in folders you choose;
-they are not uploaded to a service.
+The Markdown Handout Maker keeps your source handouts in local folders. Google Drive export and Google Doc sync are optional; they upload a copy only when you choose a Google command.
 
 ## Features
 
 - Open, create, edit, and save Markdown handouts from a local folder
 - Preview letter, A4, half-sheet, duplicate-half-sheet, and booklet layouts
-- Print natively or export a PDF
+- Print natively, export a PDF, or export a PDF to Google Drive
+- Sync a handout to a Google Doc with Push, Pull, and a phone QR link
 - Use classroom-focused Markdown additions for answer lines, drawing spaces,
   images, grids, cards, and page breaks
 - Optional local AI tools for vocabulary tables, distractors, and quiz questions
@@ -33,6 +33,18 @@ npm start
 In the app, choose **File → Open Folder…** to work with a folder of Markdown
 handouts, or **File → Open File…** for one handout. Use **File → Save** or
 Ctrl/Cmd+S to write changes back to the selected file.
+
+## Google Drive and Google Docs
+
+Google integration requires internet access and your own Google Cloud OAuth **Desktop app** client ID. In that Cloud project, enable the Google Drive API and Google Docs API, then configure its OAuth consent screen. In the app, open **File → Google Drive → Settings and sign in…**, paste the Desktop client ID, save it, and sign in through your system browser. The app requests the `drive.file` scope. Google may limit access while your consent screen is in testing mode.
+
+- **Export PDF to Drive…** uploads the current print preview, and displays its link and QR code.
+- **Sync to a Google Doc…** creates a Doc containing the saved Markdown as literal plain text, and links that local file to its Doc ID.
+- **Push** saves the current handout, then replaces the linked Doc text with literal Markdown. It refuses to overwrite a Doc whose Drive version changed since the last sync.
+- **Pull** replaces the local file with the literal text of the linked Doc. If the local file changed since the last sync, it saves a dated Markdown backup beside the handout before replacing it.
+- **Google Doc link and QR…** displays the link and an offline-generated QR code. The phone needs internet and permission to open the Doc.
+
+The Google Doc shows Markdown characters as ordinary text; it does not render the handout layout. Google Docs may still alter text that you edit manually on a phone, so review a pull before relying on it for a classroom handout. The sync link is stored in per-user app settings; refresh tokens are encrypted with the operating system's secure storage when available. Sign-in lasts only for the current app session if secure storage is unavailable.
 
 ## Local AI
 

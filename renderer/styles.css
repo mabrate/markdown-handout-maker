@@ -464,3 +464,13 @@ body[data-handout-theme="spacious"] .handout-page li { margin: .05in 0; }
   #preview > :last-child { break-after: auto; page-break-after: auto; }
   .sheet-label { display: none; }
 }
+
+.google-dialog { width: min(580px, 100%); }
+.google-dialog label { display: grid; gap: 6px; margin: 14px 0; font-weight: 650; }
+.google-dialog input { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+.google-dialog .button { color: var(--ink); border-color: var(--line); }
+.google-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.google-message { min-height: 1.4em; color: var(--accent-dark); }
+.google-link-qr { width: 220px; max-width: 100%; margin: 14px auto; }
+.google-link-qr svg { width: 100%; height: auto; }
+.google-dialog a { overflow-wrap: anywhere; }

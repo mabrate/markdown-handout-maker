@@ -1,11 +1,13 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, safeStorage } = require('electron');
 const fs = require('fs/promises'); const path = require('path'); const { pathToFileURL } = require('url');
 const { getAction, listActions } = require('./ai/aiActions'); const { LocalAIService } = require('./ai/aiService');
 const { RECOMMENDED_MODEL, downloadRecommendedModel } = require('./ai/modelDownload');
 const { DEFAULT_CONTEXT_SIZE, DEFAULT_GLOBAL_AI_PROMPT, MAX_CONTEXT_SIZE, MAX_GENERATED_TOKENS, MIN_CONTEXT_SIZE, MIN_GENERATED_TOKENS, assemblePrompt, normalizedContextSize, normalizedTokenLimit, resolvedActionMaxTokens, resolvedActionPrompt, resolvedContextSize, resolvedGlobalPrompt } = require('./ai/promptSettings');
 const { importImageAsset, renameImageAsset } = require('./assetImport');
 const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
+const drive = require('./googleDrive');
 let mainWindow; let currentRoot = null;
+let googleSession = null;
 let modelDownloadController = null;
 let editorWrapLines = false;
 let editorShowWhitespace = false;
@@ -45,6 +47,15 @@ async function refreshApplicationMenu() {
       { label: 'Open Recent', submenu: recentFiles.length ? recentFiles.map(filePath => ({ label: path.basename(filePath), toolTip: filePath, click: () => sendMenuCommand('open-recent', filePath) })) : [{ label: 'No recent files', enabled: false }] },
       { type: 'separator' }, { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
       { type: 'separator' }, { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => sendMenuCommand('export-pdf') },
+      { label: 'Google Drive', submenu: [
+        { label: 'Settings and sign in…', click: () => sendMenuCommand('google-settings') },
+        { label: 'Export PDF to Drive…', click: () => sendMenuCommand('google-export-pdf') },
+        { type: 'separator' },
+        { label: 'Sync to a Google Doc…', click: () => sendMenuCommand('google-sync') },
+        { label: 'Push to Google Doc', click: () => sendMenuCommand('google-push') },
+        { label: 'Pull from Google Doc', click: () => sendMenuCommand('google-pull') },
+        { label: 'Google Doc link and QR…', click: () => sendMenuCommand('google-link') }
+      ] },
       { label: 'Print…', accelerator: 'CmdOrCtrl+P', click: () => sendMenuCommand('print') },
       { type: 'separator' }, ...(process.platform === 'darwin' ? [{ role: 'close' }] : [{ role: 'quit' }])
     ] },
@@ -115,7 +126,16 @@ ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExt
 ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,'','utf8'); return result.filePath; });
 ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
   if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
-  return renameDocumentFile(filePath, requestedName);
+  const renamed = await renameDocumentFile(filePath, requestedName);
+  if (renamed.path !== filePath) {
+    const settings = await readSettings();
+    if (settings.googleDocs?.[filePath]) {
+      settings.googleDocs[renamed.path] = settings.googleDocs[filePath];
+      delete settings.googleDocs[filePath];
+      await saveSettings(settings);
+    }
+  }
+  return renamed;
 });
 ipcMain.handle('files:delete', async (_event, filePath) => {
   if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
@@ -158,4 +178,120 @@ ipcMain.handle('ai:select-model', async () => { const result = await dialog.show
 ipcMain.handle('ai:generate', async (event, actionId, selectedText = '', options = {}) => { if (typeof actionId !== 'string' || typeof selectedText !== 'string' || selectedText.length > 12000 || !options || typeof options !== 'object') throw new Error('Invalid local AI request.'); const action = getAction(actionId); const requestId = typeof options.requestId === 'string' ? options.requestId.slice(0, 100) : ''; const settings = await readSettings(); const safeOptions = { questionCount: Math.max(1, Math.min(20, Number(options.questionCount) || 5)), defaultPoints: Math.max(0, Math.min(100, Number(options.defaultPoints) || 1)), aiContext: typeof options.aiContext === 'string' ? options.aiContext.slice(0, 6000) : '', additionalContext: typeof options.additionalContext === 'string' ? options.additionalContext.slice(0, 6000) : '', prompt: typeof options.prompt === 'string' ? options.prompt.slice(0, 20000) : '', contextSize: resolvedContextSize(settings), maxTokens: resolvedActionMaxTokens(settings, action), requestId }; if (!safeOptions.prompt.trim()) throw new Error('Enter a prompt before sending it to AI.'); return aiService.generate(action, selectedText, safeOptions, progress => event.sender.send('ai:progress', requestId, progress)); });
 ipcMain.handle('ai:stop', (_event, requestId) => aiService.stop(typeof requestId === 'string' ? requestId.slice(0, 100) : ''));
 ipcMain.handle('handout:print', (_e, title) => { mainWindow.setTitle(safeDocumentName(title)); return new Promise(resolve => mainWindow.webContents.print({silent:false,printBackground:true},(success,failureReason) => resolve({success,failureReason}))); }); ipcMain.handle('handout:pdf', async (_e,layout,title) => { const documentName=safeDocumentName(title); const result=await dialog.showSaveDialog(mainWindow,{title:'Export handout PDF',defaultPath:`${documentName}.pdf`,filters:[{name:'PDF',extensions:['pdf']}]}); if(result.canceled) return null; await fs.writeFile(result.filePath,await mainWindow.webContents.printToPDF(pdfOptions(layout))); return result.filePath; });
+function validHandoutPath(filePath) {
+  if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('Open a saved Markdown handout first.');
+  return filePath;
+}
+function secureGoogleStorage() {
+  return safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend?.() !== 'basic_text';
+}
+function decryptGoogleSetting(value) {
+  if (!value || !secureGoogleStorage()) return null;
+  try { return safeStorage.decryptString(Buffer.from(value, 'base64')); } catch { return null; }
+}
+function storedGoogleToken(settings) { return decryptGoogleSetting(settings.googleRefreshToken); }
+function googleClientSecret(settings) {
+  if (googleSession?.clientId === settings.googleClientId && googleSession.clientSecret) return googleSession.clientSecret;
+  return decryptGoogleSetting(settings.googleClientSecret);
+}
+async function googleAccessToken() {
+  const settings = await readSettings();
+  if (!settings.googleClientId) throw new Error('Set a Google OAuth Desktop client ID in Google Drive settings.');
+  if (googleSession?.clientId === settings.googleClientId && googleSession.expiresAt > Date.now() + 60000) return googleSession.accessToken;
+  const refreshToken = (googleSession?.clientId === settings.googleClientId && googleSession.refreshToken) || storedGoogleToken(settings);
+  if (!refreshToken) throw new Error('Sign in to Google Drive from the File menu first.');
+  const clientSecret = googleClientSecret(settings) || '';
+  const tokens = await drive.refresh(settings.googleClientId, refreshToken, clientSecret);
+  googleSession = { clientId: settings.googleClientId, clientSecret, refreshToken, accessToken: tokens.access_token, expiresAt: Date.now() + tokens.expires_in * 1000 };
+  return googleSession.accessToken;
+}
+ipcMain.handle('google:settings', async () => { const settings = await readSettings(); return { clientId: settings.googleClientId || '', hasClientSecret: Boolean(googleClientSecret(settings)), signedIn: Boolean(googleSession?.refreshToken || storedGoogleToken(settings)), persistentSignIn: Boolean(storedGoogleToken(settings)) }; });
+ipcMain.handle('google:save-client-id', async (_event, clientId, clientSecret = '') => {
+  if (typeof clientId !== 'string' || !/^[a-zA-Z0-9._-]+\.apps\.googleusercontent\.com$/.test(clientId.trim())) throw new Error('Enter a valid Google OAuth Desktop client ID.');
+  if (typeof clientSecret !== 'string') throw new Error('Google client secret must be text.');
+  const settings = await readSettings();
+  const normalizedId = clientId.trim();
+  const unchangedId = normalizedId === settings.googleClientId;
+  const secret = clientSecret.trim() || (unchangedId ? googleClientSecret(settings) : null);
+  googleSession = secret ? { clientId: normalizedId, clientSecret: secret } : null;
+  const encryptedSecret = secret && secureGoogleStorage() ? safeStorage.encryptString(secret).toString('base64') : undefined;
+  await saveSettings({ ...settings, googleClientId: normalizedId, googleClientSecret: encryptedSecret, googleRefreshToken: unchangedId ? settings.googleRefreshToken : undefined });
+  return { secureStorage: Boolean(encryptedSecret) };
+});
+ipcMain.handle('google:sign-in', async () => {
+  const settings = await readSettings();
+  const clientSecret = googleClientSecret(settings) || '';
+  const tokens = await drive.authorize(settings.googleClientId || '', url => shell.openExternal(url), clientSecret);
+  googleSession = { clientId: settings.googleClientId, clientSecret, refreshToken: tokens.refresh_token, accessToken: tokens.access_token, expiresAt: Date.now() + tokens.expires_in * 1000 };
+  if (tokens.refresh_token && secureGoogleStorage()) await saveSettings({ ...settings, googleRefreshToken: safeStorage.encryptString(tokens.refresh_token).toString('base64') });
+  return { persistentSignIn: Boolean(tokens.refresh_token && secureGoogleStorage()) };
+});
+ipcMain.handle('google:sign-out', async () => { googleSession = null; const settings = await readSettings(); await saveSettings({ ...settings, googleRefreshToken: undefined }); return true; });
+ipcMain.handle('google:export-pdf', async (_event, layout, title) => {
+  const token = await googleAccessToken();
+  const name = `${safeDocumentName(title)}.pdf`;
+  const content = await mainWindow.webContents.printToPDF(pdfOptions(layout));
+  const file = await drive.upload(token, { name, content, mimeType: drive.PDF_MIME });
+  return { name: file.name, url: file.webViewLink || `https://drive.google.com/file/d/${encodeURIComponent(file.id)}/view` };
+});
+ipcMain.handle('google:doc-link', async (_event, filePath) => {
+  validHandoutPath(filePath);
+  const link = (await readSettings()).googleDocs?.[filePath];
+  return link ? { url: drive.docUrl(link.id), name: link.name } : null;
+});
+ipcMain.handle('google:sync', async (_event, filePath, title) => {
+  validHandoutPath(filePath);
+  const settings = await readSettings();
+  if (settings.googleDocs?.[filePath]) throw new Error('This handout is already linked. Use Push or Pull.');
+  const token = await googleAccessToken();
+  const content = await fs.readFile(filePath, 'utf8');
+  const name = safeDocumentName(title);
+  const id = await drive.createPlainDoc(token, name, content);
+  const file = await drive.metadata(token, id);
+  const next = await readSettings();
+  next.googleDocs = { ...(next.googleDocs || {}), [filePath]: { id, name, version: file.version, localHash: drive.digest(content), format: 'literal' } };
+  await saveSettings(next);
+  return { url: drive.docUrl(id), name };
+});
+ipcMain.handle('google:push', async (_event, filePath) => {
+  validHandoutPath(filePath);
+  const token = await googleAccessToken();
+  const settings = await readSettings();
+  const link = settings.googleDocs?.[filePath];
+  if (!link) throw new Error('Link this handout with Sync to a Google Doc first.');
+  const remote = await drive.metadata(token, link.id);
+  if (String(remote.version) !== String(link.version)) throw new Error('The Google Doc changed since the last sync. Pull it before pushing, or review its changes in Google Docs.');
+  const content = await fs.readFile(filePath, 'utf8');
+  const document = await drive.getDocument(token, link.id);
+  await drive.writePlainMarkdown(token, document, content);
+  const file = await drive.metadata(token, link.id);
+  const next = await readSettings();
+  next.googleDocs = { ...(next.googleDocs || {}), [filePath]: { ...link, version: file.version, localHash: drive.digest(content), format: 'literal' } };
+  await saveSettings(next);
+  return { url: drive.docUrl(link.id), name: link.name };
+});
+ipcMain.handle('google:pull', async (_event, filePath) => {
+  validHandoutPath(filePath);
+  const token = await googleAccessToken();
+  const settings = await readSettings();
+  const link = settings.googleDocs?.[filePath];
+  if (!link) throw new Error('Link this handout with Sync to a Google Doc first.');
+  if (link.format !== 'literal') throw new Error('This link was made with the older Markdown conversion. Push the local handout first to switch it to plain text.');
+  const local = await fs.readFile(filePath, 'utf8');
+  const remote = await drive.metadata(token, link.id);
+  const document = await drive.getDocument(token, link.id);
+  const content = drive.plainDocumentText(document).text;
+  const latest = await drive.metadata(token, link.id);
+  if (String(remote.version) !== String(latest.version)) throw new Error('The Google Doc changed during pull. Try again.');
+  let backupPath = null;
+  if (drive.digest(local) !== link.localHash) {
+    backupPath = `${filePath.replace(markdownExtension, '')}.before-google-pull-${Date.now()}-${require('crypto').randomBytes(3).toString('hex')}.md`;
+    await fs.writeFile(backupPath, local, { encoding: 'utf8', flag: 'wx' });
+  }
+  await fs.writeFile(filePath, content, 'utf8');
+  const next = await readSettings();
+  next.googleDocs = { ...(next.googleDocs || {}), [filePath]: { ...link, version: remote.version, localHash: drive.digest(content) } };
+  await saveSettings(next);
+  return { content, url: drive.docUrl(link.id), name: link.name, backupPath };
+});
 app.on('before-quit', () => { modelDownloadController?.abort(); aiService.dispose(); });

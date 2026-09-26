@@ -2049,6 +2049,137 @@ if (window.handoutDesktop) {
   }
   source.addEventListener("input", () => { if (loadingDocument) return; currentHandoutTitle(); dirty = true; if (selectedFile) { const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = true; } } markDirty(true); drawTabs(); });
   function toggleAnswers() { showAnswers = !showAnswers; render(); }
+  function googleDialog(title) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ai-dialog-overlay';
+    const panel = document.createElement('section');
+    panel.className = 'ai-dialog google-dialog';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    const header = document.createElement('header');
+    const heading = document.createElement('h2');
+    heading.textContent = title;
+    const closeButton = document.createElement('button');
+    closeButton.className = 'ai-dialog-close';
+    closeButton.type = 'button';
+    closeButton.textContent = '×';
+    closeButton.setAttribute('aria-label', 'Close');
+    header.append(heading, closeButton);
+    const body = document.createElement('div');
+    const message = document.createElement('p');
+    message.className = 'google-message';
+    message.setAttribute('role', 'status');
+    panel.append(header, body, message);
+    overlay.append(panel);
+    document.body.append(overlay);
+    const close = () => overlay.remove();
+    closeButton.addEventListener('click', close);
+    overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
+    overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+    closeButton.focus();
+    return { overlay, panel, body, message, close };
+  }
+  function googleButton(label, action, parent) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button secondary';
+    button.textContent = label;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try { await action(); } catch (error) { parent.textContent = error.message || 'Google Drive request failed.'; }
+      finally { button.disabled = false; }
+    });
+    return button;
+  }
+  async function showGoogleSettings() {
+    const dialog = googleDialog('Google Drive settings');
+    const info = document.createElement('p');
+    info.textContent = 'Enter the OAuth Desktop client ID. If Google reports that client_secret is missing, also enter the secret from the same Desktop client in Google Cloud. Sign in opens your system browser.';
+    const label = document.createElement('label');
+    label.textContent = 'OAuth Desktop client ID';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.autocomplete = 'off';
+    label.append(input);
+    const secretLabel = document.createElement('label');
+    secretLabel.textContent = 'OAuth client secret (if Google requires it)';
+    const secretInput = document.createElement('input');
+    secretInput.type = 'password';
+    secretInput.autocomplete = 'new-password';
+    secretInput.placeholder = 'Leave blank to keep the saved secret';
+    secretLabel.append(secretInput);
+    const actions = document.createElement('div');
+    actions.className = 'google-actions';
+    actions.append(
+      googleButton('Save credentials', async () => { const result = await desktop.saveGoogleClientId(input.value, secretInput.value); secretInput.value = ''; dialog.message.textContent = result.secureStorage ? 'Credentials saved using encrypted system storage.' : 'Credentials saved for this run. Click Sign in now. Secure storage is unavailable, so the secret and Google sign-in will need to be entered again after restarting.'; }, dialog.message),
+      googleButton('Sign in', async () => { const result = await desktop.googleSignIn(); dialog.message.textContent = result.persistentSignIn ? 'Signed in. Your session is encrypted on this computer.' : 'Signed in for this app session.'; }, dialog.message),
+      googleButton('Sign out', async () => { await desktop.googleSignOut(); dialog.message.textContent = 'Signed out.'; }, dialog.message)
+    );
+    dialog.body.append(info, label, secretLabel, actions);
+    const settings = await desktop.googleSettings();
+    input.value = settings.clientId;
+    if (settings.hasClientSecret) secretInput.placeholder = 'Secret saved securely; leave blank to keep it';
+    dialog.message.textContent = settings.signedIn ? 'Signed in.' : 'Not signed in.';
+  }
+  function requireGoogleHandout() {
+    if (!selectedFile) throw new Error('Open a saved Markdown handout first.');
+    return selectedFile.path;
+  }
+  async function showGoogleLink(link, title = 'Google Doc link and QR', description = 'Internet needed. Your phone must have access to this file in Google Drive.') {
+    if (!link) throw new Error('No Google Drive link is available.');
+    const dialog = googleDialog(title);
+    const qr = document.createElement('div');
+    qr.className = 'google-link-qr';
+    qr.innerHTML = window.HandoutQr.renderQrBlock(link.url);
+    const anchor = document.createElement('a');
+    anchor.href = link.url;
+    anchor.textContent = link.url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    const note = document.createElement('p');
+    note.textContent = description;
+    dialog.body.append(qr, anchor, note);
+  }
+  async function googleCommand(command) {
+    try {
+      if (command === 'google-settings') return await showGoogleSettings();
+      const filePath = requireGoogleHandout();
+      if (command === 'google-link') return await showGoogleLink(await desktop.googleDocLink(filePath));
+      if (command === 'google-export-pdf') {
+        const result = await desktop.googleExportPdf(layoutSelect.value, currentHandoutTitle());
+        statusText.textContent = `Exported ${result.name} to Google Drive`;
+        return showGoogleLink(result, 'Drive PDF link and QR', 'Internet needed. Your phone must have access to this PDF in Google Drive.');
+      }
+      if (command === 'google-sync') {
+        if (dirty && !await saveCurrent()) return;
+        const result = await desktop.googleSync(filePath, currentHandoutTitle());
+        statusText.textContent = 'Google Doc created and linked';
+        return showGoogleLink(result);
+      }
+      if (command === 'google-push') {
+        if (dirty && !await saveCurrent()) return;
+        await desktop.googlePush(filePath);
+        statusText.textContent = 'Pushed to Google Doc';
+        return;
+      }
+      if (command === 'google-pull') {
+        if (dirty) throw new Error('Save or discard unsaved changes before pulling.');
+        if (!window.confirm(`Replace the local handout “${selectedFile.name}” with the linked Google Doc?`)) return;
+        const result = await desktop.googlePull(filePath);
+        loadingDocument = true;
+        setSourceContent(result.content);
+        loadingDocument = false;
+        const state = documents.get(filePath);
+        if (state) { state.content = result.content; state.dirty = false; }
+        markDirty(false);
+        drawTabs();
+        render();
+        syncHighlight();
+        statusText.textContent = result.backupPath ? `Pulled from Google Doc; saved local backup at ${result.backupPath}` : 'Pulled from Google Doc';
+        if (result.backupPath) await refreshFolderTreeAndAssets();
+      }
+    } catch (error) { statusText.textContent = `Google Drive: ${error.message}`; }
+  }
   desktop.onMenuCommand(async ({ command, payload }) => {
     if (command === 'new-handout') return makeNewHandout();
     if (command === 'open-file') return chooseFile();
@@ -2057,6 +2188,7 @@ if (window.handoutDesktop) {
     if (command === 'save') return saveCurrent();
     if (command === 'print') return printHandout();
     if (command === 'export-pdf') return exportHandout();
+    if (command.startsWith('google-')) return googleCommand(command);
     if (command === 'toggle-answers') return toggleAnswers();
     if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
     if (command === 'wrap-lines') return setWrapLines(payload);
