@@ -239,7 +239,8 @@ const layouts = {
   "half-landscape": { width: "8.5in", height: "5.5in", page: "8.5in 5.5in", label: "Half letter landscape" },
   "half-duplicate-portrait": { width: "5.5in", height: "8.5in", page: "letter landscape", label: "Two portrait half-sheet copies", impose: "portrait-handout" },
   "half-duplicate-landscape": { width: "8.5in", height: "5.5in", page: "letter portrait", label: "Two landscape half-sheet copies", impose: "landscape-handout" },
-  booklet: { width: "8.5in", height: "11in", page: "17in 11in", label: "11×17 booklet" }
+  "booklet-letter": { width: "5.5in", height: "8.5in", page: "letter landscape", label: "8.5×11 booklet", impose: "letter" },
+  booklet: { width: "8.5in", height: "11in", page: "17in 11in", label: "11×17 booklet", impose: "tabloid" }
 };
 const requestedLayout = new URLSearchParams(window.location.search).get("layout");
 if (requestedLayout && layouts[requestedLayout]) layoutSelect.value = requestedLayout;
@@ -797,7 +798,7 @@ function imposePages(logicalPages, layout) {
     return;
   }
 
-  if (layout === "booklet") {
+  if (layouts[layout].impose === "letter" || layouts[layout].impose === "tabloid") {
     const sourcePages = [...logicalPages];
     while (sourcePages.length % 4) sourcePages.push(null);
     const total = sourcePages.length;
@@ -815,7 +816,7 @@ function imposePages(logicalPages, layout) {
     preview.innerHTML = "";
     sides.forEach(side => {
       const sheet = document.createElement("article");
-      sheet.className = "print-sheet booklet";
+      sheet.className = `print-sheet booklet ${layouts[layout].impose}`;
       sheet.append(makeSlot(side.pages[0], side.name), makeSlot(side.pages[1], side.name));
       appendFittedSheet(sheet);
     });
@@ -860,7 +861,7 @@ function paginate(blocks) {
   preview.querySelectorAll('.qr-code').forEach((qrCode, index) => { qrCode.dataset.qrIndex = index; });
   const logicalPages = [...preview.children];
   const count = logicalPages.length;
-  if (layoutSelect.value.startsWith("half-duplicate-") || layoutSelect.value === "booklet") {
+  if (layoutSelect.value.startsWith("half-duplicate-") || layouts[layoutSelect.value].impose === "letter" || layouts[layoutSelect.value].impose === "tabloid") {
     imposePages(logicalPages, layoutSelect.value);
   } else {
     pageCount.textContent = `${count} ${layouts[layoutSelect.value].label} page${count === 1 ? "" : "s"}`;

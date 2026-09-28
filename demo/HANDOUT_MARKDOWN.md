@@ -4,8 +4,8 @@ File and output conventions:
 - Editable handouts and their nearby images belong in content/handouts/.
 - Generated HTML and PDF files belong in exports/handouts/.
 - Return Markdown, not HTML or PDF, unless I explicitly request another format.
-- I may target a standard single-page handout, a multi-page packet, an individual half-letter handout, two duplicate half-sheets on one letter sheet, or a letter-page booklet imposed on 11x17 paper.
-- Choose print layout in the app, or set it with the optional `layout` YAML setting below. Write to the requested target: keep half-sheets especially compact, use intentional page breaks for packets, and organize booklet pages in normal reading order because the tool performs imposition automatically.
+- I may target a standard single-page handout, a multi-page packet, an individual half-letter handout, two duplicate half-sheets on one letter sheet, or a booklet imposed on 8.5x11 or 11x17 paper.
+- Choose print layout in the app, or set it with the optional `layout` YAML setting below. Write to the requested target: keep half-sheets especially compact, use intentional page breaks for packets, and organize booklet pages in normal reading order because the tool performs imposition automatically. The 8.5x11 booklet has 5.5x8.5 pages; print its landscape sheets double sided, flipping on the short edge.
 
 ## YAML front matter
 
@@ -23,7 +23,7 @@ ai_context: |
 
 | Parameter | Values and behavior |
 | --- | --- |
-| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, or `booklet`. Selects the layout when the handout opens. |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the layout when the handout opens. |
 | `ai_context` | A quoted one-line value or an indented YAML block. Sends handout context with local AI requests. |
 
 In addition to basic Markdown, The Markdown Handout Maker supports:

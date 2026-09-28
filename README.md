@@ -10,7 +10,7 @@ The Markdown Handout Maker keeps your source handouts in local folders. Google D
 ## Features
 
 - Open, create, edit, and save Markdown handouts from a local folder
-- Preview letter, A4, half-sheet, duplicate-half-sheet, and booklet layouts
+- Preview letter, A4, half-sheet, duplicate-half-sheet, 8.5×11 booklet, and 11×17 booklet layouts
 - Print natively, export a PDF, or export a PDF to Google Drive
 - Sync a handout to a Google Doc with Push, Pull, and a phone QR link
 - Use classroom-focused Markdown additions for answer lines, drawing spaces,
@@ -62,7 +62,7 @@ ai_context: |
 
 | Parameter | Values and behavior |
 | --- | --- |
-| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, or `booklet`. Sets the initial page layout when the handout opens. |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Sets the initial page layout when the handout opens. |
 | `ai_context` | A quoted one-line value or an indented YAML block. Its text is included with local AI requests to supply subject, grade, learning goal, and similar handout context. |
 
 ## Local AI
