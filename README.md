@@ -34,6 +34,21 @@ In the app, choose **File → Open Folder…** to work with a folder of Markdown
 handouts, or **File → Open File…** for one handout. Use **File → Save** or
 Ctrl/Cmd+S to write changes back to the selected file.
 
+## File browser
+
+Open a folder to browse its handouts and images. Select a folder, then use **+**
+to create a handout or folder there; type its name inline and press Enter.
+Press Escape to cancel. Right-click a folder or handout for creation actions.
+
+Search above the tree filters filenames while keeping their parent folders visible.
+The active handout is highlighted, and a dot marks open handouts with unsaved changes.
+Opening a handout from a tab or Recent Files reveals its parent folder in the tree.
+
+Drag a handout onto a folder to move it, or right-click it and choose **Move to…**.
+Drop on the folder name above the tree to move to the root folder. Moving saves
+any edits in that handout and adjusts its relative image and link references.
+An existing file with the same name is never replaced. Image files stay in place.
+
 ## Google Drive and Google Docs
 
 Google integration requires internet access and your own Google Cloud OAuth **Desktop app** client ID. In that Cloud project, enable the Google Drive API and Google Docs API, then configure its OAuth consent screen. In the app, open **File → Google Drive → Settings and sign in…**, paste the Desktop client ID, save it, and sign in through your system browser. The app requests the `drive.file` scope. Google may limit access while your consent screen is in testing mode.

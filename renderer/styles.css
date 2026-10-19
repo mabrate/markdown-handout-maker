@@ -478,3 +478,13 @@ body[data-handout-theme="spacious"] .handout-page li { margin: .05in 0; }
 .google-link-qr { width: 220px; max-width: 100%; margin: 14px auto; }
 .google-link-qr svg { width: 100%; height: auto; }
 .google-dialog a { overflow-wrap: anywhere; }
+
+.file-browser-tools { display: flex; gap: 5px; padding: 8px; }
+.file-browser-tools input { min-width: 0; width: 100%; padding: 6px; border: 1px solid #b7c2c8; border-radius: 4px; }
+.file-browser-tools button { font-size: 20px; padding: 0 10px; cursor: pointer; }
+.file-entry.unsaved::after { content: ' ●'; color: #9b5800; }
+.file-entry.active { background: #d0e6f4; color: #123e59; box-shadow: inset 3px 0 #287caa; font-weight: 650; }
+.file-tree .drop-target, #folder-name.drop-target { background: #c8e8d4; outline: 2px solid #36774d; }
+.browser-create { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; }
+.browser-create input { min-width: 0; width: 100%; padding: 5px; }
+.browser-create span { color: #a22727; font-size: 12px; }

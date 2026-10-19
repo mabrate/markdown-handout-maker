@@ -8,7 +8,8 @@ const subscribe = channel => callback => {
 };
 
 contextBridge.exposeInMainWorld('handoutDesktop', {
-  openFolder: invoke('folders:open'), refreshFolder: invoke('folders:refresh'),
+  createEntry: invoke('browser:create'), moveHandout: invoke('browser:move'),
+  openFolder: invoke('folders:open'), openRecentFolder: invoke('folders:open-recent'), refreshFolder: invoke('folders:refresh'),
   openFile: invoke('files:open-dialog'), recentFiles: invoke('files:recent'), openRecent: invoke('files:open-recent'),
   readFile: invoke('files:read'), saveFile: invoke('files:save'), saveNewFile: invoke('files:save-new'), newFile: invoke('files:new'), renameFile: invoke('files:rename'), deleteFile: invoke('files:delete'),
   importImage: invoke('assets:import-image'), imageReference: invoke('assets:reference'), renameImage: invoke('assets:rename-image'),

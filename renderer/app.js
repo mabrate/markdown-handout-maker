@@ -1623,6 +1623,7 @@ if (window.handoutDesktop) {
     currentHandoutTitle();
     markDirty(dirty);
     drawTabs();
+    syncTreeSelection(true);
     render();
     requestAnimationFrame(syncHighlight);
     source.focus();
@@ -1846,6 +1847,7 @@ if (window.handoutDesktop) {
 
   function markDirty(value) {
     dirty = value;
+    syncTreeSelection();
     if (selectedFile) statusText.textContent = `${selectedFile.name}${dirty ? " · unsaved" : ""}`;
   }
 
@@ -1964,7 +1966,8 @@ if (window.handoutDesktop) {
         }
         await refreshFolderTreeAndAssets();
         drawTabs();
-        if (selectedFile?.path === renamed.path) currentHandoutTitle();
+        if (browserSelection?.path === node.path) browserSelection = { ...node, ...renamed };
+        if (selectedFile?.path === renamed.path) { currentHandoutTitle(); syncTreeSelection(true); }
         close();
         statusText.textContent = `Renamed handout to ${renamed.name}`;
       } catch (error) {
@@ -1999,24 +2002,13 @@ if (window.handoutDesktop) {
     }
   }
   function showFileContextMenu(node, event) {
-    document.querySelector('.image-context-menu')?.remove();
-    const menu = document.createElement('div');
-    menu.className = 'image-context-menu';
-    menu.setAttribute('role', 'menu');
-    menu.innerHTML = '<button type="button" data-action="rename">Rename…</button><button type="button" data-action="delete">Delete…</button>';
-    document.body.append(menu);
-    menu.style.left = `${Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8)}px`;
-    menu.style.top = `${Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8)}px`;
-    const close = () => { window.removeEventListener('pointerdown', closeFromOutside); menu.remove(); };
-    const closeFromOutside = pointerEvent => { if (!menu.contains(pointerEvent.target)) close(); };
-    menu.addEventListener('click', clickEvent => {
-      const action = clickEvent.target.dataset.action;
-      close();
-      if (action === 'rename') renameTreeFile(node);
-      else if (action === 'delete') void deleteTreeFile(node);
-    });
-    window.addEventListener('pointerdown', closeFromOutside);
-    menu.querySelector('button').focus();
+    showBrowserMenu([
+      ['New handout', () => createInline(parentOf(node.path), 'file')],
+      ['New folder', () => createInline(parentOf(node.path), 'folder')],
+      ['Move to…', () => chooseMoveFolder(node)],
+      ['Rename…', () => renameTreeFile(node)],
+      ['Delete…', () => void deleteTreeFile(node)]
+    ], event);
   }
   function showImageContextMenu(node, event) {
     document.querySelector('.image-context-menu')?.remove();
@@ -2044,38 +2036,145 @@ if (window.handoutDesktop) {
     window.addEventListener('pointerdown', closeFromOutside);
     menu.querySelector('button').focus();
   }
+  let browserSelection = null;
+  const expandedFolders = new Map();
+  const browserTools = document.createElement('div');
+  browserTools.className = 'file-browser-tools';
+  browserTools.innerHTML = '<input type="search" aria-label="Search filenames" placeholder="Search filenames…"><button type="button" aria-label="Create file or folder" title="Create in selected folder">+</button>';
+  tree.before(browserTools);
+  const browserSearch = browserTools.querySelector('input');
+  browserSearch.addEventListener('input', drawTree);
+  browserTools.querySelector('button').addEventListener('click', event => {
+    if (!folder) { statusText.textContent = 'Open a folder first.'; return; }
+    const rect = event.currentTarget.getBoundingClientRect();
+    showCreateMenu(browserSelection?.type === 'folder' ? browserSelection : { path: parentOf(browserSelection?.path) || folder.path }, { clientX: rect.left, clientY: rect.bottom });
+  });
+  function parentOf(value) { return value?.slice(0, Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))); }
+  function syncTreeSelection(reveal = false) {
+    tree.querySelectorAll('[data-file-path]').forEach(row => {
+      const active = row.dataset.filePath === activePath;
+      row.classList.toggle('active', active);
+      row.classList.toggle('unsaved', !!documents.get(row.dataset.filePath)?.dirty);
+      if (active) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
+      if (active && reveal) {
+        let ancestor = row.parentElement;
+        while (ancestor && ancestor !== tree) { if (ancestor.tagName === 'DETAILS') ancestor.open = true; ancestor = ancestor.parentElement; }
+        row.scrollIntoView?.({ block: 'nearest' });
+      }
+    });
+  }
+  function showCreateMenu(node, event) {
+    showBrowserMenu([['New handout', () => createInline(node.path, 'file')], ['New folder', () => createInline(node.path, 'folder')]], event);
+  }
+  function showBrowserMenu(actions, event) {
+    document.querySelector('.image-context-menu')?.remove();
+    const menu = document.createElement('div'); menu.className = 'image-context-menu'; menu.setAttribute('role', 'menu');
+    const close = () => { menu.remove(); window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
+    const outside = e => { if (!menu.contains(e.target)) close(); };
+    const escape = e => { if (e.key === 'Escape') close(); };
+    for (const [label, action] of actions) { const button = document.createElement('button'); button.textContent = label; button.type = 'button'; button.addEventListener('click', () => { close(); action(); }); menu.append(button); }
+    document.body.append(menu); menu.style.left = `${Math.max(0, Math.min(event.clientX, innerWidth - menu.offsetWidth - 8))}px`; menu.style.top = `${Math.max(0, Math.min(event.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+    window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape); menu.firstChild.focus();
+  }
+  function createInline(parent, type) {
+    browserSearch.value = ''; expandedFolders.set(parent, true); drawTree();
+    const host = [...tree.querySelectorAll('details')].find(el => el.dataset.folderPath === parent) || tree;
+    host.open = true;
+    const form = document.createElement('form'); form.className = 'browser-create';
+    const input = document.createElement('input'); input.setAttribute('aria-label', type === 'file' ? 'New handout name' : 'New folder name'); input.placeholder = type === 'file' ? 'new-handout.md' : 'New folder'; input.required = true;
+    const error = document.createElement('span'); error.setAttribute('role', 'alert');
+    const submit = document.createElement('button'); submit.textContent = 'Create';
+    form.append(input, submit, error); host.append(form);
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') form.remove(); });
+    form.addEventListener('submit', async e => {
+      e.preventDefault(); submit.disabled = true;
+      try { const node = await desktop.createEntry(parent, input.value, type); browserSelection = node; await refreshFolderTreeAndAssets(); if (type === 'file') addDocument(node, '', folder.assets); statusText.textContent = `Created ${node.name}`; }
+      catch (failure) { error.textContent = failure.message; submit.disabled = false; }
+    }); input.focus();
+  }
+  async function moveTreeFile(node, parent) {
+    saveActiveState();
+    try {
+      const state = documents.get(node.path);
+      const moved = await desktop.moveHandout(node.path, parent, state?.content);
+      if (state) {
+        documents.delete(node.path); state.file = { ...state.file, path: moved.path, name: moved.name }; state.content = moved.content; state.dirty = false; documents.set(moved.path, state);
+        if (activePath === node.path) { activePath = moved.path; selectedFile = state.file; dirty = false; loadingDocument = true; setSourceContent(moved.content); loadingDocument = false; markDirty(false); }
+      }
+      browserSelection = { ...node, path: moved.path }; expandedFolders.set(parent, true);
+      await refreshFolderTreeAndAssets(); drawTabs(); syncTreeSelection(true); render(); statusText.textContent = `Moved ${moved.name}`;
+    } catch (error) { statusText.textContent = `Could not move handout: ${error.message}`; }
+  }
+  function chooseMoveFolder(node) {
+    const overlay = document.createElement('div'); overlay.className = 'ai-dialog-overlay';
+    const panel = document.createElement('form'); panel.className = 'image-rename-dialog'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', `Move ${node.name}`);
+    const heading = document.createElement('strong'); heading.textContent = `Move ${node.name} to…`;
+    const select = document.createElement('select'); select.setAttribute('aria-label', 'Destination folder');
+    function addOption(path, label) { const option = document.createElement('option'); option.value = path; option.textContent = label; select.append(option); }
+    addOption(folder.path, folder.name);
+    function walk(nodes, prefix) { for (const n of nodes) if (n.type === 'folder') { addOption(n.path, prefix + n.name); walk(n.children, prefix + n.name + '/'); } } walk(folder.tree, '');
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.onclick = () => overlay.remove();
+    const submit = document.createElement('button'); submit.textContent = 'Move';
+    const note = document.createElement('p'); note.textContent = 'Moving saves the handout and updates its relative image and link paths.';
+    panel.append(heading, note, select, cancel, submit); overlay.append(panel); document.body.append(overlay);
+    overlay.addEventListener('keydown', e => { if (e.key === 'Escape') overlay.remove(); });
+    panel.onsubmit = e => { e.preventDefault(); overlay.remove(); void moveTreeFile(node, select.value); }; select.focus();
+  }
+  function installFolderDrop(element, destination) {
+    element.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('application/x-handout-path')) { e.preventDefault(); e.stopPropagation(); element.classList.add('drop-target'); e.dataTransfer.dropEffect = 'move'; } });
+    element.addEventListener('dragleave', () => element.classList.remove('drop-target'));
+    element.addEventListener('drop', e => {
+      const value = e.dataTransfer.getData('application/x-handout-path'); if (!value) return;
+      e.preventDefault(); e.stopPropagation(); element.classList.remove('drop-target');
+      const find = nodes => { for (const n of nodes) { if (n.path === value && n.markdown) return n; if (n.children) { const found = find(n.children); if (found) return found; } } };
+      const node = find(folder.tree); if (node) void moveTreeFile(node, destination());
+    });
+  }
+  installFolderDrop(folderName, () => folder?.path);
+  tree.addEventListener('contextmenu', event => { if (event.target === tree || event.target.classList.contains('empty-tree')) { event.preventDefault(); if (folder) showCreateMenu(folder, event); } });
   function addTree(nodes, parent) {
-    const list = document.createElement("ul");
+    const list = document.createElement('ul');
+    const query = browserSearch.value.trim().toLowerCase();
+    const matches = node => node.type === 'folder' ? node.children.some(matches) : (node.markdown || node.image) && node.name.toLowerCase().includes(query);
     for (const node of nodes) {
-      const item = document.createElement("li");
-      if (node.type === "folder") {
-        const details = document.createElement("details"); details.open = true;
-        const summary = document.createElement("summary"); summary.textContent = node.name; details.append(summary);
+      if (query && !matches(node)) continue;
+      const item = document.createElement('li');
+      if (node.type === 'folder') {
+        const details = document.createElement('details'); details.dataset.folderPath = node.path; details.open = query ? true : expandedFolders.get(node.path) ?? false;
+        details.addEventListener('toggle', () => { if (!browserSearch.value) expandedFolders.set(node.path, details.open); });
+        const summary = document.createElement('summary'); summary.textContent = node.name; summary.title = node.path; details.append(summary);
+        summary.addEventListener('click', () => { browserSelection = node; });
+        summary.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showCreateMenu(node, event); });
+        installFolderDrop(summary, () => node.path);
         addTree(node.children, details); item.append(details);
       } else if (node.markdown) {
-        const button = document.createElement("button"); button.className = "file-entry"; button.textContent = node.name; button.title = node.path;
-        button.addEventListener("click", () => openFile(node, button)); item.append(button);
-        button.addEventListener('contextmenu', event => { event.preventDefault(); showFileContextMenu(node, event); });
+        const button = document.createElement('button'); button.className = 'file-entry'; button.textContent = node.name; button.title = node.path; button.dataset.filePath = node.path;
+        button.draggable = true;
+        button.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-handout-path', node.path); e.dataTransfer.effectAllowed = 'move'; });
+        button.addEventListener('click', () => { browserSelection = node; void openFile(node); }); item.append(button);
+        button.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showFileContextMenu(node, event); });
       } else if (node.image) {
-        const asset = document.createElement("span"); asset.className = "file-entry image-entry"; asset.textContent = node.name; asset.title = node.path;
-        asset.tabIndex = 0;
+        const asset = document.createElement('span'); asset.className = 'file-entry image-entry'; asset.textContent = node.name; asset.title = node.path; asset.tabIndex = 0;
+        asset.addEventListener('click', () => { browserSelection = node; });
         asset.addEventListener('contextmenu', event => { event.preventDefault(); showImageContextMenu(node, event); });
-        asset.addEventListener('dblclick', () => showImagePreview(node));
-        asset.addEventListener('keydown', event => { if (event.key === 'Enter') showImagePreview(node); });
-        item.append(asset);
+        asset.addEventListener('dblclick', () => showImagePreview(node)); asset.addEventListener('keydown', event => { if (event.key === 'Enter') showImagePreview(node); }); item.append(asset);
       }
       if (item.childNodes.length) list.append(item);
     }
-    parent.append(list);
+    if (list.childNodes.length) parent.append(list);
   }
-  function drawTree() { tree.innerHTML = ""; if (folder) addTree(folder.tree, tree); if (!tree.childNodes.length) tree.innerHTML = '<p class="empty-tree">No Markdown or image files in this folder.</p>'; }
+  function drawTree() {
+    tree.innerHTML = ''; if (folder) addTree(folder.tree, tree);
+    if (!tree.childNodes.length) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = browserSearch.value ? 'No matching files.' : 'No Markdown or image files in this folder.'; tree.append(empty); }
+    syncTreeSelection();
+  }
   async function openFile(node, button) {
     if (selectedFile && node.path === selectedFile.path) return;
     discardBlankUntitledHandout();
     if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
-    if (dirty) await saveCurrent();
+    if (dirty && !await saveCurrent()) return;
     try {
-      const content = await desktop.readFile(node.path); addDocument(node, content, folder ? folder.assets : []); clearActive(); if (button) button.classList.add("active");
+      const content = await desktop.readFile(node.path); addDocument(node, content, folder ? folder.assets : []); clearActive(); syncTreeSelection(true);
     } catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
   }
   async function loadStandalone(file) {
@@ -2085,7 +2184,8 @@ if (window.handoutDesktop) {
     if (dirty && !await saveCurrent()) return;
     const documentFile = { type: "file", name: file.name, path: file.path, markdown: true };
     addDocument(documentFile, file.content, file.assets || []);
-    folderName.textContent = file.name; folder = null; clearActive();
+    const refreshed = await desktop.refreshFolder();
+    if (refreshed) { folder = refreshed; folderName.textContent = refreshed.name; browserSearch.value = ''; drawTree(); syncTreeSelection(true); }
   }
   async function chooseFile() {
     try { await loadStandalone(await desktop.openFile()); }
@@ -2098,7 +2198,27 @@ if (window.handoutDesktop) {
     try { await desktop.saveFile(selectedFile.path, source.value); dirty = false; const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = false; } markDirty(false); drawTabs(); return true; }
     catch (error) { statusText.textContent = `Could not save: ${error.message}`; return false; }
   }
-  function setAssets(assets) { assetMap.clear(); assets.forEach(asset => { assetMap.set(asset.relative, asset.url); assetMap.set(asset.relative.split("/").pop(), asset.url); }); }
+  function setAssets(assets) {
+    assetMap.clear();
+    assets.forEach(asset => {
+      assetMap.set(asset.relative, asset.url);
+      assetMap.set(asset.relative.split('/').pop(), asset.url);
+    });
+    // Resolve against the handout location so nested documents and moved handouts
+    // still select the correct image when several folders use the same filename.
+    if (selectedFile && !selectedFile.untitled) {
+      const documentUrl = new URL('file://' + selectedFile.path.split('/').map(encodeURIComponent).join('/'));
+      assets.forEach(asset => {
+        const target = new URL(asset.url);
+        const from = documentUrl.pathname.split('/').slice(0, -1);
+        const to = target.pathname.split('/');
+        while (from.length && to.length && from[0] === to[0]) { from.shift(); to.shift(); }
+        const relative = [...from.map(() => '..'), ...to].join('/');
+        assetMap.set(decodeURIComponent(relative), asset.url);
+        assetMap.set(relative, asset.url);
+      });
+    }
+  }
   function addImageToFolderTree(imported) {
     if (!folder || !imported.path) return;
     const separatorIndex = Math.max(imported.path.lastIndexOf('/'), imported.path.lastIndexOf('\\'));
@@ -2181,11 +2301,14 @@ if (window.handoutDesktop) {
     }
   });
   window.addEventListener('dragend', () => source.classList.remove('image-drag-target'));
-  async function chooseFolder() {
+  async function chooseFolder(recentPath) {
     if (dirty && !window.confirm("Save changes to the current handout before changing folders?")) return false;
     if (dirty && !await saveCurrent()) return false;
-    const next = await desktop.openFolder();
+    let next;
+    try { next = recentPath ? await desktop.openRecentFolder(recentPath) : await desktop.openFolder(); }
+    catch (error) { statusText.textContent = `Could not open folder: ${error.message}`; return false; }
     if (!next) return false;
+    browserSelection = null; browserSearch.value = ''; expandedFolders.clear();
     saveActiveState(); folder = next; selectedFile = null; activePath = null; documents.clear(); source.value = ""; source.disabled = true; folderName.textContent = next.name; setAssets(next.assets); drawTabs(); drawTree(); markDirty(false); statusText.textContent = "No file open"; render();
     makeUntitledHandout();
     return true;
@@ -2332,6 +2455,7 @@ if (window.handoutDesktop) {
     if (command === 'open-file') return chooseFile();
     if (command === 'open-folder') return chooseFolder();
     if (command === 'open-recent') return openRecentPath(payload);
+    if (command === 'open-recent-folder') return chooseFolder(payload);
     if (command === 'save') return saveCurrent();
     if (command === 'print') return printHandout();
     if (command === 'export-pdf') return exportHandout();

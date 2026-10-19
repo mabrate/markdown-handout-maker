@@ -6,6 +6,7 @@ const { DEFAULT_CONTEXT_SIZE, DEFAULT_GLOBAL_AI_PROMPT, MAX_CONTEXT_SIZE, MAX_GE
 const { importImageAsset, renameImageAsset } = require('./assetImport');
 const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
 const drive = require('./googleDrive');
+const { createEntry, moveHandout } = require('./fileBrowser');
 let mainWindow; let currentRoot = null;
 let googleSession = null;
 let modelDownloadController = null;
@@ -31,6 +32,15 @@ async function refreshApplicationMenu() {
   for (const filePath of settings.recentFiles || []) {
     try { if (markdownExtension.test(filePath)) { await fs.access(filePath); recentFiles.push(filePath); } } catch {}
   }
+  const recentFolders = [];
+  for (const folderPath of settings.recentFolders || []) {
+    try { if ((await fs.stat(folderPath)).isDirectory()) recentFolders.push(folderPath); } catch {}
+  }
+  const recentMenu = [
+    ...(recentFolders.length ? [{ label: 'Folders', enabled: false }, ...recentFolders.map(folderPath => ({ label: path.basename(folderPath) || folderPath, toolTip: folderPath, click: () => sendMenuCommand('open-recent-folder', folderPath) }))] : []),
+    ...(recentFolders.length && recentFiles.length ? [{ type: 'separator' }] : []),
+    ...(recentFiles.length ? [{ label: 'Files', enabled: false }, ...recentFiles.map(filePath => ({ label: path.basename(filePath), toolTip: filePath, click: () => sendMenuCommand('open-recent', filePath) }))] : [])
+  ];
   const layouts = [
     ['Letter', 'letter'], ['Letter landscape', 'letter-landscape'], ['A4', 'a4'], ['Half letter portrait', 'half-portrait'],
     ['Half letter landscape', 'half-landscape'], ['Two portrait half-sheet copies', 'half-duplicate-portrait'],
@@ -44,7 +54,7 @@ async function refreshApplicationMenu() {
       { label: 'New Handout', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('new-handout') },
       { label: 'Open File…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('open-file') },
       { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand('open-folder') },
-      { label: 'Open Recent', submenu: recentFiles.length ? recentFiles.map(filePath => ({ label: path.basename(filePath), toolTip: filePath, click: () => sendMenuCommand('open-recent', filePath) })) : [{ label: 'No recent files', enabled: false }] },
+      { label: 'Open Recent', submenu: recentMenu.length ? recentMenu : [{ label: 'No recent files or folders', enabled: false }] },
       { type: 'separator' }, { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
       { type: 'separator' }, { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => sendMenuCommand('export-pdf') },
       { label: 'Google Drive', submenu: [
@@ -119,10 +129,30 @@ function createWindow() {
 }
 app.setName(productName);
 app.whenReady().then(async () => { await refreshApplicationMenu(); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); }); app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-ipcMain.handle('folders:open', async () => { const settings = await readSettings(); const result = await dialog.showOpenDialog(mainWindow,{title:'Choose handout folder',defaultPath:settings.lastFolder,properties:['openDirectory']}); if(result.canceled) return null; currentRoot=result.filePaths[0]; await saveSettings({...settings,lastFolder:currentRoot}); return {path:currentRoot,name:path.basename(currentRoot),tree:await readTree(currentRoot),assets:await assetsIn(currentRoot)}; });
-ipcMain.handle('files:open-dialog', async () => { const settings = await readSettings(); const result = await dialog.showOpenDialog(mainWindow,{title:'Open Markdown file',defaultPath:settings.lastFolder,properties:['openFile'],filters:[{name:'Markdown',extensions:['md','markdown','mdown']}]}); if(result.canceled) return null; const filePath=result.filePaths[0]; currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {path:filePath,name:path.basename(filePath),content:await fs.readFile(filePath,'utf8'),assets:await assetsIn(currentRoot),recentFiles}; });
+async function openHandoutFolder(folderPath) {
+  const tree = await readTree(folderPath);
+  const assets = await assetsIn(folderPath);
+  const settings = await readSettings();
+  const recentFolders = [folderPath, ...(settings.recentFolders || []).filter(p => p !== folderPath)].slice(0, recentLimit);
+  await saveSettings({ ...settings, lastFolder: folderPath, recentFolders });
+  currentRoot = folderPath;
+  await refreshApplicationMenu();
+  return { path: folderPath, name: path.basename(folderPath), tree, assets };
+}
+ipcMain.handle('folders:open', async () => {
+  const settings = await readSettings();
+  const result = await dialog.showOpenDialog(mainWindow, { title: 'Choose handout folder', defaultPath: settings.lastFolder, properties: ['openDirectory', 'createDirectory'] });
+  if (result.canceled) return null;
+  return openHandoutFolder(result.filePaths[0]);
+});
+ipcMain.handle('folders:open-recent', async (_event, folderPath) => {
+  const settings = await readSettings();
+  if (typeof folderPath !== 'string' || !(settings.recentFolders || []).includes(folderPath)) throw Error('This folder is not in Open Recent.');
+  return openHandoutFolder(folderPath);
+});
+ipcMain.handle('files:open-dialog', async () => { const settings = await readSettings(); const result = await dialog.showOpenDialog(mainWindow,{title:'Open Markdown file',defaultPath:settings.lastFolder,properties:['openFile'],filters:[{name:'Markdown',extensions:['md','markdown','mdown']}]}); if(result.canceled) return null; const filePath=result.filePaths[0]; if (!isInsideRoot(filePath)) currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {root:currentRoot,path:filePath,name:path.basename(filePath),content:await fs.readFile(filePath,'utf8'),assets:await assetsIn(currentRoot),recentFiles}; });
 ipcMain.handle('files:recent', async () => { const settings = await readSettings(); const valid=[]; for (const filePath of settings.recentFiles || []) { try { if (markdownExtension.test(filePath)) { await fs.access(filePath); valid.push({path:filePath,name:path.basename(filePath)}); } } catch {} } return valid; });
-ipcMain.handle('files:open-recent', async (_e, filePath) => { if (!markdownExtension.test(filePath)) throw Error('Only Markdown files can be opened.'); const content=await fs.readFile(filePath,'utf8'); currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {path:filePath,name:path.basename(filePath),content,assets:await assetsIn(currentRoot),recentFiles}; });
+ipcMain.handle('files:open-recent', async (_e, filePath) => { if (!markdownExtension.test(filePath)) throw Error('Only Markdown files can be opened.'); const content=await fs.readFile(filePath,'utf8'); if (!isInsideRoot(filePath)) currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {root:currentRoot,path:filePath,name:path.basename(filePath),content,assets:await assetsIn(currentRoot),recentFiles}; });
 ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExtension.test(p)) throw Error('File is outside selected folder.'); await addRecent(p); return fs.readFile(p,'utf8'); }); ipcMain.handle('files:save', async (_e,p,content) => { if(!markdownExtension.test(p)||(!isInsideRoot(p)&&path.dirname(p)!==currentRoot)) throw Error('File is outside selected folder.'); await fs.writeFile(p,content,'utf8'); return true; });
 ipcMain.handle('files:save-new', async (_event, content) => { const result = await dialog.showSaveDialog(mainWindow, { title: 'Save handout', defaultPath: currentRoot ? path.join(currentRoot, 'new-handout.md') : 'new-handout.md', filters: [{ name: 'Markdown', extensions: ['md'] }] }); if (result.canceled || !result.filePath) return null; const filePath = result.filePath; await fs.writeFile(filePath, content, 'utf8'); currentRoot = path.dirname(filePath); await addRecent(filePath); return { path: filePath, name: path.basename(filePath), assets: await assetsIn(currentRoot) }; });
 ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,'','utf8'); return result.filePath; });
@@ -138,6 +168,20 @@ ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
     }
   }
   return renamed;
+});
+ipcMain.handle('browser:create', (_event, parent, name, type) => {
+  if (!['file', 'folder'].includes(type)) throw Error('Invalid item type.');
+  return createEntry(currentRoot, parent, name, type);
+});
+ipcMain.handle('browser:move', async (_event, source, parent, content) => {
+  const moved = await moveHandout(currentRoot, source, parent, content);
+  if (moved.path !== source) {
+    const settings = await readSettings();
+    if (settings.googleDocs?.[source]) { settings.googleDocs[moved.path] = settings.googleDocs[source]; delete settings.googleDocs[source]; }
+    settings.recentFiles = [...new Set((settings.recentFiles || []).map(p => p === source ? moved.path : p))];
+    await saveSettings(settings); await refreshApplicationMenu();
+  }
+  return moved;
 });
 ipcMain.handle('files:delete', async (_event, filePath) => {
   if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
@@ -157,7 +201,7 @@ ipcMain.handle('assets:rename-image', async (_event, imagePath, requestedName) =
   if (typeof imagePath !== 'string' || !imageExtension.test(imagePath) || !isInsideRoot(imagePath)) throw new Error('The selected image is outside the open folder.');
   return renameImageAsset(imagePath, requestedName);
 });
-ipcMain.handle('folders:refresh', async () => currentRoot ? { tree: await readTree(currentRoot), assets: await assetsIn(currentRoot) } : null);
+ipcMain.handle('folders:refresh', async () => currentRoot ? { path: currentRoot, name: path.basename(currentRoot), tree: await readTree(currentRoot), assets: await assetsIn(currentRoot) } : null);
 ipcMain.handle('ai:status', () => aiService.status());
 ipcMain.handle('ai:recommended-model', () => ({ name: RECOMMENDED_MODEL.name }));
 ipcMain.handle('ai:download-model', async event => {
