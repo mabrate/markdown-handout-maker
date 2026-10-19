@@ -420,23 +420,33 @@ function restoreLegacyInlineHtml(html) {
     });
 }
 
-function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
-  const cleaned = markdown.replace(/<!--([\s\S]*?)-->/g, "");
+function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset = 0) {
+  const cleaned = markdown.replace(/<!--([\s\S]*?)-->/g, comment => comment.replace(/[^\n]/g, " "));
   const lines = cleaned.replace(/\r\n?/g, "\n").split("\n");
   const placeholders = [];
   const outLines = [];
+  const sourceMap = [];
+  let iterationStart = 0;
+  const emit = (value, end = i + 1) => {
+    outLines.push(value);
+    const location = [sourceOffset + iterationStart, sourceOffset + Math.max(iterationStart + 1, end)];
+    sourceMap.push(location);
+    const placeholder = /^@@BLOCK(\d+)@@$/.exec(value);
+    if (placeholder) placeholders[Number(placeholder[1])].sourceLocation = location;
+  };
   let i = 0;
 
   while (i < lines.length) {
+    iterationStart = i;
     const line = lines[i];
-    if (!line.trim()) { outLines.push(""); i++; continue; }
-    if (/^ {0,3}#{1,2}(?:\s|$)/.test(line)) outLines.push("<!--HANDOUT_QUESTION_RESET-->");
+    if (!line.trim()) { emit(""); i++; continue; }
+    if (/^ {0,3}#{1,2}(?:\s|$)/.test(line)) emit("<!--HANDOUT_QUESTION_RESET-->");
 
     const qrMatch = line.match(/^\s*\[qr:([^\]]*)\](?:\{([^}]*)\})?\s*$/i);
     if (qrMatch) {
       const token = `@@BLOCK${placeholders.length}@@`;
       placeholders.push({ type: "qr", value: qrMatch[1], attributes: qrMatch[2] || '' });
-      outLines.push(token);
+      emit(token);
       i++;
       continue;
     }
@@ -444,7 +454,7 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
     if (/^:::pagebreak\s*$/.test(line.trim())) {
       const token = `@@BLOCK${placeholders.length}@@`;
       placeholders.push({ type: "pagebreak" });
-      outLines.push(token);
+      emit(token);
       i++;
       continue;
     }
@@ -454,8 +464,8 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       while (i < lines.length && lines[i].trim() !== ":::") i++;
       const content = lines.slice(start, i).join("\n");
       const token = `@@BLOCK${placeholders.length}@@`;
-      placeholders.push({ type: "wrap", content });
-      outLines.push(token);
+      placeholders.push({ type: "wrap", contentOffset: sourceOffset + start, content });
+      emit(token);
       if (i < lines.length) i++;
       continue;
     }
@@ -464,8 +474,8 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       const start = i + 1; i++;
       while (i < lines.length && lines[i].trim() !== ":::") i++;
       const token = `@@BLOCK${placeholders.length}@@`;
-      placeholders.push({ type: "checklist", content: lines.slice(start, i).join("\n") });
-      outLines.push(token);
+      placeholders.push({ type: "checklist", contentOffset: sourceOffset + start, content: lines.slice(start, i).join("\n") });
+      emit(token);
       if (i < lines.length) i++;
       continue;
     }
@@ -481,8 +491,8 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       }
       const content = lines.slice(start, i).join("\n");
       const token = `@@BLOCK${placeholders.length}@@`;
-      placeholders.push({ type: "question", attrStr, content });
-      outLines.push(token);
+      placeholders.push({ type: "question", contentOffset: sourceOffset + start, attrStr, content });
+      emit(token);
       if (i < lines.length) {
         i++;
         if (answerMarker !== -1 && i < lines.length && lines[i].trim() === ":::") i++;
@@ -500,13 +510,15 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       });
       const cells = [];
       let cell = [];
+      let cellStart = i + 1;
       let depth = 0;
       i++;
       while (i < lines.length) {
         const nested = lines[i].trim();
         if (depth === 0 && /^:::cell\s*$/.test(nested)) {
-          if (cell.length) cells.push(cell.join("\n"));
+          if (cell.length) cells.push({ content: cell.join("\n"), offset: sourceOffset + cellStart });
           cell = [];
+          cellStart = i + 1;
           i++;
           continue;
         }
@@ -518,10 +530,10 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
         cell.push(lines[i]);
         i++;
       }
-      if (cell.length) cells.push(cell.join("\n"));
+      if (cell.length) cells.push({ content: cell.join("\n"), offset: sourceOffset + cellStart });
       const token = `@@BLOCK${placeholders.length}@@`;
       placeholders.push({ type: "grid", attr, cells });
-      outLines.push(token);
+      emit(token);
       if (i < lines.length) i++;
       continue;
     }
@@ -549,14 +561,14 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
         return "";
       });
       const body = bodyRows.map(row => splitRow(row));
-      let tableHtml = '<table class="md-table"><thead><tr>';
+      let tableHtml = `<table class="md-table"><thead><tr data-source-start="${sourceOffset + i}" data-source-end="${sourceOffset + i + 1}">`;
       headers.forEach((header, idx) => {
         const align = aligns[idx] || "";
         tableHtml += `<th${align ? ` style="text-align:${align}"` : ""}>${inlineMarkdown(header)}</th>`;
       });
       tableHtml += '</tr></thead><tbody>';
-      for (const row of body) {
-        tableHtml += '<tr>';
+      for (const [rowIndex, row] of body.entries()) {
+        tableHtml += `<tr data-source-start="${sourceOffset + i + 2 + rowIndex}" data-source-end="${sourceOffset + i + 3 + rowIndex}">`;
         row.forEach((cell, idx) => {
           const align = aligns[idx] || "";
           tableHtml += `<td${align ? ` style="text-align:${align}"` : ""}>${inlineMarkdown(cell)}</td>`;
@@ -566,17 +578,17 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       tableHtml += '</tbody></table>';
       const token = `@@BLOCK${placeholders.length}@@`;
       placeholders.push({ type: "table", html: tableHtml });
-      outLines.push(token);
+      emit(token, j);
       i = j;
       continue;
     }
 
-    outLines.push(line);
+    emit(line);
     i++;
   }
 
   const mdSource = outLines.join("\n");
-  const custommdSource = mdSource.split("\n").map(line => {
+  const customLines = mdSource.split("\n").map(line => {
     const trimmed = line.trim();
     const inlineMatch = trimmed.match(/^(.+?)\s*\{\{lines:(\d+):inline\}\}\s*$/);
     if (inlineMatch && inlineMatch[1].trim()) {
@@ -593,9 +605,36 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
     return line
       .replace(/\{\{total-points\}\}/g, String(totalPoints))
       .replace(/\{\{grade\}\}/g, `<span class="grade-box">____ / ${totalPoints}</span>`);
-  }).join("\n");
+  });
+  const expandedMap = customLines.flatMap((line, index) => line.split('\n').map(() => sourceMap[index]));
+  const custommdSource = customLines.join('\n');
   const md = window.markdownit ? window.markdownit({ html: true }) : null;
-  const rendered = md ? md.render(preprocessLegacyMarkdown(custommdSource)) : preprocessLegacyMarkdown(custommdSource);
+  let rendered = preprocessLegacyMarkdown(custommdSource);
+  if (md) {
+    const tokens = md.parse(rendered, {});
+    const annotate = tokens => tokens.forEach(token => {
+      if (token.map) {
+        const start = expandedMap[token.map[0]];
+        const end = expandedMap[Math.max(token.map[0], token.map[1] - 1)];
+        if (start && end) {
+          if (token.type === 'html_block') {
+            token.content = token.content.replace(/<(div|section|table|tr|li|ul|ol|p|h[1-6]|blockquote|pre)(?=[\s>])([^>]*)>/gi, (tag, name, attributes, offset) => {
+              const line = token.map[0] + (token.content.slice(0, offset).match(/\n/g) || []).length;
+              const location = expandedMap[line] || start;
+              return `<${name}${attributes} data-source-start="${location[0]}" data-source-end="${location[1]}">`;
+            });
+          }
+          else if (token.nesting === 1 || token.type === 'fence' || token.type === 'code_block') {
+            token.attrSet('data-source-start', String(start[0]));
+            token.attrSet('data-source-end', String(end[1]));
+          }
+        }
+      }
+      if (token.children) annotate(token.children);
+    });
+    annotate(tokens);
+    rendered = md.renderer.render(tokens, md.options, {});
+  }
 
   const renderedWithBlocks = rendered
     .replace(/<!--HANDOUT_QUESTION_RESET-->/g, () => { numbering.questionNumber = 1; return ""; })
@@ -604,37 +643,41 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
     const index = Number(indexText);
     const block = placeholders[index];
     if (!block) return "";
+    const located = html => {
+      const [start, end] = block.sourceLocation;
+      return html.replace(/<([a-z][a-z0-9-]*)(?=[\s>])/i, `<$1 data-source-start="${start}" data-source-end="${end}"`);
+    };
 
     if (block.type === "pagebreak") {
       return '<div class="handout-pagebreak" aria-hidden="true"></div>';
     }
 
     if (block.type === "qr") {
-      return window.HandoutQr.renderQrBlock(block.value, block.attributes);
+      return located(window.HandoutQr.renderQrBlock(block.value, block.attributes));
     }
 
     if (block.type === "wrap") {
-      const innerBlocks = parseBlocks(block.content, numbering);
+      const innerBlocks = parseBlocks(block.content, numbering, block.contentOffset);
       const wrappedHtml = innerBlocks.map(blockItem => blockItem.html).join("");
-      return `<section class="text-wrap">${wrappedHtml}</section>`;
+      return located(`<section class="text-wrap">${wrappedHtml}</section>`);
     }
 
     if (block.type === "checklist") {
-      const checklistHtml = md ? md.render(preprocessLegacyMarkdown(block.content)) : preprocessLegacyMarkdown(block.content);
-      return window.HandoutChecklist.renderChecklistBlock(checklistHtml);
+      const checklistHtml = parseBlocks(block.content, numbering, block.contentOffset).map(item => item.html).join("");
+      return located(window.HandoutChecklist.renderChecklistBlock(checklistHtml));
     }
 
     if (block.type === "grid") {
-      const parts = block.cells.map(part => part.trim()).filter(Boolean);
-      const cellHtml = parts.map(part => `<div class="grid-cell">${parseBlocks(part, numbering).map(blockItem => blockItem.html).join("")}</div>`).join("");
+      const parts = block.cells.filter(part => part.content.trim());
+      const cellHtml = parts.map(part => `<div class="grid-cell">${parseBlocks(part.content, numbering, part.offset).map(blockItem => blockItem.html).join("")}</div>`).join("");
       const columns = Math.max(1, Math.min(4, Number(block.attr.columns) || parts.length || 2));
       const cardClass = block.attr.cards ? " cards" : "";
       const widths = block.attr.widths ? block.attr.widths.split(",").map(value => { const [numerator, denominator] = value.split("/").map(Number); return Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0 ? `${numerator}fr` : "1fr"; }).join(" ") : `repeat(${columns}, minmax(0, 1fr))`;
-      return `<div class="grid${cardClass}" style="--grid-template:${widths}">${cellHtml}</div>`;
+      return located(`<div class="grid${cardClass}" style="--grid-template:${widths}">${cellHtml}</div>`);
     }
 
     if (block.type === "table") {
-      return block.html;
+      return located(block.html);
     }
 
     if (block.type === "question") {
@@ -648,11 +691,13 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       const qtype = attrs.type || "mc";
       const qid = attrs.id || `q${questionCounter++}`;
       const qLines = block.content.split("\n");
+      const qLineOffsets = qLines.map((_, index) => block.contentOffset + index);
       let answerLines = [];
       const answerIndex = qLines.findIndex(line => line.trim() === ":::answer");
       if (answerIndex !== -1) {
         let k = answerIndex + 1;
         while (k < qLines.length && qLines[k].trim() !== ":::") answerLines.push(qLines[k++]);
+        qLineOffsets.splice(answerIndex, (k < qLines.length && qLines[k].trim() === ":::") ? (k - answerIndex + 1) : (k - answerIndex));
         qLines.splice(answerIndex, (k < qLines.length && qLines[k].trim() === ":::") ? (k - answerIndex + 1) : (k - answerIndex));
       }
 
@@ -672,10 +717,11 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
             let isCorrect = false;
             if (/\s\*$/.test(content)) { isCorrect = true; content = content.replace(/\s*\*$/, ""); }
             else if (/\*$/.test(content)) { isCorrect = true; content = content.replace(/\*$/, ""); }
-            choices.push({ content, isCorrect });
+            choices.push({ content, isCorrect, start: qLineOffsets[j], end: qLineOffsets[j] + 1 });
             j++;
           } else if (choices.length) {
             choices[choices.length - 1].content += "\n" + qLines[j];
+            choices[choices.length - 1].end = qLineOffsets[j] + 1;
             j++;
           } else {
             j++;
@@ -687,7 +733,7 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
       if (prompt.trim()) {
         const number = numbering.questionNumber++;
         const promptHtml = renderTextBlock(prompt);
-        qHtml += `<div class="question-prompt"><span class="question-num">${number}.</span>${promptHtml}</div>`;
+        qHtml += `<div class="question-prompt" data-source-start="${block.contentOffset}" data-source-end="${block.contentOffset + (choiceStart < 0 ? qLines.length : choiceStart)}"><span class="question-num">${number}.</span>${promptHtml}</div>`;
       }
 
       if (choices.length) {
@@ -695,20 +741,20 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }) {
         choices.forEach((choice, choiceIndex) => {
           const choiceHtml = inlineMarkdown(choice.content);
           const correctClass = (choice.isCorrect && showAnswers) ? " correct-answer" : "";
-          qHtml += `<li class="mc-choice${correctClass}" data-correct="${choice.isCorrect ? "true" : "false"}><span class="choice-letter">${String.fromCharCode(65 + choiceIndex)}.</span>${choiceHtml}</li>`;
+          qHtml += `<li data-source-start="${choice.start}" data-source-end="${choice.end}" class="mc-choice${correctClass}" data-correct="${choice.isCorrect ? "true" : "false"}><span class="choice-letter">${String.fromCharCode(65 + choiceIndex)}.</span>${choiceHtml}</li>`;
         });
         qHtml += '</ul>';
       } else {
         const linesCount = Number(attrs.lines) || 3;
         if (showAnswers && answerLines.length) {
-          const answerHtml = parseBlocks(answerLines.join("\n"), numbering).map(blockItem => blockItem.html).join("");
+          const answerHtml = parseBlocks(answerLines.join("\n"), numbering, block.contentOffset + answerIndex + 1).map(blockItem => blockItem.html).join("");
           qHtml += `<div class="short-answer-key handwritten">${answerHtml}</div>`;
         } else {
           qHtml += answerMarkup(linesCount);
         }
       }
       qHtml += '</div>';
-      return qHtml;
+      return located(qHtml);
     }
 
     return "";
@@ -877,7 +923,10 @@ function render() {
   }, 0);
   questionCounter = 1;
   applyLayout();
-  paginate(parseBlocks(withoutDocumentSettings(source.value)));
+  const visibleSource = withoutDocumentSettings(source.value);
+  const prefixLength = source.value.length - visibleSource.length;
+  const sourceOffset = (source.value.slice(0, prefixLength).match(/\n/g) || []).length;
+  paginate(parseBlocks(visibleSource, { questionNumber: 1 }, sourceOffset));
   statusText.textContent = "Preview updated";
   requestAnimationFrame(() => {
     previewPanel.scrollTop = previousScroll;
@@ -1370,107 +1419,51 @@ if (window.handoutDesktop) {
     cancelDownloadButton.addEventListener("click", async () => { cancelDownloadButton.disabled = true; await desktop.cancelAIModelDownload(); downloadStatus.querySelector("p").textContent = "Cancelling download…"; });
   }
 
+  let previewNavigationId = 0;
   function jumpToPreviewSource(block, target) {
-    function selectAndRevealLine(lines, lineIndex) {
-      const start = lines.slice(0, lineIndex).join("\n").length + (lineIndex ? 1 : 0);
-      source.focus();
-      source.setSelectionRange(start, start + lines[lineIndex].length);
-      const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
-      source.scrollTop = Math.max(0, lineIndex * lineHeight - source.clientHeight / 3);
-      // Focusing a textarea can adjust its scroll position after this handler.
-      // Sync on the next frame so the visual overlays follow the final position.
-      requestAnimationFrame(syncHighlight);
+    const mapped = target.closest('[data-source-start][data-source-end]');
+    if (!mapped || !preview.contains(mapped)) {
+      statusText.textContent = 'This preview element has no source location.';
+      return;
     }
-
-    const normalizePreviewText = text => text.replace(/^\s*\d+\.\s*/, "").replace(/\s+/g, " ").trim();
-    const normalizeMarkdownText = text => text
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "\$1")
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "\$1")
-      .replace(/<[^>]+>/g, "")
-      .replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, "\$1")
-      .replace(/[\*_`~]/g, "")
-      .replace(/\\$/g, "")
-      .replace(/^#{1,6}\s*/, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    const findSourceLine = (lines, previewText) => {
-      const needle = normalizePreviewText(previewText).toLowerCase();
-      const normalizedLines = lines.map(line => normalizeMarkdownText(line).toLowerCase());
-      const exactMatch = normalizedLines.findIndex(line => line === needle);
-      return exactMatch !== -1 ? exactMatch : normalizedLines.findIndex(line => line.includes(needle));
+    const lines = source.value.split('\n');
+    const first = Number(mapped.dataset.sourceStart);
+    const last = Math.min(lines.length, Number(mapped.dataset.sourceEnd));
+    if (!Number.isInteger(first) || first < 0 || first >= lines.length || last <= first) return;
+    let endLine = last;
+    if (mapped.tagName === 'LI') {
+      for (const nested of mapped.querySelectorAll('ul[data-source-start], ol[data-source-start]')) {
+        endLine = Math.min(endLine, Number(nested.dataset.sourceStart));
+      }
+    }
+    while (endLine > first + 1 && !lines[endLine - 1].trim()) endLine--;
+    const start = lines.slice(0, first).reduce((sum, line) => sum + line.length + 1, 0);
+    const end = start + lines.slice(first, endLine).join('\n').length;
+    const navigationId = ++previewNavigationId;
+    source.focus({ preventScroll: true });
+    source.setSelectionRange(start, end);
+    syncNativeSelection();
+    // A mirror uses the textarea's actual width and font metrics, including wrapped
+    // lines. Apply the measured scroll after focus/selection have settled.
+    const reveal = () => {
+      if (navigationId !== previewNavigationId) return;
+      const style = getComputedStyle(source);
+      const width = Math.max(1, source.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+      Object.assign(lineMeasure.style, {
+        width: `${width}px`, font: style.font, letterSpacing: style.letterSpacing,
+        whiteSpace: wrapLines ? 'pre-wrap' : 'pre', overflowWrap: style.overflowWrap,
+        tabSize: style.tabSize
+      });
+      const prefix = document.createElement('span'); prefix.textContent = source.value.slice(0, start);
+      const marker = document.createElement('span'); marker.textContent = '\u200b';
+      lineMeasure.replaceChildren(prefix, marker);
+      const top = marker.getBoundingClientRect().top - lineMeasure.getBoundingClientRect().top + parseFloat(style.paddingTop);
+      source.scrollTop = Math.max(0, top - source.clientHeight / 3);
+      source.scrollLeft = 0;
+      syncHighlight();
     };
-    const findHtmlTableStart = table => {
-      const tableText = normalizePreviewText(table.textContent).toLowerCase();
-      if (!tableText) return -1;
-      const htmlTable = /<table\b[^>]*>[\s\S]*?<\/table>/gi;
-      let match;
-      while ((match = htmlTable.exec(source.value))) {
-        const sourceTableText = normalizeMarkdownText(match[0]).toLowerCase();
-        if (sourceTableText.includes(tableText) || tableText.includes(sourceTableText)) {
-          return source.value.slice(0, match.index).split("\n").length - 1;
-        }
-      }
-      return -1;
-    };
-    const clickedTable = target.closest("table");
-    if (clickedTable) {
-      const tableLine = findHtmlTableStart(clickedTable);
-      if (tableLine !== -1) {
-        const sourceLines = source.value.split("\n");
-        selectAndRevealLine(sourceLines, tableLine);
-        statusText.textContent = "Editing table beginning on line " + (tableLine + 1);
-        return;
-      }
-    }
-    const clickedQr = target.closest(".qr-code");
-    if (clickedQr) {
-      const qrIndex = Number(clickedQr.dataset.qrIndex);
-      const qrMatches = [...source.value.matchAll(/\[qr:[^\]]*\](?:\{[^}]*\})?/g)];
-      const match = qrMatches[qrIndex];
-      if (match) {
-        const sourceLines = source.value.split("\n");
-        const qrLine = source.value.slice(0, match.index).split("\n").length - 1;
-        selectAndRevealLine(sourceLines, qrLine);
-        statusText.textContent = "Editing QR code on line " + (qrLine + 1);
-        return;
-      }
-    }
-    const clickedSpecial = target.closest(".answer-lines, .inline-answer, .drawing-space");
-    if (clickedSpecial) {
-      const sourcePattern = clickedSpecial.closest(".drawing-space") ? /\{\{space:\d+(?::(?:blank|box|dots))?\}\}/ : /\{\{lines:\d+(?::(?:inline|new))?\}\}/;
-      const sourceLines = source.value.split("\n");
-      const nearbyBlock = clickedSpecial.closest(".handout-block");
-      const previousBlock = nearbyBlock && nearbyBlock.previousElementSibling;
-      const anchorText = [nearbyBlock, previousBlock]
-        .filter(Boolean)
-        .flatMap(candidate => [...candidate.querySelectorAll("h1,h2,h3,h4,p,li")].map(node => node.textContent.trim()))
-        .filter(text => text.length >= 4)
-        .sort((a, b) => b.length - a.length)[0];
-      const anchorLine = anchorText ? sourceLines.findIndex(line => line.toLowerCase().includes(anchorText.toLowerCase().slice(0, 80))) : -1;
-      let specialLine = -1;
-      for (let index = Math.max(0, anchorLine); index < sourceLines.length; index++) {
-        if (sourcePattern.test(sourceLines[index])) { specialLine = index; break; }
-        if (anchorLine !== -1 && index > anchorLine + 20) break;
-      }
-      if (specialLine !== -1) {
-        selectAndRevealLine(sourceLines, specialLine);
-        statusText.textContent = `Editing line ${specialLine + 1}`;
-        return;
-      }
-    }
-    const prompt = target.closest(".question-prompt");
-    const clickedText = target.closest("h1,h2,h3,h4,p,li,th,td");
-    const candidates = [clickedText, prompt, ...block.querySelectorAll("h1,h2,h3,h4,p,li,th,td")]
-      .filter(Boolean)
-      .flatMap(node => (node.innerText || node.textContent).split("\n").map(normalizePreviewText))
-      .filter(text => text.length >= 4)
-      .filter((text, index, values) => values.indexOf(text) === index);
-    const lines = source.value.split("\n");
-    const candidate = candidates.find(text => findSourceLine(lines, text) !== -1);
-    if (!candidate) { statusText.textContent = "Could not locate this preview block in the Markdown"; return; }
-    const matchIndex = findSourceLine(lines, candidate);
-    selectAndRevealLine(lines, matchIndex);
-    statusText.textContent = `Editing line ${matchIndex + 1}`;
+    requestAnimationFrame(() => { reveal(); requestAnimationFrame(reveal); });
+    statusText.textContent = first + 1 === endLine ? `Editing line ${first + 1}` : `Editing lines ${first + 1}–${endLine}`;
   }
   function selectResizableMedia(media) {
     document.querySelector('.media-resize-outline')?.remove();

@@ -34,6 +34,13 @@ In the app, choose **File → Open Folder…** to work with a folder of Markdown
 handouts, or **File → Open File…** for one handout. Use **File → Save** or
 Ctrl/Cmd+S to write changes back to the selected file.
 
+## Preview navigation
+
+Click preview text to select its Markdown source. List items, nested items,
+checklists, question choices, and Markdown table rows use their original source
+locations, so repeated wording does not jump to the first occurrence. The editor
+reveals the selected item's beginning with line wrapping accounted for.
+
 ## File browser
 
 Open a folder to browse its handouts and images. Select a folder, then use **+**
@@ -129,3 +136,11 @@ tests/             Focused Node-based checks
 Keep changes cross-platform and offline-friendly. Do not commit generated
 application builds, dependencies, or AI models. Run `npm test` before opening a
 pull request.
+
+### Preview navigation regression check
+
+With Playwright and its Chromium browser installed, run
+`node tests/test-preview-navigation.cjs`. For an existing browser installation,
+set `CHROME_PATH` to its executable. `PLAYWRIGHT_MODULE` optionally selects an
+existing Playwright package. This check uses a mocked desktop bridge; native
+macOS focus and selection behavior should also be checked in the packaged app.
