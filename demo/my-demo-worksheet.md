@@ -1,9 +1,5 @@
 ---
 layout: letter
-ai_context: |
-  Subject: [Subject]
-  Grade: [Grade]
-  Learning goal: [Learning goal]
 ---
 
 **Name:** ______________________________  **Period:** ______  **Date:** __________

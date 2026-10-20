@@ -15,9 +15,6 @@ The Markdown Handout Maker keeps your source handouts in local folders. Google D
 - Sync a handout to a Google Doc with Push, Pull, and a phone QR link
 - Use classroom-focused Markdown additions for answer lines, drawing spaces,
   images, grids, cards, and page breaks
-- Optional local AI tools for vocabulary tables, distractors, and quiz questions
-- Download and verify the recommended local AI model, or choose your own
-  compatible `.gguf` file
 
 ## Quick start
 
@@ -75,34 +72,17 @@ Put an optional YAML block at the very beginning of a handout. The app removes i
 ```md
 ---
 layout: letter
-ai_context: |
-  Subject: [subject]
-  Grade: [grade]
-  Learning goal: [learning goal]
 ---
 ```
 
 | Parameter | Values and behavior |
 | --- | --- |
 | `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Sets the initial page layout when the handout opens. |
-| `ai_context` | A quoted one-line value or an indented YAML block. Its text is included with local AI requests to supply subject, grade, learning goal, and similar handout context. |
-
-## Local AI
-
-AI features are optional; all editing, previewing, printing, and PDF export
-work without them. In **AI Tools → AI Settings**, either:
-
-- Choose **Download recommended model** to download, checksum-verify, and
-  select the suggested model automatically (about 3 GB), or
-- Choose **Choose an AI model file…** to select an existing `.gguf` model.
-
-The selected model path is stored only in the app's per-user settings. Downloaded
-models and manually selected model files are not committed to Git.
 
 ## Build and test
 
 ```bash
-# Verify the local model-download integrity logic
+# Run automated checks
 npm test
 
 # Build an unpacked application for the current platform
@@ -119,7 +99,7 @@ Git.
 ## Project layout
 
 ```text
-electron/          Electron main process, isolated preload bridge, and local AI services
+electron/          Electron main process, isolated preload bridge, and filesystem services
 renderer/           Renderer, styles, preview logic, and bundled Markdown support
 demo/              Example handouts and the Handout Markdown authoring guide
 tests/             Focused Node-based checks
@@ -128,13 +108,13 @@ tests/             Focused Node-based checks
 ## Handout syntax and examples
 
 - Start with [the example handout](demo/example-handout.md).
-- See [the AI handout guide](demo/AI_HANDOUT_GUIDE.md) for supported Markdown
+- See [the handout Markdown guide](demo/HANDOUT_MARKDOWN.md) for supported Markdown
   extensions, YAML settings, and classroom layout patterns.
 
 ## Contributing
 
 Keep changes cross-platform and offline-friendly. Do not commit generated
-application builds, dependencies, or AI models. Run `npm test` before opening a
+application builds or dependencies. Run `npm test` before opening a
 pull request.
 
 ### Preview navigation regression check

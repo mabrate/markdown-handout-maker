@@ -18,10 +18,6 @@ let totalPoints = 0;
 const snippets = {
   boilerplate: `---
 layout: letter
-ai_context: |
-  Subject: [Subject]
-  Grade: [Grade]
-  Learning goal: [Learning goal]
 ---
 
 **Name:** ______________________________  **Period:** ______  **Date:** __________
@@ -151,7 +147,7 @@ function makeRubric(title, criteria) {
 
 function openSnippetDialog(kind) {
   const overlay = document.createElement("div");
-  overlay.className = "ai-dialog-overlay snippet-dialog-overlay";
+  overlay.className = "app-dialog-overlay snippet-dialog-overlay";
   const close = () => { overlay.remove(); source.focus(); };
   const submit = event => {
     event.preventDefault();
@@ -163,17 +159,17 @@ function openSnippetDialog(kind) {
     close();
   };
   const shells = {
-    question: `<h2 id="snippet-dialog-title">Insert a question</h2><p class="ai-dialog-description" id="question-guidance">Choose a question type. The options below will adapt to match it.</p><div class="form-grid question-form-grid"><div class="form-wide question-control-row"><label class="question-type-field">Question type<select name="type"><option value="short">Short answer</option><option value="mc">Multiple choice</option><option value="true-false">True / false</option></select></label><label class="compact-field">Points <span class="field-hint">optional</span><input name="points" type="number" min="0" max="100" placeholder="0"></label><label class="compact-field" data-question-field="lines">Answer lines<input name="lines" type="number" min="1" max="30" value="3"></label></div><label class="form-wide">Question prompt<input name="prompt" value="Write your response here." required></label><label class="form-wide" data-question-field="answer">Teacher answer <span class="field-hint">shown only when answers are toggled on</span><textarea name="answer" rows="3" placeholder="Enter the expected answer (optional)"></textarea></label><label class="form-wide" data-question-field="choices" hidden>Answer choices <span class="field-hint">one choice per line; add an asterisk (*) after the correct answer</span><textarea name="content" rows="5" placeholder="Choice 1&#10;Correct choice *&#10;Choice 3"></textarea></label><fieldset class="form-wide true-false-answer" data-question-field="true-false" hidden><legend>Correct answer</legend><label><input name="correct" type="radio" value="0" checked> True</label><label><input name="correct" type="radio" value="1"> False</label></fieldset></div>`,
-    rubric: `<h2 id="snippet-dialog-title">Insert a rubric</h2><p class="ai-dialog-description">Add one criterion per line. Separate the four columns with vertical bars.</p><div class="form-grid"><label class="form-wide">Rubric title<input name="title" value="Assessment Rubric"></label><label class="form-wide">Criteria<textarea name="criteria" rows="6" placeholder="Scientific reasoning | Thorough explanation | Clear explanation | Needs support"></textarea></label></div>`,
-    columns: `<h2 id="snippet-dialog-title">Insert columns</h2><p class="ai-dialog-description">Choose a layout, then decide whether each column needs a visible box.</p><div class="form-grid"><label>Format<select name="format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Column widths<select name="widths"><option value="1/2,1/2">Two equal</option><option value="1/3,2/3">One third + two thirds</option><option value="2/3,1/3">Two thirds + one third</option><option value="1/4,1/4,1/2">Quarter + quarter + half</option><option value="1/4,1/4,1/4,1/4">Four equal</option></select></label><label class="checkbox-field form-wide"><input name="cards" type="checkbox"> Draw a box around each column</label></div>`,
-    table: `<h2 id="snippet-dialog-title">Insert a table</h2><p class="ai-dialog-description">Set the table size. HTML format allows custom column widths in the generated markup.</p><div class="form-grid"><label>Format<select name="format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Body rows<input name="rows" type="number" min="1" max="20" value="3"></label><label>Columns<input name="columns" type="number" min="2" max="10" value="3"></label></div>`
+    question: `<h2 id="snippet-dialog-title">Insert a question</h2><p class="app-dialog-description" id="question-guidance">Choose a question type. The options below will adapt to match it.</p><div class="form-grid question-form-grid"><div class="form-wide question-control-row"><label class="question-type-field">Question type<select name="type"><option value="short">Short answer</option><option value="mc">Multiple choice</option><option value="true-false">True / false</option></select></label><label class="compact-field">Points <span class="field-hint">optional</span><input name="points" type="number" min="0" max="100" placeholder="0"></label><label class="compact-field" data-question-field="lines">Answer lines<input name="lines" type="number" min="1" max="30" value="3"></label></div><label class="form-wide">Question prompt<input name="prompt" value="Write your response here." required></label><label class="form-wide" data-question-field="answer">Teacher answer <span class="field-hint">shown only when answers are toggled on</span><textarea name="answer" rows="3" placeholder="Enter the expected answer (optional)"></textarea></label><label class="form-wide" data-question-field="choices" hidden>Answer choices <span class="field-hint">one choice per line; add an asterisk (*) after the correct answer</span><textarea name="content" rows="5" placeholder="Choice 1&#10;Correct choice *&#10;Choice 3"></textarea></label><fieldset class="form-wide true-false-answer" data-question-field="true-false" hidden><legend>Correct answer</legend><label><input name="correct" type="radio" value="0" checked> True</label><label><input name="correct" type="radio" value="1"> False</label></fieldset></div>`,
+    rubric: `<h2 id="snippet-dialog-title">Insert a rubric</h2><p class="app-dialog-description">Add one criterion per line. Separate the four columns with vertical bars.</p><div class="form-grid"><label class="form-wide">Rubric title<input name="title" value="Assessment Rubric"></label><label class="form-wide">Criteria<textarea name="criteria" rows="6" placeholder="Scientific reasoning | Thorough explanation | Clear explanation | Needs support"></textarea></label></div>`,
+    columns: `<h2 id="snippet-dialog-title">Insert columns</h2><p class="app-dialog-description">Choose a layout, then decide whether each column needs a visible box.</p><div class="form-grid"><label>Format<select name="format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Column widths<select name="widths"><option value="1/2,1/2">Two equal</option><option value="1/3,2/3">One third + two thirds</option><option value="2/3,1/3">Two thirds + one third</option><option value="1/4,1/4,1/2">Quarter + quarter + half</option><option value="1/4,1/4,1/4,1/4">Four equal</option></select></label><label class="checkbox-field form-wide"><input name="cards" type="checkbox"> Draw a box around each column</label></div>`,
+    table: `<h2 id="snippet-dialog-title">Insert a table</h2><p class="app-dialog-description">Set the table size. HTML format allows custom column widths in the generated markup.</p><div class="form-grid"><label>Format<select name="format"><option value="markdown">Markdown</option><option value="html">HTML</option></select></label><label>Body rows<input name="rows" type="number" min="1" max="20" value="3"></label><label>Columns<input name="columns" type="number" min="2" max="10" value="3"></label></div>`
   };
   const actionLabels = { question: "Insert question", rubric: "Insert rubric", columns: "Insert columns", table: "Insert table" };
-  overlay.innerHTML = `<form class="ai-dialog snippet-dialog" role="dialog" aria-modal="true" aria-labelledby="snippet-dialog-title"><header>${shells[kind].match(/<h2[\s\S]*?<\/h2>/)?.[0] || ""}<button type="button" class="ai-dialog-close" aria-label="Close">×</button></header>${shells[kind].replace(/<h2[\s\S]*?<\/h2>/, "")}<footer><button type="button" class="button secondary snippet-cancel">Cancel</button><button type="submit" class="button primary">${actionLabels[kind]}</button></footer></form>`;
+  overlay.innerHTML = `<form class="app-dialog snippet-dialog" role="dialog" aria-modal="true" aria-labelledby="snippet-dialog-title"><header>${shells[kind].match(/<h2[\s\S]*?<\/h2>/)?.[0] || ""}<button type="button" class="app-dialog-close" aria-label="Close">×</button></header>${shells[kind].replace(/<h2[\s\S]*?<\/h2>/, "")}<footer><button type="button" class="button secondary snippet-cancel">Cancel</button><button type="submit" class="button primary">${actionLabels[kind]}</button></footer></form>`;
   document.body.append(overlay);
   const form = overlay.querySelector("form");
   form.addEventListener("submit", submit);
-  overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
+  overlay.querySelector(".app-dialog-close").addEventListener("click", close);
   overlay.querySelector(".snippet-cancel").addEventListener("click", close);
   overlay.addEventListener("mousedown", event => { if (event.target === overlay) close(); });
   overlay.addEventListener("keydown", event => { if (event.key === "Escape") close(); });
@@ -256,22 +252,6 @@ function setSourceContent(content) {
 
 function withoutDocumentSettings(markdown) {
   return markdown.replace(/^---\s*\n[\s\S]*?\n---\s*(?:\n|$)/, "");
-}
-
-function currentAIContext(markdown) {
-  const frontMatter = markdown.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
-  if (!frontMatter) return "";
-  const lines = frontMatter[1].split(/\r?\n/);
-  const start = lines.findIndex(line => /^ai_context\s*:/i.test(line));
-  if (start === -1) return "";
-  const value = lines[start].replace(/^ai_context\s*:\s*/i, "").trim();
-  if (value && !/^[|>]\-?\+?$/.test(value)) return value.replace(/^['"]|['"]$/g, "");
-  const contextLines = [];
-  for (const line of lines.slice(start + 1)) {
-    if (line && !/^\s+/.test(line)) break;
-    contextLines.push(line.replace(/^\s{2}/, "").trimEnd());
-  }
-  return contextLines.join("\n").trim();
 }
 
 const example = `# Ecosystems Review
@@ -1155,270 +1135,6 @@ if (window.handoutDesktop) {
   });
   resetEditorHistory();
 
-  function escapeAIHtml(value) {
-    return escapeHtml(String(value));
-  }
-
-  function setupAIActivity(overlay, status) {
-    const context = overlay.querySelector('.ai-context');
-    const activity = overlay.querySelector('.ai-activity');
-    const output = overlay.querySelector('.ai-output');
-    const messages = [];
-    return progress => {
-      if (!progress || typeof progress !== 'object') return;
-      if (progress.message) status.textContent = progress.message;
-      if (progress.prompt) context.textContent = `Inference backend: ${progress.inferenceBackend || 'Unknown'}\nSelected handout text: ${progress.selectedCharacters} characters\nContext window: ${progress.contextSize} tokens\nOutput limit: ${progress.maxTokens} tokens\n\nExact prompt sent to the model:\n${progress.prompt}`;
-      if (Object.hasOwn(progress, 'generatedText')) {
-        output.textContent = progress.generatedText || 'Waiting for generated text…';
-        output.scrollTop = output.scrollHeight;
-      }
-      if (progress.message) {
-        messages.push(`${new Date().toLocaleTimeString()} — ${progress.message}`);
-        activity.textContent = messages.slice(-40).join('\n');
-        activity.scrollTop = activity.scrollHeight;
-      }
-    };
-  }
-
-  function createAIRequestId() {
-    return globalThis.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-
-  function shuffleChoices(correctAnswer, distractors) {
-    const choices = [correctAnswer, ...distractors].map((text, index) => ({ text, correct: index === 0 }));
-    for (let index = choices.length - 1; index > 0; index--) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [choices[index], choices[swapIndex]] = [choices[swapIndex], choices[index]];
-    }
-    return choices;
-  }
-
-  function makeAIOutput(actionId, result) {
-    if (actionId === "quiz") {
-      const points = Math.max(0, Number(result.defaultPoints) || 1);
-      return result.previewQuestions.map(question => `:::question type=mc points=${points}\n${question.question}\n${question.choices.map(choice => `- ${choice.text}${choice.correct ? " *" : ""}`).join("\n")}\n:::\n`).join("\n");
-    }
-    if (actionId === "vocabulary" || actionId === "vocabularyExamples") {
-      const withExamples = actionId === "vocabularyExamples";
-      const columns = withExamples ? '<col style="width: 22%">\n  <col style="width: 38%">\n  <col style="width: 40%">' : '<col style="width: 25%">\n  <col style="width: 75%">';
-      const headers = withExamples ? '<th>Term</th><th>Definition</th><th>Example</th>' : '<th>Term</th><th>Definition</th>';
-      const rows = result.rows.map(row => withExamples ? `<tr><td>${escapeHtml(row.term)}</td><td>${escapeHtml(row.definition)}</td><td>${escapeHtml(row.example)}</td></tr>` : `<tr><td>${escapeHtml(row.term)}</td><td>${escapeHtml(row.definition)}</td></tr>`);
-      return `<table class="worksheet-table vocabulary-table">\n  <colgroup>\n  ${columns}\n  </colgroup>\n  <thead>\n    <tr>${headers}</tr>\n  </thead>\n  <tbody>\n    ${rows.join("\n    ")}\n  </tbody>\n</table>\n\n`;
-    }
-    const choices = result.previewChoices || shuffleChoices(result.correctAnswer, result.distractors);
-    return `:::question type=mc\n${result.question}\n${choices.map(choice => `- ${choice.text}${choice.correct ? " *" : ""}`).join("\n")}\n:::\n\n`;
-  }
-
-  function showAIPreview(actionId, result) {
-    if (actionId === "quiz") {
-      return result.previewQuestions.map((question, index) => `<div class="ai-question-preview"><strong>${index + 1}. ${escapeAIHtml(question.question)}</strong><ol type="A">${question.choices.map(choice => `<li>${escapeAIHtml(choice.text)}</li>`).join("")}</ol></div>`).join("");
-    }
-    if (actionId === "vocabulary" || actionId === "vocabularyExamples") {
-      const withExamples = actionId === "vocabularyExamples";
-      return `<table class="ai-preview-table"><colgroup>${withExamples ? '<col style="width:22%"><col style="width:38%"><col style="width:40%">' : '<col style="width:25%"><col style="width:75%">'}</colgroup><thead><tr><th>Term</th><th>Definition</th>${withExamples ? "<th>Example</th>" : ""}</tr></thead><tbody>${result.rows.map(row => `<tr><td>${escapeAIHtml(row.term)}</td><td>${escapeAIHtml(row.definition)}</td>${withExamples ? `<td>${escapeAIHtml(row.example)}</td>` : ""}</tr>`).join("")}</tbody></table>`;
-    }
-    const choices = result.previewChoices || shuffleChoices(result.correctAnswer, result.distractors);
-    return `<div class="ai-question-preview"><strong>${escapeAIHtml(result.question)}</strong><ol type="A">${choices.map(choice => `<li>${escapeAIHtml(choice.text)}</li>`).join("")}</ol></div>`;
-  }
-
-  function openAIAction(action) {
-    const start = source.selectionStart;
-    const end = source.selectionEnd;
-    const selectedText = source.value.slice(start, end).trim();
-    if (action.requiresSelection && !selectedText) { statusText.textContent = "Select text in the Markdown editor first"; source.focus(); return; }
-    const overlay = document.createElement("div");
-    overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-dialog-title"><header><h2 id="ai-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">${escapeAIHtml(action.description)}</p><div class="ai-dialog-source"><strong>Selected text</strong><pre>${escapeAIHtml(selectedText)}</pre></div><label class="ai-prompt-label">Prompt to send <textarea class="ai-prompt" rows="10" spellcheck="true" aria-label="Prompt to send to AI"></textarea></label><details class="ai-debug"><summary>Model context & activity</summary><pre class="ai-context">Waiting for the request to be prepared…</pre><strong class="ai-output-label">Live model output (not yet parsed)</strong><pre class="ai-output" aria-live="polite">Waiting for generated text…</pre><pre class="ai-activity" aria-live="polite"></pre></details><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-reset-prompt">Reset prompt</button><button type="button" class="button primary ai-regenerate">Send to AI</button><button type="button" class="button secondary ai-stop" disabled>Stop AI</button><button type="button" class="button primary ai-approve" disabled>Insert/Replace</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
-    document.body.append(overlay);
-    overlay.querySelector('.ai-debug').open = true;
-    const status = overlay.querySelector(".ai-status");
-    const resultArea = overlay.querySelector(".ai-result");
-    const generateButton = overlay.querySelector(".ai-regenerate");
-    const promptInput = overlay.querySelector(".ai-prompt");
-    const stopButton = overlay.querySelector(".ai-stop");
-    const approveButton = overlay.querySelector(".ai-approve");
-    const updateActivity = setupAIActivity(overlay, status);
-    let result = null;
-    let busy = false;
-    let activeRequestId = null;
-    const preparePrompt = async () => { promptInput.value = await desktop.prepareAI(action.id, selectedText, { aiContext: currentAIContext(source.value) }); status.textContent = "Edit the prompt if needed, then choose Send to AI."; };
-    const close = () => { if (activeRequestId) void desktop.stopAI(activeRequestId); overlay.remove(); };
-    overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
-    overlay.querySelector(".ai-cancel").addEventListener("click", close);
-    async function generate() {
-      if (busy) return;
-      busy = true; generateButton.disabled = true; stopButton.disabled = false; approveButton.disabled = true; status.textContent = "Preparing local AI request…"; resultArea.innerHTML = "";
-      const requestId = createAIRequestId();
-      activeRequestId = requestId;
-      const stopProgress = desktop.onAIProgress((progressRequestId, progress) => { if (progressRequestId === requestId) updateActivity(progress); });
-      try {
-        result = await desktop.generateAI(action.id, selectedText, { aiContext: currentAIContext(source.value), prompt: promptInput.value, requestId });
-        if (action.id === "distractors") result.previewChoices = shuffleChoices(result.correctAnswer, result.distractors);
-        resultArea.innerHTML = showAIPreview(action.id, result);
-        status.textContent = "Review the proposed result before inserting it.";
-        approveButton.disabled = false;
-      } catch (error) {
-        result = null;
-        status.textContent = error.message || "AI generation failed.";
-      } finally { stopProgress(); busy = false; activeRequestId = null; generateButton.disabled = false; stopButton.disabled = true; }
-    }
-    generateButton.addEventListener("click", generate);
-    overlay.querySelector(".ai-reset-prompt").addEventListener("click", () => preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; }));
-    stopButton.addEventListener("click", async () => { if (activeRequestId) { stopButton.disabled = true; status.textContent = "Stopping AI generation…"; await desktop.stopAI(activeRequestId); } });
-    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); replaceEditorSelection(makeAIOutput(action.id, result)); close(); });
-    preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; });
-  }
-
-  function openQuizAction(action) {
-    const start = source.selectionStart;
-    const end = source.selectionEnd;
-    const overlay = document.createElement("div");
-    overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true" aria-labelledby="quiz-dialog-title"><header><h2 id="quiz-dialog-title">${escapeAIHtml(action.label)}</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><p class="ai-dialog-description">Create multiple-choice questions that match this handout.</p><div class="quiz-options"><label>Number of questions <input class="quiz-count" type="number" min="1" max="20" value="5"></label><label>Default points <input class="quiz-points" type="number" min="0" max="100" value="1"></label><label class="quiz-context-label">Additional context <textarea class="quiz-context" rows="4" placeholder="Topics, standards, reading level, or directions for the quiz"></textarea></label></div><label class="ai-prompt-label">Prompt to send <textarea class="ai-prompt" rows="10" spellcheck="true" aria-label="Prompt to send to AI"></textarea></label><details class="ai-debug"><summary>Model context & activity</summary><pre class="ai-context">Waiting for the request to be prepared…</pre><strong class="ai-output-label">Live model output (not yet parsed)</strong><pre class="ai-output" aria-live="polite">Waiting for generated text…</pre><pre class="ai-activity" aria-live="polite"></pre></details><div class="ai-status" role="status"></div><div class="ai-result"></div><footer><button type="button" class="button secondary ai-reset-prompt">Reset prompt</button><button type="button" class="button primary ai-regenerate">Send to AI</button><button type="button" class="button secondary ai-stop" disabled>Stop AI</button><button type="button" class="button primary ai-approve" disabled>Insert Quiz</button><button type="button" class="button secondary ai-cancel">Cancel</button></footer></section>`;
-    document.body.append(overlay);
-    overlay.querySelector('.ai-debug').open = true;
-    const status = overlay.querySelector(".ai-status");
-    const resultArea = overlay.querySelector(".ai-result");
-    const generateButton = overlay.querySelector(".ai-regenerate");
-    const promptInput = overlay.querySelector(".ai-prompt");
-    const stopButton = overlay.querySelector(".ai-stop");
-    const approveButton = overlay.querySelector(".ai-approve");
-    const updateActivity = setupAIActivity(overlay, status);
-    let result = null;
-    let busy = false;
-    let activeRequestId = null;
-    const preparePrompt = async () => { promptInput.value = await desktop.prepareAI(action.id, source.value, { questionCount: Number(overlay.querySelector(".quiz-count").value) || 5, defaultPoints: Number(overlay.querySelector(".quiz-points").value) || 1, additionalContext: overlay.querySelector(".quiz-context").value, aiContext: currentAIContext(source.value) }); status.textContent = "Edit the prompt if needed, then choose Send to AI."; };
-    const close = () => { if (activeRequestId) void desktop.stopAI(activeRequestId); overlay.remove(); };
-    overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
-    overlay.querySelector(".ai-cancel").addEventListener("click", close);
-    async function generate() {
-      if (busy) return;
-      const questionCount = Number(overlay.querySelector(".quiz-count").value) || 5;
-      const defaultPoints = Number(overlay.querySelector(".quiz-points").value) || 1;
-      const additionalContext = overlay.querySelector(".quiz-context").value;
-      busy = true; generateButton.disabled = true; stopButton.disabled = false; approveButton.disabled = true; status.textContent = "Preparing local AI request…"; resultArea.innerHTML = "";
-      const requestId = createAIRequestId();
-      activeRequestId = requestId;
-      const stopProgress = desktop.onAIProgress((progressRequestId, progress) => { if (progressRequestId === requestId) updateActivity(progress); });
-      try {
-        result = await desktop.generateAI(action.id, source.value, { questionCount, defaultPoints, additionalContext, aiContext: currentAIContext(source.value), prompt: promptInput.value, requestId });
-        result.defaultPoints = defaultPoints;
-        result.previewQuestions = result.questions.map(question => ({ question: question.question, choices: shuffleChoices(question.correctAnswer, question.distractors) }));
-        resultArea.innerHTML = showAIPreview(action.id, result);
-        status.textContent = "Review the proposed quiz before inserting it.";
-        approveButton.disabled = false;
-      } catch (error) { result = null; status.textContent = error.message || "AI generation failed."; }
-      finally { stopProgress(); busy = false; activeRequestId = null; generateButton.disabled = false; stopButton.disabled = true; }
-    }
-    generateButton.addEventListener("click", generate);
-    overlay.querySelector(".ai-reset-prompt").addEventListener("click", () => preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; }));
-    stopButton.addEventListener("click", async () => { if (activeRequestId) { stopButton.disabled = true; status.textContent = "Stopping AI generation…"; await desktop.stopAI(activeRequestId); } });
-    approveButton.addEventListener("click", () => { if (!result) return; source.focus(); source.setSelectionRange(start, end); replaceEditorSelection(makeAIOutput(action.id, result)); close(); });
-    preparePrompt().catch(error => { status.textContent = error.message || "Could not prepare the prompt."; });
-  }
-
-  async function showAISettings() {
-    const overlay = document.createElement("div");
-    overlay.className = "ai-dialog-overlay";
-    overlay.innerHTML = `<section class="ai-dialog" role="dialog" aria-modal="true"><header><h2>AI Settings</h2><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="ai-settings-status"></div><section class="ai-global-prompt-settings"><label class="ai-prompt-label">Global default prompt <span class="field-hint">Added before every action-specific prompt and its content.</span><textarea class="ai-global-prompt" rows="7" maxlength="10000" spellcheck="true"></textarea></label><div class="ai-global-prompt-actions"><button type="button" class="button secondary ai-reset-global-prompt">Reset to default</button><button type="button" class="button primary ai-save-global-prompt">Save global prompt</button><span class="ai-global-prompt-status" role="status"></span></div></section><details class="ai-action-prompt-settings"><summary>Action prompt defaults</summary><p class="field-hint">Available placeholders: <code>{{selectedText}}</code>, <code>{{handoutText}}</code>, <code>{{aiContext}}</code>, <code>{{additionalContext}}</code>, and <code>{{questionCount}}</code>.</p><div class="ai-action-prompt-list"></div><div class="ai-action-prompt-actions"><button type="button" class="button primary ai-save-action-prompts">Save action prompts</button><span class="ai-action-prompt-status" role="status"></span></div></details><details class="ai-advanced-settings"><summary>Advanced AI settings</summary><div class="ai-context-size-settings"><label>Context window <input class="ai-context-size" type="number" step="1"></label><p class="field-hint">Input and instruction capacity in tokens. Larger values use more memory. This is separate from each action's maximum generated tokens. The previous automatic range was 2,048–3,072 tokens; the default remains 3,072.</p><div class="ai-context-size-actions"><button type="button" class="button secondary ai-reset-context-size">Reset to default</button><button type="button" class="button primary ai-save-context-size">Save context size</button><span class="ai-context-size-status" role="status"></span></div></div></details><div class="ai-download-status" hidden><progress max="100" value="0"></progress><p role="status">Preparing download…</p></div><footer><button type="button" class="button primary ai-select-model">Choose an AI model file…</button><button type="button" class="button secondary ai-download-model">Download recommended model</button><button type="button" class="button secondary ai-cancel-download" hidden>Cancel download</button><button type="button" class="button secondary ai-cancel">Close</button></footer></section>`;
-    document.body.append(overlay);
-    const status = overlay.querySelector(".ai-settings-status");
-    const downloadStatus = overlay.querySelector(".ai-download-status");
-    const downloadButton = overlay.querySelector(".ai-download-model");
-    const cancelDownloadButton = overlay.querySelector(".ai-cancel-download");
-    const selectButton = overlay.querySelector(".ai-select-model");
-    const globalPromptInput = overlay.querySelector('.ai-global-prompt');
-    const globalPromptStatus = overlay.querySelector('.ai-global-prompt-status');
-    const saveGlobalPromptButton = overlay.querySelector('.ai-save-global-prompt');
-    const resetGlobalPromptButton = overlay.querySelector('.ai-reset-global-prompt');
-    const actionPromptList = overlay.querySelector('.ai-action-prompt-list');
-    const saveActionPromptsButton = overlay.querySelector('.ai-save-action-prompts');
-    const actionPromptStatus = overlay.querySelector('.ai-action-prompt-status');
-    const contextSizeInput = overlay.querySelector('.ai-context-size');
-    const contextSizeStatus = overlay.querySelector('.ai-context-size-status');
-    const saveContextSizeButton = overlay.querySelector('.ai-save-context-size');
-    const resetContextSizeButton = overlay.querySelector('.ai-reset-context-size');
-    const renderStatus = model => { const stateLabels = { installed: "Installed", "not-installed": "Not Installed", loading: "Loading", error: "Error" }; status.innerHTML = `<p><strong>Local AI:</strong> ${escapeAIHtml(stateLabels[model.state] || model.state)}</p><p><strong>Model:</strong> ${escapeAIHtml(model.modelName || "None selected")}</p><p class="ai-model-path">${escapeAIHtml(model.modelPath || "Download the recommended model or choose a compatible .gguf file.")}</p>${model.message ? `<p class="ai-error">${escapeAIHtml(model.message)}</p>` : ""}`; };
-    const [currentModel, recommendedModel, promptSettings] = await Promise.all([desktop.aiStatus(), desktop.recommendedAIModel(), desktop.aiPromptSettings()]);
-    renderStatus(currentModel);
-    globalPromptInput.value = promptSettings.globalPrompt;
-    contextSizeInput.min = promptSettings.minContextSize;
-    contextSizeInput.max = promptSettings.maxContextSize;
-    contextSizeInput.value = promptSettings.contextSize;
-    for (const action of promptSettings.actions) {
-      const field = document.createElement('section');
-      field.className = 'ai-action-prompt-field';
-      field.innerHTML = `<label>${escapeAIHtml(action.label)}<textarea rows="8" maxlength="20000" spellcheck="true" data-action-id="${escapeAIHtml(action.id)}"></textarea></label><div class="ai-token-limit-row"><label>Maximum generated tokens <input type="number" min="${promptSettings.minGeneratedTokens}" max="${promptSettings.maxGeneratedTokens}" step="1" value="${action.maxTokens}" data-token-action-id="${escapeAIHtml(action.id)}"></label><span class="field-hint">Controls response length, not input capacity.</span></div><button type="button" class="button secondary">Reset this action</button>`;
-      field.querySelector('textarea').value = action.prompt;
-      field.querySelector('button').addEventListener('click', () => { field.querySelector('textarea').value = action.defaultPrompt; field.querySelector('[data-token-action-id]').value = action.defaultMaxTokens; actionPromptStatus.textContent = `${action.label} reset locally. Save to keep this change.`; });
-      actionPromptList.append(field);
-    }
-    status.insertAdjacentHTML('beforeend', `<p><strong>Recommended download:</strong> ${escapeAIHtml(recommendedModel.name)} (about 3 GB)</p>`);
-    const close = () => { stopDownloadProgress(); overlay.remove(); };
-    overlay.querySelector(".ai-dialog-close").addEventListener("click", close);
-    overlay.querySelector(".ai-cancel").addEventListener("click", close);
-    async function saveGlobalPrompt(value, message) {
-      saveGlobalPromptButton.disabled = true;
-      resetGlobalPromptButton.disabled = true;
-      globalPromptStatus.textContent = 'Saving…';
-      try {
-        const saved = await desktop.saveGlobalAIPrompt(value);
-        globalPromptInput.value = saved.globalPrompt;
-        globalPromptStatus.textContent = message;
-      } catch (error) {
-        globalPromptStatus.textContent = error.message || 'Could not save the global prompt.';
-      } finally {
-        saveGlobalPromptButton.disabled = false;
-        resetGlobalPromptButton.disabled = false;
-      }
-    }
-    saveGlobalPromptButton.addEventListener('click', () => saveGlobalPrompt(globalPromptInput.value, 'Global prompt saved.'));
-    resetGlobalPromptButton.addEventListener('click', () => saveGlobalPrompt(promptSettings.defaultGlobalPrompt, 'Default restored and saved.'));
-    async function saveContextSize(value, message) {
-      saveContextSizeButton.disabled = true;
-      resetContextSizeButton.disabled = true;
-      contextSizeStatus.textContent = 'Saving…';
-      try {
-        const saved = await desktop.saveAIContextSize(Number(value));
-        contextSizeInput.value = saved.contextSize;
-        contextSizeStatus.textContent = message;
-      } catch (error) {
-        contextSizeStatus.textContent = error.message || 'Could not save the context size.';
-      } finally {
-        saveContextSizeButton.disabled = false;
-        resetContextSizeButton.disabled = false;
-      }
-    }
-    saveContextSizeButton.addEventListener('click', () => saveContextSize(contextSizeInput.value, 'Context size saved. It will apply to the next AI request.'));
-    resetContextSizeButton.addEventListener('click', () => saveContextSize(promptSettings.defaultContextSize, 'Default context size restored and saved.'));
-    saveActionPromptsButton.addEventListener('click', async () => {
-      saveActionPromptsButton.disabled = true;
-      actionPromptStatus.textContent = 'Saving…';
-      const actionPrompts = Object.fromEntries([...actionPromptList.querySelectorAll('textarea')].map(input => [input.dataset.actionId, input.value]));
-      const tokenLimits = Object.fromEntries([...actionPromptList.querySelectorAll('[data-token-action-id]')].map(input => [input.dataset.tokenActionId, Number(input.value)]));
-      try { await desktop.saveAIActionPrompts(actionPrompts); await desktop.saveAIActionTokenLimits(tokenLimits); actionPromptStatus.textContent = 'Action prompts and output limits saved.'; }
-      catch (error) { actionPromptStatus.textContent = error.message || 'Could not save action prompts.'; }
-      finally { saveActionPromptsButton.disabled = false; }
-    });
-    selectButton.addEventListener("click", async event => { event.currentTarget.disabled = true; try { const model = await desktop.selectAIModel(); if (model) renderStatus(model); } catch (error) { status.innerHTML += `<p class="ai-error">${escapeAIHtml(error.message)}</p>`; } finally { event.currentTarget.disabled = false; } });
-    const stopDownloadProgress = desktop.onAIModelDownloadProgress(progress => {
-      downloadStatus.hidden = false;
-      const progressBar = downloadStatus.querySelector("progress");
-      if (progress.percent === null) progressBar.removeAttribute("value"); else progressBar.value = progress.percent;
-      const received = (progress.received / 1024 / 1024).toFixed(0);
-      const total = progress.total ? ` of ${(progress.total / 1024 / 1024).toFixed(0)} MB` : ' MB';
-      downloadStatus.querySelector("p").textContent = `Downloading… ${received}${total}${progress.percent !== null ? ` (${progress.percent}%)` : ''}`;
-    });
-    downloadButton.addEventListener("click", async () => {
-      downloadButton.disabled = true; selectButton.disabled = true; cancelDownloadButton.hidden = false; downloadStatus.hidden = false;
-      downloadStatus.querySelector("p").textContent = "Connecting to download…";
-      try { renderStatus(await desktop.downloadAIModel()); downloadStatus.querySelector("progress").value = 100; downloadStatus.querySelector("p").textContent = "Recommended model downloaded, verified, and selected."; }
-      catch (error) { downloadStatus.querySelector("p").innerHTML = `<span class="ai-error">${escapeAIHtml(error.message)}</span>`; }
-      finally { downloadButton.disabled = false; selectButton.disabled = false; cancelDownloadButton.hidden = true; cancelDownloadButton.disabled = false; }
-    });
-    cancelDownloadButton.addEventListener("click", async () => { cancelDownloadButton.disabled = true; await desktop.cancelAIModelDownload(); downloadStatus.querySelector("p").textContent = "Cancelling download…"; });
-  }
-
   let previewNavigationId = 0;
   function jumpToPreviewSource(block, target) {
     const mapped = target.closest('[data-source-start][data-source-end]');
@@ -1859,16 +1575,16 @@ if (window.handoutDesktop) {
   }
   function showImagePreview(node) {
     const overlay = document.createElement('div');
-    overlay.className = 'ai-dialog-overlay image-preview-overlay';
+    overlay.className = 'app-dialog-overlay image-preview-overlay';
     const close = () => overlay.remove();
-    overlay.innerHTML = `<section class="image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview"><header><strong>${escapeHtml(node.name)}</strong><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><div class="image-preview-stage"><img src="${escapeHtml(node.url)}" alt="Preview of ${escapeHtml(node.name)}"></div><footer><button type="button" class="button secondary image-preview-rename">Rename…</button><button type="button" class="button primary image-preview-insert">Insert into Markdown</button></footer></section>`;
+    overlay.innerHTML = `<section class="image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview"><header><strong>${escapeHtml(node.name)}</strong><button type="button" class="app-dialog-close" aria-label="Close">×</button></header><div class="image-preview-stage"><img src="${escapeHtml(node.url)}" alt="Preview of ${escapeHtml(node.name)}"></div><footer><button type="button" class="button secondary image-preview-rename">Rename…</button><button type="button" class="button primary image-preview-insert">Insert into Markdown</button></footer></section>`;
     document.body.append(overlay);
-    overlay.querySelector('.ai-dialog-close').addEventListener('click', close);
+    overlay.querySelector('.app-dialog-close').addEventListener('click', close);
     overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
     overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
     overlay.querySelector('.image-preview-insert').addEventListener('click', () => insertTreeImage(node).then(close).catch(error => { statusText.textContent = `Could not insert image: ${error.message}`; }));
     overlay.querySelector('.image-preview-rename').addEventListener('click', () => { close(); renameTreeImage(node); });
-    overlay.querySelector('.ai-dialog-close').focus();
+    overlay.querySelector('.app-dialog-close').focus();
   }
   async function refreshFolderTreeAndAssets() {
     if (!folder) return;
@@ -1895,14 +1611,14 @@ if (window.handoutDesktop) {
   }
   function renameTreeImage(node) {
     const overlay = document.createElement('div');
-    overlay.className = 'ai-dialog-overlay image-rename-overlay';
-    overlay.innerHTML = `<form class="image-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="image-rename-title"><header><strong id="image-rename-title">Rename image</strong><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><label>Filename<input name="filename" value="${escapeHtml(node.name)}" autocomplete="off" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary image-rename-cancel">Cancel</button><button type="submit" class="button primary">Rename</button></footer></form>`;
+    overlay.className = 'app-dialog-overlay image-rename-overlay';
+    overlay.innerHTML = `<form class="image-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="image-rename-title"><header><strong id="image-rename-title">Rename image</strong><button type="button" class="app-dialog-close" aria-label="Close">×</button></header><label>Filename<input name="filename" value="${escapeHtml(node.name)}" autocomplete="off" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary image-rename-cancel">Cancel</button><button type="submit" class="button primary">Rename</button></footer></form>`;
     document.body.append(overlay);
     const form = overlay.querySelector('form');
     const input = form.elements.filename;
     const errorMessage = overlay.querySelector('.image-rename-error');
     const close = () => overlay.remove();
-    overlay.querySelector('.ai-dialog-close').addEventListener('click', close);
+    overlay.querySelector('.app-dialog-close').addEventListener('click', close);
     overlay.querySelector('.image-rename-cancel').addEventListener('click', close);
     overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
     overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
@@ -1932,14 +1648,14 @@ if (window.handoutDesktop) {
   }
   function renameTreeFile(node) {
     const overlay = document.createElement('div');
-    overlay.className = 'ai-dialog-overlay image-rename-overlay';
-    overlay.innerHTML = `<form class="image-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="file-rename-title"><header><strong id="file-rename-title">Rename handout</strong><button type="button" class="ai-dialog-close" aria-label="Close">×</button></header><label>Filename<input name="filename" value="${escapeHtml(node.name)}" autocomplete="off" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary image-rename-cancel">Cancel</button><button type="submit" class="button primary">Rename</button></footer></form>`;
+    overlay.className = 'app-dialog-overlay image-rename-overlay';
+    overlay.innerHTML = `<form class="image-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="file-rename-title"><header><strong id="file-rename-title">Rename handout</strong><button type="button" class="app-dialog-close" aria-label="Close">×</button></header><label>Filename<input name="filename" value="${escapeHtml(node.name)}" autocomplete="off" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary image-rename-cancel">Cancel</button><button type="submit" class="button primary">Rename</button></footer></form>`;
     document.body.append(overlay);
     const form = overlay.querySelector('form');
     const input = form.elements.filename;
     const errorMessage = overlay.querySelector('.image-rename-error');
     const close = () => overlay.remove();
-    overlay.querySelector('.ai-dialog-close').addEventListener('click', close);
+    overlay.querySelector('.app-dialog-close').addEventListener('click', close);
     overlay.querySelector('.image-rename-cancel').addEventListener('click', close);
     overlay.addEventListener('mousedown', event => { if (event.target === overlay) close(); });
     overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
@@ -2108,7 +1824,7 @@ if (window.handoutDesktop) {
     } catch (error) { statusText.textContent = `Could not move handout: ${error.message}`; }
   }
   function chooseMoveFolder(node) {
-    const overlay = document.createElement('div'); overlay.className = 'ai-dialog-overlay';
+    const overlay = document.createElement('div'); overlay.className = 'app-dialog-overlay';
     const panel = document.createElement('form'); panel.className = 'image-rename-dialog'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', `Move ${node.name}`);
     const heading = document.createElement('strong'); heading.textContent = `Move ${node.name} to…`;
     const select = document.createElement('select'); select.setAttribute('aria-label', 'Destination folder');
@@ -2332,16 +2048,16 @@ if (window.handoutDesktop) {
   function toggleAnswers() { showAnswers = !showAnswers; render(); }
   function googleDialog(title) {
     const overlay = document.createElement('div');
-    overlay.className = 'ai-dialog-overlay';
+    overlay.className = 'app-dialog-overlay';
     const panel = document.createElement('section');
-    panel.className = 'ai-dialog google-dialog';
+    panel.className = 'app-dialog google-dialog';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     const header = document.createElement('header');
     const heading = document.createElement('h2');
     heading.textContent = title;
     const closeButton = document.createElement('button');
-    closeButton.className = 'ai-dialog-close';
+    closeButton.className = 'app-dialog-close';
     closeButton.type = 'button';
     closeButton.textContent = '×';
     closeButton.setAttribute('aria-label', 'Close');
@@ -2484,8 +2200,6 @@ if (window.handoutDesktop) {
     if (command === 'insert-snippet' && snippets[payload]) return insertSnippet(snippets[payload]);
     if (command === 'open-snippet-dialog' && ['question', 'rubric', 'columns', 'table'].includes(payload)) return openSnippetDialog(payload);
     if (command === 'open-handout-guide') return openRecentPath(payload);
-    if (command === 'ai-settings') return showAISettings();
-    if (command === 'ai-action' && payload?.id) return payload.id === 'quiz' ? openQuizAction(payload) : openAIAction(payload);
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });

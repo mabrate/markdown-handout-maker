@@ -6,7 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/test-model-download.js && node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-prompt-settings.js && node tests/test-google-drive.js",
+    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-google-drive.js",
     "package": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -38,7 +38,6 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "node-llama-cpp": "^3.20.0",
     "qrcode-generator": "^2.0.4",
     "yauzl": "^3.4.0"
   }

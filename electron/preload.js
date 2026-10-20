@@ -17,10 +17,5 @@ contextBridge.exposeInMainWorld('handoutDesktop', {
   print: invoke('handout:print'), exportPdf: invoke('handout:pdf'),
   googleSettings: invoke('google:settings'), saveGoogleClientId: invoke('google:save-client-id'), googleSignIn: invoke('google:sign-in'), googleSignOut: invoke('google:sign-out'),
   googleExportPdf: invoke('google:export-pdf'), googleDocLink: invoke('google:doc-link'), googleSync: invoke('google:sync'), googlePush: invoke('google:push'), googlePull: invoke('google:pull'),
-  aiStatus: invoke('ai:status'), recommendedAIModel: invoke('ai:recommended-model'), downloadAIModel: invoke('ai:download-model'),
-  cancelAIModelDownload: invoke('ai:cancel-model-download'), selectAIModel: invoke('ai:select-model'), aiPromptSettings: invoke('ai:prompt-settings'),
-  saveGlobalAIPrompt: invoke('ai:save-global-prompt'), saveAIActionPrompts: invoke('ai:save-action-prompts'),
-  saveAIActionTokenLimits: invoke('ai:save-action-token-limits'), saveAIContextSize: invoke('ai:save-context-size'),
-  prepareAI: invoke('ai:prepare'), generateAI: invoke('ai:generate'), stopAI: invoke('ai:stop'),
-  onMenuCommand: subscribe('menu:command'), onAIModelDownloadProgress: subscribe('ai:model-download-progress'), onAIProgress: subscribe('ai:progress')
+  onMenuCommand: subscribe('menu:command')
 });

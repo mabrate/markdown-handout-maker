@@ -18,10 +18,6 @@ An optional YAML block may appear at the first line of a handout. The app remove
 ```md
 ---
 layout: letter
-ai_context: |
-  Subject: [subject]
-  Grade: [grade]
-  Learning goal: [learning goal]
 ---
 ```
 
@@ -30,7 +26,6 @@ Use only these app-supported parameters:
 | Parameter | Values and behavior |
 | --- | --- |
 | `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, or `booklet`. Selects the layout when the handout opens. |
-| `ai_context` | A quoted one-line value or an indented YAML block. Its text is sent with local AI requests to provide subject, grade, learning goal, or other handout context. |
 
 ## Required opening and heading structure
 

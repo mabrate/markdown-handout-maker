@@ -9,22 +9,17 @@ File and output conventions:
 
 ## YAML front matter
 
-An optional YAML block at the first line of a handout controls its opening layout and adds context to local AI actions. It is removed from the preview, printout, and PDF:
+An optional YAML block at the first line of a handout controls its opening layout. It is removed from the preview, printout, and PDF:
 
 ```md
 ---
 layout: letter
-ai_context: |
-  Subject: [subject]
-  Grade: [grade]
-  Learning goal: [learning goal]
 ---
 ```
 
 | Parameter | Values and behavior |
 | --- | --- |
 | `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the layout when the handout opens. |
-| `ai_context` | A quoted one-line value or an indented YAML block. Sends handout context with local AI requests. |
 
 In addition to basic Markdown, The Markdown Handout Maker supports:
 
