@@ -25,7 +25,7 @@ Use only these app-supported parameters:
 
 | Parameter | Values and behavior |
 | --- | --- |
-| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, or `booklet`. Selects the layout when the handout opens. |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the layout when the handout opens. |
 
 ## Required opening and heading structure
 

@@ -48,10 +48,15 @@ Search above the tree filters filenames while keeping their parent folders visib
 The active handout is highlighted, and a dot marks open handouts with unsaved changes.
 Opening a handout from a tab or Recent Files reveals its parent folder in the tree.
 
-Drag a handout onto a folder to move it, or right-click it and choose **Move to…**.
-Drop on the folder name above the tree to move to the root folder. Moving saves
-any edits in that handout and adjusts its relative image and link references.
-An existing file with the same name is never replaced. Image files stay in place.
+Drag any file onto a folder to move it, or right-click it and choose **Move to…**.
+Drop onto the folder name above the tree to move a file to the root folder.
+Moving a Markdown handout adjusts its relative image and link references while
+keeping unsaved edits unsaved. Existing files are never replaced. Moving an image
+or another supporting file does not rewrite links in other documents.
+
+When leaving an edited handout, choose **Save**, **Discard**, or **Cancel**.
+Switching between open tabs preserves their unsaved edits. Hover a web link in
+the handout preview for the **Ctrl-click** hint (⌘-click also works on Mac).
 
 ## Google Drive and Google Docs
 
@@ -159,3 +164,31 @@ handout can still expand its parents.
 
 Run `node tests/test-file-browser-refresh.cjs` with the optional Playwright setup
 described above to check automatic refresh and expansion persistence.
+
+### Teaching materials and clipboard paste
+
+- **Help → AI Handout Syntax Guide** opens the bundled AI authoring guide in a
+  read-only pane. **Copy entire guide** copies it for use in another application.
+  **Save as…** saves a Markdown copy wherever you choose for your AI agent.
+  Both Help guides work offline and leave your current handout and folder open.
+- Drag images and supporting files from the file browser into another app's file
+  drop area. All files, including Markdown, drag directly from their filenames.
+  Drop onto a folder in the app to move it. Dragging out sends the saved file;
+  unsaved edits stay in the editor. Export a PDF first when you need a PDF.
+- Click a supporting file to preview it. PDF uses the built-in viewer; DOCX shows
+  text; XLSX, CSV, and TSV show tables. XLSX previews include up to 30 sheets,
+  200 rows and 40 columns per sheet, using saved formula results. Text previews
+  show up to 500,000 characters. Previews accept files up to 20 MB, with a 64 MB
+  expanded-size limit for Office documents. Legacy DOC/XLS files and other formats
+  offer **Open in default app**. Double-click and Enter retain the default-app action.
+- Paste from Google Docs, Word, Sheets, or Excel into the Markdown editor to
+  convert headings, bold, italic, lists, web links, and tables into editable Markdown.
+  Tab-separated clipboard data also becomes a table. Plain-text paste remains
+  available through the system's paste-as-plain-text command. Complex document
+  layouts, merged cells, and spreadsheet formulas are not reproduced by paste.
+
+Native drag-and-drop depends on the receiving application's upload area; verify
+it with your browser and Canvas installation on the target operating system.
+
+Run `node tests/test-app-lifecycle.cjs` with the optional Playwright setup to check
+native Electron startup and clean shutdown using a temporary app profile.

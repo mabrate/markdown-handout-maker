@@ -41,14 +41,16 @@ function rebaseReferences(content, oldPath, newPath) {
 }
 async function moveHandout(root, source, parent, content) {
   source = await checkedPath(root, source); parent = await checkedPath(root, parent);
-  if (!markdownExtension.test(source) || !(await fs.stat(source)).isFile() || !(await fs.stat(parent)).isDirectory()) throw Error('Choose a handout and destination folder.');
+  if (!(await fs.stat(source)).isFile() || !(await fs.stat(parent)).isDirectory()) throw Error('Choose a file and destination folder.');
   const destination = path.join(parent, path.basename(source));
-  const original = await fs.readFile(source, 'utf8');
-  if (typeof content !== 'string') content = original;
-  if (source === destination) return { path: source, name: path.basename(source), content };
-  const updated = rebaseReferences(content, source, destination);
-  await fs.writeFile(destination, updated, { flag: 'wx' });
+  const markdown = markdownExtension.test(source);
+  const original = markdown ? await fs.readFile(source, 'utf8') : undefined;
+  if (markdown && typeof content !== 'string') content = original;
+  if (source === destination) return { path: source, name: path.basename(source), ...(markdown ? { content, savedContent: original } : {}) };
+  const savedContent = markdown ? rebaseReferences(original, source, destination) : undefined;
+  if (markdown) await fs.writeFile(destination, savedContent, { flag: 'wx', mode: (await fs.stat(source)).mode });
+  else await fs.copyFile(source, destination, require('fs').constants.COPYFILE_EXCL);
   try { await fs.unlink(source); } catch (error) { await fs.unlink(destination); throw error; }
-  return { path: destination, name: path.basename(destination), content: updated };
+  return { path: destination, name: path.basename(destination), ...(markdown ? { content: rebaseReferences(content, source, destination), savedContent } : {}) };
 }
 module.exports = { createEntry, moveHandout, rebaseReferences, checkedPath };

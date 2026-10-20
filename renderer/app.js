@@ -1249,7 +1249,19 @@ if (window.handoutDesktop) {
     });
   }
   previewPanel.addEventListener('scroll', () => document.querySelector('.media-resize-outline')?.remove());
+  preview.addEventListener('mouseover', event => {
+    const link = event.target.closest('a[href]');
+    if (link && /^https?:/i.test(link.href)) link.title = 'Ctrl-click (⌘-click on Mac) to open in your browser';
+  });
   preview.addEventListener("click", event => {
+    const link = event.target.closest('a[href]');
+    if (link) {
+      event.preventDefault();
+      if ((event.ctrlKey || event.metaKey) && /^https?:/i.test(link.href)) {
+        desktop.openWebLink(link.href).catch(error => { statusText.textContent = `Could not open link: ${error.message}`; });
+        return;
+      }
+    }
     const media = event.target.closest('img[data-image-index], .qr-code[data-qr-index]');
     if (media) {
       event.stopPropagation();
@@ -1291,12 +1303,40 @@ if (window.handoutDesktop) {
       tabBar.append(tab);
     }
   }
+  function askUnsaved(name) {
+    return new Promise(resolve => {
+      const dialog = document.createElement('dialog'); dialog.className = 'unsaved-dialog';
+      dialog.setAttribute('aria-label', 'Unsaved changes');
+      const title = document.createElement('h3'); title.textContent = `Save changes to ${name}?`;
+      const note = document.createElement('p'); note.textContent = 'Choose Save to keep your changes, Discard to continue without them, or Cancel to stay here.';
+      dialog.append(title, note);
+      for (const choice of ['Save', 'Discard', 'Cancel']) {
+        const button = document.createElement('button'); button.textContent = choice; button.onclick = () => { dialog.returnValue = choice.toLowerCase(); dialog.close(); }; dialog.append(button);
+      }
+      dialog.addEventListener('close', () => { const choice = dialog.returnValue || 'cancel'; dialog.remove(); resolve(choice); }, { once: true });
+      dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.returnValue = 'cancel'; dialog.close(); });
+      document.body.append(dialog); dialog.showModal(); dialog.querySelector('button:last-child').focus();
+    });
+  }
+  async function resolveUnsaved() {
+    if (!dirty || !selectedFile) return true;
+    const choice = await askUnsaved(selectedFile.name);
+    if (choice === 'cancel') return false;
+    if (choice === 'save') return saveCurrent();
+    try {
+      const content = selectedFile.untitled ? '' : await desktop.readFile(selectedFile.path);
+      const state = documents.get(selectedFile.path); if (state) { state.content = content; state.dirty = false; }
+      loadingDocument = true; setSourceContent(content); loadingDocument = false; markDirty(false); drawTabs(); render();
+      return true;
+    } catch (error) { statusText.textContent = `Could not discard changes: ${error.message}`; return false; }
+  }
   async function closeDocument(filePath) {
     const documentState = documents.get(filePath);
     if (!documentState) return;
     if (documentState.dirty) {
-      const choice = window.confirm(`Save changes to ${documentState.file.name} before closing?`);
-      if (choice) {
+      const choice = await askUnsaved(documentState.file.name);
+      if (choice === 'cancel') return;
+      if (choice === 'save') {
         if (documentState.file.untitled) {
           if (activePath !== filePath) activateDocument(filePath);
           if (!await saveCurrent()) return;
@@ -1764,8 +1804,40 @@ if (window.handoutDesktop) {
       }
     } catch (error) { statusText.textContent = `Could not ${action === 'extract' ? 'extract ZIP' : action === 'reveal' ? 'show item' : 'open item'}: ${error.message}`; }
   }
+  desktop.onDragError?.(message => { statusText.textContent = `Could not drag file: ${message}`; });
+  function installNativeDrag(element, node) {
+    element.draggable = true;
+    element.addEventListener('dragstart', event => {
+      event.preventDefault();
+      if (documents.get(node.path)?.dirty) statusText.textContent = 'Dragging the saved file; unsaved edits stay in the editor.';
+      desktop.startFileDrag(node.path);
+    });
+  }
+  async function showDocumentPreview(node) {
+    document.querySelector('.supporting-preview')?.remove();
+    const panel = document.createElement('aside'); panel.className = 'supporting-preview'; panel.setAttribute('aria-label', `Preview ${node.name}`);
+    const heading = document.createElement('strong'); heading.textContent = node.name;
+    const open = document.createElement('button'); open.textContent = 'Open in default app'; open.onclick = () => void browserAction('external', node);
+    const close = document.createElement('button'); close.textContent = 'Close preview'; close.onclick = () => { panel.remove(); };
+    const body = document.createElement('div'); body.className = 'supporting-preview-body'; body.textContent = 'Loading preview…';
+    panel.append(heading, open, close, body); document.body.append(panel);
+    panel.addEventListener('keydown', event => { if (event.key === 'Escape') { panel.remove(); } }); close.focus();
+    try {
+      const preview = await desktop.previewDocument(node.path); if (!panel.isConnected) return;
+      body.replaceChildren();
+      if (preview.note) { const note = document.createElement('p'); note.textContent = preview.note; body.append(note); }
+      if (preview.kind === 'pdf') { const frame = document.createElement('iframe'); frame.src = preview.url; frame.title = node.name; body.append(frame); }
+      if (preview.kind === 'text') { const pre = document.createElement('pre'); pre.textContent = preview.text; body.append(pre); }
+      for (const sheet of preview.sheets || []) {
+        const title = document.createElement('h3'); title.textContent = sheet.name; body.append(title);
+        const table = document.createElement('table');
+        for (const row of sheet.rows) { const tr = document.createElement('tr'); for (const value of row) { const td = document.createElement('td'); td.textContent = value; tr.append(td); } table.append(tr); }
+        body.append(table);
+      }
+    } catch (error) { body.textContent = `Could not preview: ${error.message}`; }
+  }
   function externalActions(node) {
-    return [[revealLabel, () => void browserAction('reveal', node)],
+    return [...(node.type !== 'folder' && !node.markdown ? [['Move to…', () => chooseMoveFolder(node)]] : []), ...(node.type !== 'folder' && !node.markdown && !node.image ? [['Preview', () => void showDocumentPreview(node)]] : []), [revealLabel, () => void browserAction('reveal', node)],
       [node.type === 'folder' ? (desktop.platform === 'darwin' ? 'Open in Finder' : 'Open in file manager') : 'Open in default app', () => void browserAction('external', node)],
       ...(/\.zip$/i.test(node.name || '') && node.type !== 'folder' ? [['Extract ZIP', () => void browserAction('extract', node)]] : [])];
   }
@@ -1864,12 +1936,12 @@ if (window.handoutDesktop) {
       const state = documents.get(node.path);
       const moved = await desktop.moveHandout(node.path, parent, state?.content);
       if (state) {
-        documents.delete(node.path); state.file = { ...state.file, path: moved.path, name: moved.name }; state.content = moved.content; state.dirty = false; documents.set(moved.path, state);
-        if (activePath === node.path) { activePath = moved.path; selectedFile = state.file; dirty = false; loadingDocument = true; setSourceContent(moved.content); loadingDocument = false; markDirty(false); }
+        documents.delete(node.path); state.file = { ...state.file, path: moved.path, name: moved.name }; state.content = moved.content; documents.set(moved.path, state);
+        if (activePath === node.path) { activePath = moved.path; selectedFile = state.file; dirty = state.dirty; loadingDocument = true; setSourceContent(moved.content); loadingDocument = false; markDirty(dirty); }
       }
       browserSelection = { ...node, path: moved.path }; expandedFolders.set(parent, true);
       await refreshFolderTreeAndAssets(); drawTabs(); syncTreeSelection(true); render(); statusText.textContent = `Moved ${moved.name}`;
-    } catch (error) { statusText.textContent = `Could not move handout: ${error.message}`; }
+    } catch (error) { statusText.textContent = `Could not move file: ${error.message}`; }
   }
   function chooseMoveFolder(node) {
     const overlay = document.createElement('div'); overlay.className = 'app-dialog-overlay';
@@ -1881,24 +1953,35 @@ if (window.handoutDesktop) {
     function walk(nodes, prefix) { for (const n of nodes) if (n.type === 'folder') { addOption(n.path, prefix + n.name); walk(n.children, prefix + n.name + '/'); } } walk(folder.tree, '');
     const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.onclick = () => overlay.remove();
     const submit = document.createElement('button'); submit.textContent = 'Move';
-    const note = document.createElement('p'); note.textContent = 'Moving saves the handout and updates its relative image and link paths.';
+    const note = document.createElement('p'); note.textContent = node.markdown ? 'Moving updates relative image and link paths. Unsaved edits stay unsaved.' : 'Move this file into the selected folder.';
     panel.append(heading, note, select, cancel, submit); overlay.append(panel); document.body.append(overlay);
     overlay.addEventListener('keydown', e => { if (e.key === 'Escape') overlay.remove(); });
     panel.onsubmit = e => { e.preventDefault(); overlay.remove(); void moveTreeFile(node, select.value); }; select.focus();
   }
   function installFolderDrop(element, destination) {
-    element.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('application/x-handout-path')) { e.preventDefault(); e.stopPropagation(); element.classList.add('drop-target'); e.dataTransfer.dropEffect = 'move'; } });
+    const isFileDrag = event => [...(event.dataTransfer?.types || [])].some(type => type === 'Files' || type === 'application/x-handout-path');
+    element.addEventListener('dragover', event => {
+      if (!isFileDrag(event)) return;
+      event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; element.classList.add('drop-target');
+    });
     element.addEventListener('dragleave', () => element.classList.remove('drop-target'));
-    element.addEventListener('drop', e => {
-      const value = e.dataTransfer.getData('application/x-handout-path'); if (!value) return;
-      e.preventDefault(); e.stopPropagation(); element.classList.remove('drop-target');
-      const find = nodes => { for (const n of nodes) { if (n.path === value && n.markdown) return n; if (n.children) { const found = find(n.children); if (found) return found; } } };
-      const node = find(folder.tree); if (node) void moveTreeFile(node, destination());
+    element.addEventListener('drop', async event => {
+      if (!isFileDrag(event)) return;
+      event.preventDefault(); event.stopPropagation(); element.classList.remove('drop-target');
+      const paths = [...(event.dataTransfer.files || [])].map(file => desktop.droppedFilePath(file));
+      const legacyPath = event.dataTransfer.getData('application/x-handout-path'); if (legacyPath) paths.push(legacyPath);
+      const find = (nodes, path) => { for (const node of nodes) { if (node.type === 'file' && node.path === path) return node; if (node.children) { const match = find(node.children, path); if (match) return match; } } };
+      for (const path of new Set(paths)) {
+        const node = find(folder.tree, path);
+        if (node) await moveTreeFile(node, destination());
+        else statusText.textContent = 'Only files in the open folder can be moved here.';
+      }
     });
   }
+  installFolderDrop(folderName, () => folder?.path);
+  installFolderDrop(tree, () => folder?.path);
   folderName.title = 'Right-click for folder actions';
   folderName.addEventListener('contextmenu', event => { if (folder) { event.preventDefault(); showCreateMenu(folder, event); } });
-  installFolderDrop(folderName, () => folder?.path);
   tree.addEventListener('contextmenu', event => { if (event.target === tree || event.target.classList.contains('empty-tree')) { event.preventDefault(); if (folder) showCreateMenu(folder, event); } });
   function addTree(nodes, parent) {
     const list = document.createElement('ul');
@@ -1917,18 +2000,19 @@ if (window.handoutDesktop) {
         addTree(node.children, details); item.append(details);
       } else if (node.markdown) {
         const button = document.createElement('button'); button.className = 'file-entry'; button.textContent = node.name; button.title = node.path; button.dataset.filePath = node.path;
-        button.draggable = true;
-        button.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-handout-path', node.path); e.dataTransfer.effectAllowed = 'move'; });
+        installNativeDrag(button, node);
         button.addEventListener('click', () => { browserSelection = node; void openFile(node); }); item.append(button);
         button.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showFileContextMenu(node, event); });
       } else if (node.image) {
         const asset = document.createElement('span'); asset.className = 'file-entry image-entry'; asset.textContent = node.name; asset.title = node.path; asset.tabIndex = 0;
+        installNativeDrag(asset, node);
         asset.addEventListener('click', () => { browserSelection = node; });
         asset.addEventListener('contextmenu', event => { event.preventDefault(); showImageContextMenu(node, event); });
         asset.addEventListener('dblclick', () => showImagePreview(node)); asset.addEventListener('keydown', event => { if (event.key === 'Enter') showImagePreview(node); }); item.append(asset);
       } else {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry external-entry'; button.textContent = node.name; button.title = `${node.path} · Open in default app`;
-        button.addEventListener('click', () => { browserSelection = node; });
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry external-entry'; button.textContent = node.name; button.title = `${node.path} · Click to preview; drag to another app`;
+        installNativeDrag(button, node);
+        button.addEventListener('click', () => { browserSelection = node; void showDocumentPreview(node); });
         button.addEventListener('dblclick', () => void browserAction('external', node));
         button.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void browserAction('external', node); } });
         button.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showBrowserMenu(externalActions(node), event); });
@@ -1946,8 +2030,7 @@ if (window.handoutDesktop) {
   async function openFile(node, button) {
     if (selectedFile && node.path === selectedFile.path) return;
     discardBlankUntitledHandout();
-    if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
-    if (dirty && !await saveCurrent()) return;
+    if (!await resolveUnsaved()) return;
     try {
       const content = await desktop.readFile(node.path); addDocument(node, content, folder ? folder.assets : []); clearActive(); syncTreeSelection(true);
     } catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
@@ -1955,18 +2038,17 @@ if (window.handoutDesktop) {
   async function loadStandalone(file) {
     if (!file) return;
     discardBlankUntitledHandout();
-    if (dirty && !window.confirm("Save changes to the current handout before opening another file?")) return;
-    if (dirty && !await saveCurrent()) return;
+    if (!await resolveUnsaved()) return;
     const documentFile = { type: "file", name: file.name, path: file.path, markdown: true };
     addDocument(documentFile, file.content, file.assets || []);
     const refreshed = await desktop.refreshFolder();
     if (refreshed) { if (folder?.path !== refreshed.path) { saveFolderExpansion(); restoreFolderExpansion(refreshed.path); browserSelection = null; } folder = refreshed; folderName.textContent = refreshed.name; browserSearch.value = ''; drawTree(); syncTreeSelection(true); }
   }
   async function chooseFile() {
-    try { await loadStandalone(await desktop.openFile()); }
+    try { if (await resolveUnsaved()) await loadStandalone(await desktop.openFile()); }
     catch (error) { statusText.textContent = `Could not open file: ${error.message}`; }
   }
-  async function openRecentPath(filePath) { try { await loadStandalone(await desktop.openRecent(filePath)); } catch (error) { statusText.textContent = `Could not open recent file: ${error.message}`; } }
+  async function openRecentPath(filePath) { try { if (await resolveUnsaved()) await loadStandalone(await desktop.openRecent(filePath)); } catch (error) { statusText.textContent = `Could not open recent file: ${error.message}`; } }
   async function saveCurrent() {
     if (!selectedFile) return false;
     if (selectedFile.untitled) return saveUntitledHandout();
@@ -2024,8 +2106,18 @@ if (window.handoutDesktop) {
     statusText.textContent = `${action} image as ${imported.relative}`;
     return imported;
   }
+  let pasteAsPlainText = false;
+  source.addEventListener('keydown', event => { pasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v'; });
+  source.addEventListener('blur', () => { pasteAsPlainText = false; });
   source.addEventListener('paste', event => {
+    if (pasteAsPlainText) { pasteAsPlainText = false; return; }
     const imageItem = [...(event.clipboardData?.items || [])].find(item => item.kind === 'file' && item.type.startsWith('image/'));
+    const html = event.clipboardData?.getData('text/html');
+    const text = event.clipboardData?.getData('text/plain') || '';
+    if (html || (!imageItem && text.includes('\t'))) {
+      const converted = html ? window.HandoutClipboard.htmlToMarkdown(html) : window.HandoutClipboard.table(window.HandoutClipboard.delimited(text));
+      if (converted) { event.preventDefault(); replaceEditorSelection(converted); statusText.textContent = 'Pasted as editable Markdown'; return; }
+    }
     if (!imageItem) return;
     event.preventDefault();
     const file = imageItem.getAsFile();
@@ -2077,8 +2169,12 @@ if (window.handoutDesktop) {
   });
   window.addEventListener('dragend', () => source.classList.remove('image-drag-target'));
   async function chooseFolder(recentPath) {
-    if (dirty && !window.confirm("Save changes to the current handout before changing folders?")) return false;
-    if (dirty && !await saveCurrent()) return false;
+    saveActiveState();
+    for (const state of [...documents.values()]) {
+      if (!state.dirty) continue;
+      if (activePath !== state.file.path) activateDocument(state.file.path);
+      if (!await resolveUnsaved()) return false;
+    }
     let next;
     try { next = recentPath ? await desktop.openRecentFolder(recentPath) : await desktop.openFolder(); }
     catch (error) { statusText.textContent = `Could not open folder: ${error.message}`; return false; }
@@ -2248,7 +2344,29 @@ if (window.handoutDesktop) {
     if (command === 'find') return showFind();
     if (command === 'insert-snippet' && snippets[payload]) return insertSnippet(snippets[payload]);
     if (command === 'open-snippet-dialog' && ['question', 'rubric', 'columns', 'table'].includes(payload)) return openSnippetDialog(payload);
-    if (command === 'open-handout-guide') return openRecentPath(payload);
+    if (command === 'open-handout-guide') {
+      try {
+        const name = payload.split(/[\\/]/).pop();
+        const text = await desktop.readGuide(name);
+        document.querySelector('.supporting-preview')?.remove();
+        const panel = document.createElement('aside'); panel.className = 'supporting-preview'; panel.setAttribute('aria-label', 'Syntax guide');
+        const title = document.createElement('strong'); title.textContent = name === 'AI_HANDOUT_GUIDE.md' ? 'AI Handout Syntax Guide' : 'Handout Markdown Guide';
+        const copy = document.createElement('button'); copy.textContent = 'Copy entire guide';
+        const save = document.createElement('button'); save.textContent = 'Save as…';
+        save.onclick = async () => {
+          save.disabled = true;
+          try { const savedPath = await desktop.saveGuide(name); if (savedPath) statusText.textContent = `Guide saved to ${savedPath}`; }
+          catch (error) { statusText.textContent = `Could not save guide: ${error.message}`; }
+          finally { save.disabled = false; }
+        };
+        const close = document.createElement('button'); close.textContent = 'Close guide'; close.onclick = () => panel.remove();
+        const area = document.createElement('textarea'); area.className = 'supporting-preview-body'; area.readOnly = true; area.value = text; area.setAttribute('aria-label', 'Guide text');
+        copy.onclick = async () => { try { await navigator.clipboard.writeText(text); copy.textContent = 'Copied'; } catch { area.focus(); area.select(); statusText.textContent = 'Press Ctrl/Cmd+C to copy the guide.'; } };
+        panel.append(title, copy, save, close, area); document.body.append(panel); close.focus();
+        panel.addEventListener('keydown', event => { if (event.key === 'Escape') panel.remove(); });
+      } catch (error) { statusText.textContent = `Could not open guide: ${error.message}`; }
+      return;
+    }
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, safeStorage, nativeImage } = require('electron');
 const fs = require('fs/promises'); const path = require('path'); const { pathToFileURL } = require('url');
 const { importImageAsset, renameImageAsset } = require('./assetImport');
 const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
@@ -97,7 +97,7 @@ async function refreshApplicationMenu() {
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
     ] },
     { role: 'windowMenu' },
-    { role: 'help', submenu: [{ label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
+    { role: 'help', submenu: [{ label: 'AI Handout Syntax Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'AI_HANDOUT_GUIDE.md')) }, { label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
   ]));
 }
 async function addRecent(filePath) { const settings = await readSettings(); const recentFiles = [filePath, ...(settings.recentFiles || []).filter(item => item !== filePath)].slice(0, recentLimit); await saveSettings({...settings, recentFiles}); await refreshApplicationMenu(); return recentFiles; }
@@ -170,6 +170,37 @@ ipcMain.handle('browser:open-external', async (_event, target) => {
   const error = await shell.openPath(checked);
   if (error) throw Error(error);
   return true;
+});
+ipcMain.handle('links:open', (_event, url) => {
+  if (typeof url !== 'string' || !/^https?:$/i.test(new URL(url).protocol)) throw Error('Only web links can be opened.');
+  return shell.openExternal(url);
+});
+ipcMain.handle('help:guide', (_event, name) => {
+  if (!['AI_HANDOUT_GUIDE.md', 'HANDOUT_MARKDOWN.md'].includes(name)) throw Error('Unknown guide.');
+  return fs.readFile(path.join(__dirname, '..', 'demo', name), 'utf8');
+});
+ipcMain.handle('help:save-guide', async (_event, name) => {
+  if (!['AI_HANDOUT_GUIDE.md', 'HANDOUT_MARKDOWN.md'].includes(name)) throw Error('Unknown guide.');
+  const sourcePath = path.join(__dirname, '..', 'demo', name);
+  const content = await fs.readFile(sourcePath, 'utf8');
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save syntax guide as…', defaultPath: name,
+    filters: [{ name: 'Markdown', extensions: ['md'] }]
+  });
+  if (result.canceled || !result.filePath) return null;
+  if (path.resolve(result.filePath) === path.resolve(sourcePath)) throw Error('Choose a different location to save a copy of the bundled guide.');
+  await fs.writeFile(result.filePath, content, 'utf8');
+  return result.filePath;
+});
+ipcMain.handle('browser:preview', (_event, target) => require('./supportingDocuments').previewDocument(currentRoot, target));
+ipcMain.on('browser:drag', async (event, target) => {
+  try {
+    if (event.sender !== mainWindow.webContents) return;
+    const file = await checkedPath(currentRoot, target);
+    if (!(await fs.stat(file)).isFile()) throw Error('Choose a file to drag.');
+    const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'markdown-handout-maker-icon.png')).resize({ width: 48, height: 48 });
+    event.sender.startDrag({ file, icon });
+  } catch (error) { event.sender.send('browser:drag-error', error.message); }
 });
 ipcMain.handle('browser:extract-zip', (_event, target) => extractArchive(currentRoot, target));
 ipcMain.handle('browser:create', (_event, parent, name, type) => {
@@ -322,4 +353,3 @@ ipcMain.handle('google:pull', async (_event, filePath) => {
   await saveSettings(next);
   return { content, url: drive.docUrl(link.id), name: link.name, backupPath };
 });
-app.on('before-quit', () => { modelDownloadController?.abort(); aiService.dispose(); });
