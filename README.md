@@ -145,3 +145,17 @@ removed on failure. Extraction is limited to 512 MB and 10,000 entries.
 The optional `node tests/test-file-browser-external.cjs` browser check uses the
 same Playwright setup as the preview navigation regression check. Native Finder
 and default-app launches still need a check on the target operating system.
+
+### Automatic file browser refresh
+
+The open folder is checked every two seconds while the app is visible, and again
+when you return to the app. Added, removed, and renamed files update automatically;
+open handout text and unsaved edits are preserved. Refresh waits while you type
+a new file or folder name.
+
+Expanded subfolders are remembered separately for each folder across sessions.
+New folders start collapsed. Search expansion is temporary; revealing an active
+handout can still expand its parents.
+
+Run `node tests/test-file-browser-refresh.cjs` with the optional Playwright setup
+described above to check automatic refresh and expansion persistence.

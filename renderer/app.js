@@ -1369,6 +1369,15 @@ if (window.handoutDesktop) {
     documents.set(saved.path, documentState);
     activePath = saved.path; selectedFile = documentState.file; dirty = false;
     setAssets(documentState.assets); markDirty(false); drawTabs();
+    // Saving the first handout can establish (or change) the browsed folder.
+    try {
+      const refreshed = await desktop.refreshFolder();
+      if (refreshed) {
+        if (folder?.path !== refreshed.path) { saveFolderExpansion(); restoreFolderExpansion(refreshed.path); browserSelection = null; }
+        folder = refreshed; folderName.textContent = refreshed.name; browserSearch.value = '';
+        documentState.assets = refreshed.assets; setAssets(refreshed.assets); drawTree(); syncTreeSelection(true);
+      }
+    } catch { /* The file is saved even if a temporary directory-read error occurs. */ }
     statusText.textContent = saved.name + ' saved';
     return true;
   }
@@ -1586,16 +1595,40 @@ if (window.handoutDesktop) {
     overlay.querySelector('.image-preview-rename').addEventListener('click', () => { close(); renameTreeImage(node); });
     overlay.querySelector('.app-dialog-close').focus();
   }
-  async function refreshFolderTreeAndAssets() {
-    if (!folder) return;
+  let automaticRefreshPending = false;
+  async function refreshFolderTreeAndAssets(automatic = false) {
+    const expected = folder;
+    if (!expected || (automatic && tree.querySelector('.browser-create'))) return;
     const refreshed = await desktop.refreshFolder();
-    if (!refreshed) return;
+    if (!refreshed || folder !== expected || (refreshed.path && refreshed.path !== expected.path)) return;
+    if (automatic && tree.querySelector('.browser-create')) return;
+    const assetsChanged = JSON.stringify(expected.assets) !== JSON.stringify(refreshed.assets);
+    if (automatic && !assetsChanged && JSON.stringify(expected.tree) === JSON.stringify(refreshed.tree)) return;
+    const panel = tree.closest('.file-panel');
+    const scrollTop = panel.scrollTop;
     folder.tree = refreshed.tree;
     folder.assets = refreshed.assets;
     for (const documentState of documents.values()) documentState.assets = refreshed.assets;
     setAssets(refreshed.assets);
     drawTree();
+    panel.scrollTop = scrollTop;
+    if (automatic && assetsChanged) {
+      const status = statusText.textContent;
+      render();
+      statusText.textContent = status;
+    }
   }
+  async function checkFolderChanges() {
+    if (!folder || automaticRefreshPending || document.hidden) return;
+    automaticRefreshPending = true;
+    try { await refreshFolderTreeAndAssets(true); }
+    catch { /* A folder may be temporarily unavailable or changing; retry next time. */ }
+    finally { automaticRefreshPending = false; }
+  }
+  const folderRefreshTimer = window.setInterval(checkFolderChanges, 2000);
+  window.addEventListener('focus', checkFolderChanges);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkFolderChanges(); });
+  window.addEventListener('unload', () => window.clearInterval(folderRefreshTimer));
   function replaceCurrentImageReferences(oldReference, newReference) {
     const decodePath = value => { try { return decodeURIComponent(value); } catch { return value; } };
     const normalizePath = value => decodePath(value).replace(/\\/g, '/').replace(/^\.\/+/, '');
@@ -1756,6 +1789,21 @@ if (window.handoutDesktop) {
   }
   let browserSelection = null;
   const expandedFolders = new Map();
+  const expansionStorageKey = root => `handout-folder-expansion-v1:${root}`;
+  function saveFolderExpansion() {
+    if (!folder || browserSearch.value) return;
+    for (const details of tree.querySelectorAll('details[data-folder-path]')) expandedFolders.set(details.dataset.folderPath, details.open);
+    try { localStorage.setItem(expansionStorageKey(folder.path), JSON.stringify([...expandedFolders].filter(([, open]) => open).map(([path]) => path))); }
+    catch { /* File browsing remains usable if local storage is unavailable. */ }
+  }
+  function restoreFolderExpansion(root) {
+    expandedFolders.clear();
+    try {
+      const paths = JSON.parse(localStorage.getItem(expansionStorageKey(root)) || '[]');
+      if (Array.isArray(paths)) for (const path of paths) if (typeof path === 'string') expandedFolders.set(path, true);
+    } catch { /* New folders start collapsed, including when saved data is invalid. */ }
+  }
+  window.addEventListener('beforeunload', saveFolderExpansion);
   const browserTools = document.createElement('div');
   browserTools.className = 'file-browser-tools';
   browserTools.innerHTML = '<input type="search" aria-label="Search filenames" placeholder="Search filenames…"><button type="button" aria-label="Create file or folder" title="Create in selected folder">+</button>';
@@ -1861,7 +1909,7 @@ if (window.handoutDesktop) {
       const item = document.createElement('li');
       if (node.type === 'folder') {
         const details = document.createElement('details'); details.dataset.folderPath = node.path; details.open = query ? true : expandedFolders.get(node.path) ?? false;
-        details.addEventListener('toggle', () => { if (!browserSearch.value) expandedFolders.set(node.path, details.open); });
+        details.addEventListener('toggle', () => { if (details.isConnected && !browserSearch.value) { expandedFolders.set(node.path, details.open); saveFolderExpansion(); } });
         const summary = document.createElement('summary'); summary.textContent = node.name; summary.title = node.path; details.append(summary);
         summary.addEventListener('click', () => { browserSelection = node; });
         summary.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showCreateMenu(node, event); });
@@ -1912,7 +1960,7 @@ if (window.handoutDesktop) {
     const documentFile = { type: "file", name: file.name, path: file.path, markdown: true };
     addDocument(documentFile, file.content, file.assets || []);
     const refreshed = await desktop.refreshFolder();
-    if (refreshed) { folder = refreshed; folderName.textContent = refreshed.name; browserSearch.value = ''; drawTree(); syncTreeSelection(true); }
+    if (refreshed) { if (folder?.path !== refreshed.path) { saveFolderExpansion(); restoreFolderExpansion(refreshed.path); browserSelection = null; } folder = refreshed; folderName.textContent = refreshed.name; browserSearch.value = ''; drawTree(); syncTreeSelection(true); }
   }
   async function chooseFile() {
     try { await loadStandalone(await desktop.openFile()); }
@@ -2035,7 +2083,8 @@ if (window.handoutDesktop) {
     try { next = recentPath ? await desktop.openRecentFolder(recentPath) : await desktop.openFolder(); }
     catch (error) { statusText.textContent = `Could not open folder: ${error.message}`; return false; }
     if (!next) return false;
-    browserSelection = null; browserSearch.value = ''; expandedFolders.clear();
+    saveFolderExpansion();
+    browserSelection = null; browserSearch.value = ''; restoreFolderExpansion(next.path);
     saveActiveState(); folder = next; selectedFile = null; activePath = null; documents.clear(); source.value = ""; source.disabled = true; folderName.textContent = next.name; setAssets(next.assets); drawTabs(); drawTree(); markDirty(false); statusText.textContent = "No file open"; render();
     makeUntitledHandout();
     return true;
