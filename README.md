@@ -144,3 +144,24 @@ With Playwright and its Chromium browser installed, run
 set `CHROME_PATH` to its executable. `PLAYWRIGHT_MODULE` optionally selects an
 existing Playwright package. This check uses a mocked desktop bridge; native
 macOS focus and selection behavior should also be checked in the packaged app.
+
+### Other files and ZIP archives
+
+The file browser shows all non-hidden file types. Double-click a file such as a
+CSV, PDF, or spreadsheet (or select it and press Enter) to open it in the system's
+default app. CSV files open in Excel if Excel is your Mac's default CSV app.
+Markdown and images keep their existing in-app editing and preview actions.
+
+Right-click any file or folder for **Show in Finder** and **Open in default app**
+(or **Open in Finder** for folders). Right-click the folder name above the tree
+for the same folder actions. On Linux, these actions use the default file manager.
+
+Right-click a ZIP and choose **Extract ZIP** to extract beside the archive into
+a fresh folder. If that name exists, a numbered folder is created. The archive
+stays intact and the extracted folder appears in the tree automatically. Damaged,
+encrypted, unsafe-path, and symlink archives are rejected; partial output is
+removed on failure. Extraction is limited to 512 MB and 10,000 entries.
+
+The optional `node tests/test-file-browser-external.cjs` browser check uses the
+same Playwright setup as the preview navigation regression check. Native Finder
+and default-app launches still need a check on the target operating system.

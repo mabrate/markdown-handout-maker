@@ -8,6 +8,7 @@ const subscribe = channel => callback => {
 };
 
 contextBridge.exposeInMainWorld('handoutDesktop', {
+  platform: process.platform, revealItem: invoke('browser:reveal'), openExternalFile: invoke('browser:open-external'), extractZip: invoke('browser:extract-zip'),
   createEntry: invoke('browser:create'), moveHandout: invoke('browser:move'),
   openFolder: invoke('folders:open'), openRecentFolder: invoke('folders:open-recent'), refreshFolder: invoke('folders:refresh'),
   openFile: invoke('files:open-dialog'), recentFiles: invoke('files:recent'), openRecent: invoke('files:open-recent'),

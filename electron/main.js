@@ -6,7 +6,8 @@ const { DEFAULT_CONTEXT_SIZE, DEFAULT_GLOBAL_AI_PROMPT, MAX_CONTEXT_SIZE, MAX_GE
 const { importImageAsset, renameImageAsset } = require('./assetImport');
 const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
 const drive = require('./googleDrive');
-const { createEntry, moveHandout } = require('./fileBrowser');
+const { createEntry, moveHandout, checkedPath } = require('./fileBrowser');
+const { extractArchive } = require('./zipFiles');
 let mainWindow; let currentRoot = null;
 let googleSession = null;
 let modelDownloadController = null;
@@ -169,6 +170,18 @@ ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
   }
   return renamed;
 });
+ipcMain.handle('browser:reveal', async (_event, target) => {
+  const checked = await checkedPath(currentRoot, target);
+  shell.showItemInFolder(checked);
+  return true;
+});
+ipcMain.handle('browser:open-external', async (_event, target) => {
+  const checked = await checkedPath(currentRoot, target);
+  const error = await shell.openPath(checked);
+  if (error) throw Error(error);
+  return true;
+});
+ipcMain.handle('browser:extract-zip', (_event, target) => extractArchive(currentRoot, target));
 ipcMain.handle('browser:create', (_event, parent, name, type) => {
   if (!['file', 'folder'].includes(type)) throw Error('Invalid item type.');
   return createEntry(currentRoot, parent, name, type);

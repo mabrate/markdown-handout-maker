@@ -1994,40 +1994,49 @@ if (window.handoutDesktop) {
       statusText.textContent = `Could not delete handout: ${error.message}`;
     }
   }
+  const revealLabel = desktop.platform === 'darwin' ? 'Show in Finder' : 'Show in file manager';
+  async function browserAction(action, node) {
+    try {
+      if (action === 'reveal') await desktop.revealItem(node.path);
+      else if (action === 'external') {
+        await desktop.openExternalFile(node.path);
+        statusText.textContent = `Opened ${node.name} in its default app`;
+      } else if (action === 'extract') {
+        statusText.textContent = `Extracting ${node.name}…`;
+        const extracted = await desktop.extractZip(node.path);
+        browserSearch.value = '';
+        expandedFolders.set(extracted.path, true);
+        browserSelection = { ...extracted, type: 'folder' };
+        await refreshFolderTreeAndAssets();
+        let parent = parentOf(extracted.path);
+        while (parent && parent !== folder.path) { expandedFolders.set(parent, true); parent = parentOf(parent); }
+        drawTree();
+        statusText.textContent = `Extracted to ${extracted.name}`;
+      }
+    } catch (error) { statusText.textContent = `Could not ${action === 'extract' ? 'extract ZIP' : action === 'reveal' ? 'show item' : 'open item'}: ${error.message}`; }
+  }
+  function externalActions(node) {
+    return [[revealLabel, () => void browserAction('reveal', node)],
+      [node.type === 'folder' ? (desktop.platform === 'darwin' ? 'Open in Finder' : 'Open in file manager') : 'Open in default app', () => void browserAction('external', node)],
+      ...(/\.zip$/i.test(node.name || '') && node.type !== 'folder' ? [['Extract ZIP', () => void browserAction('extract', node)]] : [])];
+  }
   function showFileContextMenu(node, event) {
     showBrowserMenu([
       ['New handout', () => createInline(parentOf(node.path), 'file')],
       ['New folder', () => createInline(parentOf(node.path), 'folder')],
       ['Move to…', () => chooseMoveFolder(node)],
       ['Rename…', () => renameTreeFile(node)],
-      ['Delete…', () => void deleteTreeFile(node)]
+      ['Delete…', () => void deleteTreeFile(node)],
+      ...externalActions(node)
     ], event);
   }
   function showImageContextMenu(node, event) {
-    document.querySelector('.image-context-menu')?.remove();
-    const menu = document.createElement('div');
-    menu.className = 'image-context-menu';
-    menu.setAttribute('role', 'menu');
-    menu.innerHTML = '<button type="button" data-action="insert">Insert into Markdown</button><button type="button" data-action="preview">Preview</button><button type="button" data-action="rename">Rename…</button>';
-    document.body.append(menu);
-    menu.style.left = `${Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8)}px`;
-    menu.style.top = `${Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8)}px`;
-    const close = () => {
-      window.removeEventListener('pointerdown', closeFromOutside);
-      menu.remove();
-    };
-    const closeFromOutside = pointerEvent => {
-      if (!menu.contains(pointerEvent.target)) close();
-    };
-    menu.addEventListener('click', clickEvent => {
-      const action = clickEvent.target.dataset.action;
-      close();
-      if (action === 'insert') insertTreeImage(node).catch(error => { statusText.textContent = `Could not insert image: ${error.message}`; });
-      else if (action === 'preview') showImagePreview(node);
-      else if (action === 'rename') renameTreeImage(node);
-    });
-    window.addEventListener('pointerdown', closeFromOutside);
-    menu.querySelector('button').focus();
+    showBrowserMenu([
+      ['Insert into Markdown', () => insertTreeImage(node).catch(error => { statusText.textContent = error.message; })],
+      ['Preview', () => showImagePreview(node)],
+      ['Rename…', () => renameTreeImage(node)],
+      ...externalActions(node)
+    ], event);
   }
   let browserSelection = null;
   const expandedFolders = new Map();
@@ -2057,7 +2066,7 @@ if (window.handoutDesktop) {
     });
   }
   function showCreateMenu(node, event) {
-    showBrowserMenu([['New handout', () => createInline(node.path, 'file')], ['New folder', () => createInline(node.path, 'folder')]], event);
+    showBrowserMenu([['New handout', () => createInline(node.path, 'file')], ['New folder', () => createInline(node.path, 'folder')], ...externalActions({ ...node, type: 'folder' })], event);
   }
   function showBrowserMenu(actions, event) {
     document.querySelector('.image-context-menu')?.remove();
@@ -2123,12 +2132,14 @@ if (window.handoutDesktop) {
       const node = find(folder.tree); if (node) void moveTreeFile(node, destination());
     });
   }
+  folderName.title = 'Right-click for folder actions';
+  folderName.addEventListener('contextmenu', event => { if (folder) { event.preventDefault(); showCreateMenu(folder, event); } });
   installFolderDrop(folderName, () => folder?.path);
   tree.addEventListener('contextmenu', event => { if (event.target === tree || event.target.classList.contains('empty-tree')) { event.preventDefault(); if (folder) showCreateMenu(folder, event); } });
   function addTree(nodes, parent) {
     const list = document.createElement('ul');
     const query = browserSearch.value.trim().toLowerCase();
-    const matches = node => node.type === 'folder' ? node.children.some(matches) : (node.markdown || node.image) && node.name.toLowerCase().includes(query);
+    const matches = node => node.type === 'folder' ? node.children.some(matches) : node.name.toLowerCase().includes(query);
     for (const node of nodes) {
       if (query && !matches(node)) continue;
       const item = document.createElement('li');
@@ -2151,6 +2162,13 @@ if (window.handoutDesktop) {
         asset.addEventListener('click', () => { browserSelection = node; });
         asset.addEventListener('contextmenu', event => { event.preventDefault(); showImageContextMenu(node, event); });
         asset.addEventListener('dblclick', () => showImagePreview(node)); asset.addEventListener('keydown', event => { if (event.key === 'Enter') showImagePreview(node); }); item.append(asset);
+      } else {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry external-entry'; button.textContent = node.name; button.title = `${node.path} · Open in default app`;
+        button.addEventListener('click', () => { browserSelection = node; });
+        button.addEventListener('dblclick', () => void browserAction('external', node));
+        button.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void browserAction('external', node); } });
+        button.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showBrowserMenu(externalActions(node), event); });
+        item.append(button);
       }
       if (item.childNodes.length) list.append(item);
     }
@@ -2158,7 +2176,7 @@ if (window.handoutDesktop) {
   }
   function drawTree() {
     tree.innerHTML = ''; if (folder) addTree(folder.tree, tree);
-    if (!tree.childNodes.length) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = browserSearch.value ? 'No matching files.' : 'No Markdown or image files in this folder.'; tree.append(empty); }
+    if (!tree.childNodes.length) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = browserSearch.value ? 'No matching files.' : 'No files in this folder.'; tree.append(empty); }
     syncTreeSelection();
   }
   async function openFile(node, button) {
