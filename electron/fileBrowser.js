@@ -2,6 +2,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 const { safeDocumentName, markdownExtension } = require('./documentFiles');
+const handoutStarter = require('../renderer/handout-starter');
 async function checkedPath(root, target) {
   if (typeof root !== 'string' || typeof target !== 'string') throw Error('Choose a folder first.');
   const realRoot = await fs.realpath(root);
@@ -21,8 +22,8 @@ async function createEntry(root, parent, name, type) {
   name = type === 'folder' ? folderName(name) : safeDocumentName('', folderName(name));
   const destination = path.join(parent, name);
   if (type === 'folder') await fs.mkdir(destination);
-  else await fs.writeFile(destination, '', { flag: 'wx' });
-  return { path: destination, name, type: type === 'folder' ? 'folder' : 'file', markdown: type !== 'folder' };
+  else await fs.writeFile(destination, handoutStarter, { flag: 'wx' });
+  return { path: destination, name, type: type === 'folder' ? 'folder' : 'file', markdown: type !== 'folder', ...(type !== 'folder' ? { content: handoutStarter } : {}) };
 }
 function rebaseReferences(content, oldPath, newPath) {
   function rebase(url) {

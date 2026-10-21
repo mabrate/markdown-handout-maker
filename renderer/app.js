@@ -15,6 +15,30 @@ let questionCounter = 1;
 let activeHandoutTitle = "handout";
 let totalPoints = 0;
 
+let currentDocumentPath = null;
+let lastDocumentMode;
+const slideStudio = window.SlideStudio.mount({ source, preview, previewPanel, pageCount,
+  edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout,
+  guide: () => document.dispatchEvent(new Event('slides:guide'))
+});
+function isSlideDocument() { return window.HandoutSlides.metadata(source.value).enabled; }
+function pdfLayout() { return isSlideDocument() ? (window.HandoutSlides.parse(source.value).settings.aspect === '4:3' ? 'slides-standard' : 'slides-wide') : layoutSelect.value; }
+function slideImageUrl(src) {
+  if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) return src;
+  let decoded; try { decoded = decodeURIComponent(src); } catch { decoded = src; }
+  return assetMap.get(src) || assetMap.get(decoded) || '';
+}
+async function exportSlidesPowerPoint() {
+  if (!isSlideDocument()) { statusText.textContent = 'Open a slide deck to export PowerPoint.'; return; }
+  render(); const content = source.value, documentPath = currentDocumentPath;
+  return slideStudio.withAllSlides(async () => {
+    try {
+      const saved = await window.handoutDesktop.exportPowerPoint(content, documentPath);
+      if (saved) statusText.textContent = `PowerPoint saved to ${saved}`;
+    } catch (error) { statusText.textContent = `Could not export PowerPoint: ${error.message}`; }
+  });
+}
+
 const snippets = {
   boilerplate: `---
 layout: letter
@@ -86,6 +110,7 @@ function makeColumns(format, widths, cards = false) {
 }
 
 function replaceEditorSelection(text, caretOffset = text.length) {
+  source.dispatchEvent(new Event('editor:before-edit'));
   const start = source.selectionStart;
   const end = source.selectionEnd;
   source.setRangeText(text, start, end, "end");
@@ -168,6 +193,7 @@ function openSnippetDialog(kind) {
   overlay.innerHTML = `<form class="app-dialog snippet-dialog" role="dialog" aria-modal="true" aria-labelledby="snippet-dialog-title"><header>${shells[kind].match(/<h2[\s\S]*?<\/h2>/)?.[0] || ""}<button type="button" class="app-dialog-close" aria-label="Close">×</button></header>${shells[kind].replace(/<h2[\s\S]*?<\/h2>/, "")}<footer><button type="button" class="button secondary snippet-cancel">Cancel</button><button type="submit" class="button primary">${actionLabels[kind]}</button></footer></form>`;
   document.body.append(overlay);
   const form = overlay.querySelector("form");
+  if (isSlideDocument() && kind === 'table') { form.elements.format.value = 'markdown'; form.elements.format.closest('label').hidden = true; }
   form.addEventListener("submit", submit);
   overlay.querySelector(".app-dialog-close").addEventListener("click", close);
   overlay.querySelector(".snippet-cancel").addEventListener("click", close);
@@ -598,7 +624,7 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
         const end = expandedMap[Math.max(token.map[0], token.map[1] - 1)];
         if (start && end) {
           if (token.type === 'html_block') {
-            token.content = token.content.replace(/<(div|section|table|tr|li|ul|ol|p|h[1-6]|blockquote|pre)(?=[\s>])([^>]*)>/gi, (tag, name, attributes, offset) => {
+            token.content = token.content.replace(/<(div|section|table|tr|li|ul|ol|p|h[1-6]|blockquote|pre|img)(?=[\s>])([^>]*)>/gi, (tag, name, attributes, offset) => {
               const line = token.map[0] + (token.content.slice(0, offset).match(/\n/g) || []).length;
               const location = expandedMap[line] || start;
               return `<${name}${attributes} data-source-start="${location[0]}" data-source-end="${location[1]}">`;
@@ -895,6 +921,13 @@ function paginate(blocks) {
 }
 
 function render() {
+  // An immediate render supersedes any pending input render. Avoid replacing
+  // the preview again while the user is selecting or dragging an element.
+  clearTimeout(renderTimer);
+  const mode = isSlideDocument() ? 'slides' : 'handout';
+  const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default');
+  if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default').catch(() => {}); }
+  if (slideStudio.render(source.value, slideImageUrl)) { statusText.textContent = 'Slide preview updated'; return; }
   document.querySelector('.media-resize-outline')?.remove();
   const previousScroll = previewPanel.scrollTop;
   totalPoints = [...source.value.matchAll(/:::question(?:\s+[^\n]*)?/g)].reduce((sum, match) => {
@@ -953,16 +986,26 @@ document.querySelector("#folder-input").addEventListener("change", event => load
 source.addEventListener("input", scheduleRender);
 layoutSelect.addEventListener("change", render);
 async function printHandout() {
-  if (window.handoutDesktop) {
-    const result = await window.handoutDesktop.print(activeHandoutTitle);
-    statusText.textContent = result.success ? "Print job sent" : `Could not print: ${result.failureReason || "unknown error"}`;
-    return;
-  }
-  window.print();
+  render();
+  const print = async () => {
+    if (window.handoutDesktop) {
+      const result = await window.handoutDesktop.print(activeHandoutTitle);
+      statusText.textContent = result.success ? "Print job sent" : `Could not print: ${result.failureReason || "unknown error"}`;
+    } else window.print();
+  };
+  return isSlideDocument() ? slideStudio.withAllSlides(print) : print();
 }
+
 async function exportHandout() {
+  render();
+  if (isSlideDocument()) return slideStudio.withAllSlides(async () => {
+    if (window.handoutDesktop) {
+      const savedPath = await window.handoutDesktop.exportPdf(pdfLayout(), activeHandoutTitle);
+      if (savedPath) statusText.textContent = "PDF exported";
+    } else window.print();
+  });
   if (window.handoutDesktop) {
-    const savedPath = await window.handoutDesktop.exportPdf(layoutSelect.value, activeHandoutTitle);
+    const savedPath = await window.handoutDesktop.exportPdf(pdfLayout(), activeHandoutTitle);
     if (savedPath) statusText.textContent = "PDF exported";
     return;
   }
@@ -1015,7 +1058,7 @@ window.addEventListener("load", startLivePreview);
 window.addEventListener("resize", fitSheetPreviews);
 
 // Electron adds local-file editing around the existing renderer. The parsing,
-// pagination, preview and print CSS above remain the single rendering path.
+// pagination and print CSS above remain the handout rendering path.
 if (window.handoutDesktop) {
   const desktop = window.handoutDesktop;
   const tree = document.querySelector("#file-tree");
@@ -1111,6 +1154,10 @@ if (window.handoutDesktop) {
   }
 
   source.addEventListener("input", recordEditorHistory);
+  source.addEventListener('editor:before-edit', () => {
+    const previous = editorHistory.at(-1);
+    if (previous?.value === source.value) Object.assign(previous, editorSnapshot());
+  });
   source.addEventListener("editor:content-loaded", resetEditorHistory);
   source.addEventListener("editor:programmatic-edit-complete", () => requestAnimationFrame(syncHighlight));
   source.addEventListener("keydown", event => {
@@ -1136,7 +1183,7 @@ if (window.handoutDesktop) {
   resetEditorHistory();
 
   let previewNavigationId = 0;
-  function jumpToPreviewSource(block, target) {
+  function jumpToPreviewSource(target) {
     const mapped = target.closest('[data-source-start][data-source-end]');
     if (!mapped || !preview.contains(mapped)) {
       statusText.textContent = 'This preview element has no source location.';
@@ -1265,21 +1312,24 @@ if (window.handoutDesktop) {
     const media = event.target.closest('img[data-image-index], .qr-code[data-qr-index]');
     if (media) {
       event.stopPropagation();
-      if (media.classList.contains('qr-code')) {
-        const block = media.closest('.handout-block');
-        if (block) jumpToPreviewSource(block, media);
-      } else selectResizableMedia(media);
+      jumpToPreviewSource(media);
+      if (!media.classList.contains('qr-code')) {
+        const navigationId = previewNavigationId;
+        // Let source reveal and preview scrolling settle before positioning the handle.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (navigationId === previewNavigationId && media.isConnected) selectResizableMedia(media);
+        }));
+      }
       return;
     }
     document.querySelector('.media-resize-outline')?.remove();
-    const block = event.target.closest(".handout-block");
-    if (block) jumpToPreviewSource(block, event.target);
+    if (event.target.closest('[data-source-start][data-source-end]')) jumpToPreviewSource(event.target);
   });
 
   function saveActiveState() {
     if (!selectedFile) return;
     const documentState = documents.get(selectedFile.path);
-    if (documentState) { documentState.content = source.value; documentState.dirty = dirty; documentState.scrollTop = source.scrollTop; documentState.scrollLeft = source.scrollLeft; }
+    if (documentState) { documentState.selectionStart = source.selectionStart; documentState.selectionEnd = source.selectionEnd; documentState.previewScrollTop = previewPanel.scrollTop; documentState.layout = layoutSelect.value; documentState.handoutTheme = document.body.dataset.handoutTheme || 'default'; documentState.content = source.value; documentState.dirty = dirty; documentState.scrollTop = source.scrollTop; documentState.scrollLeft = source.scrollLeft; }
   }
   function drawTabs() {
     tabBar.innerHTML = "";
@@ -1289,7 +1339,10 @@ if (window.handoutDesktop) {
       tab.title = documentState.file.path;
       const label = document.createElement("button");
       label.className = "document-tab-label";
-      label.textContent = `${documentState.file.name}${documentState.dirty ? " *" : ""}`;
+      const slideTab = window.HandoutSlides.metadata(documentState.content).enabled;
+      tab.dataset.documentMode = slideTab ? 'slides' : 'handout';
+      const icon = document.createElement('span'); icon.className = 'document-type-icon'; icon.textContent = slideTab ? '▣' : '▤'; icon.setAttribute('aria-hidden', 'true');
+      label.append(icon, document.createTextNode(`${documentState.file.name}${documentState.dirty ? " *" : ""}`));
       label.title = documentState.file.path;
       label.addEventListener("click", () => activateDocument(documentState.file.path));
       const close = document.createElement("button");
@@ -1356,6 +1409,7 @@ if (window.handoutDesktop) {
     }
   }
   function activateDocument(filePath) {
+    slideStudio.leaveDocument();
     saveActiveState();
     const documentState = documents.get(filePath);
     if (!documentState) return;
@@ -1363,8 +1417,11 @@ if (window.handoutDesktop) {
     selectedFile = documentState.file;
     dirty = documentState.dirty;
     source.disabled = false;
+    layoutSelect.value = documentState.layout || 'letter';
+    document.body.dataset.handoutTheme = documentState.handoutTheme || 'default';
     loadingDocument = true;
     setSourceContent(documentState.content);
+    source.setSelectionRange(documentState.selectionStart || 0, documentState.selectionEnd || 0);
     source.scrollTop = documentState.scrollTop || 0;
     source.scrollLeft = documentState.scrollLeft || 0;
     loadingDocument = false;
@@ -1374,34 +1431,41 @@ if (window.handoutDesktop) {
     drawTabs();
     syncTreeSelection(true);
     render();
-    requestAnimationFrame(syncHighlight);
+    requestAnimationFrame(() => { syncHighlight(); previewPanel.scrollTop = documentState.previewScrollTop || 0; });
     source.focus();
   }
   function addDocument(file, content, assets) {
     const existing = documents.get(file.path);
     if (existing) { activateDocument(file.path); return; }
-    documents.set(file.path, { file, content, assets, dirty: false, scrollTop: 0, scrollLeft: 0 });
+    documents.set(file.path, { file, content, assets, layout: 'letter', handoutTheme: 'default', dirty: false, scrollTop: 0, scrollLeft: 0 });
     activateDocument(file.path);
   }
 
+  function makeUntitledSlides() {
+    discardBlankUntitledHandout();
+    const key = `__untitled_slides_${Date.now()}__`;
+    addDocument({ type: 'file', name: 'new-slides.md', path: key, markdown: true, untitled: true }, window.HandoutSlides.starter, []);
+    dirty = true; documents.get(key).dirty = true; markDirty(true); drawTabs();
+  }
   function makeUntitledHandout() {
     const existing = documents.get(untitledPath);
     if (existing) { activateDocument(untitledPath); return; }
-    addDocument({ type: 'file', name: 'new-handout.md', path: untitledPath, markdown: true, untitled: true }, '', []);
+    addDocument({ type: 'file', name: 'new-handout.md', path: untitledPath, markdown: true, untitled: true }, window.HandoutStarter, []);
   }
   function discardBlankUntitledHandout() {
     const untitled = documents.get(untitledPath);
-    if (!untitled || untitled.content !== '') return;
+    if (!untitled || untitled.dirty || !['', window.HandoutStarter].includes(untitled.content)) return;
     const wasActive = activePath === untitledPath;
     documents.delete(untitledPath);
     if (wasActive) { activePath = null; selectedFile = null; dirty = false; }
   }
   async function saveUntitledHandout() {
+    const untitledKey = selectedFile.path;
     const saved = await desktop.saveNewFile(source.value);
     if (!saved) return false;
-    const documentState = documents.get(untitledPath);
+    const documentState = documents.get(untitledKey);
     if (!documentState) return false;
-    documents.delete(untitledPath);
+    documents.delete(untitledKey);
     documentState.file = { type: 'file', name: saved.name, path: saved.path, markdown: true };
     documentState.assets = saved.assets || [];
     documentState.content = source.value;
@@ -1599,11 +1663,13 @@ if (window.handoutDesktop) {
     const fallback = selectedFile ? selectedFile.name.replace(/\.(md|markdown|mdown)$/i, "") : "handout";
     const title = headingText || fallback;
     activeHandoutTitle = title;
+    currentDocumentPath = selectedFile && !selectedFile.untitled ? selectedFile.path : null;
     document.title = `${title} — The Markdown Handout Maker`;
     return title;
   }
 
   function markDirty(value) {
+    currentDocumentPath = selectedFile && !selectedFile.untitled ? selectedFile.path : null;
     dirty = value;
     syncTreeSelection();
     if (selectedFile) statusText.textContent = `${selectedFile.name}${dirty ? " · unsaved" : ""}`;
@@ -1926,7 +1992,7 @@ if (window.handoutDesktop) {
     input.addEventListener('keydown', e => { if (e.key === 'Escape') form.remove(); });
     form.addEventListener('submit', async e => {
       e.preventDefault(); submit.disabled = true;
-      try { const node = await desktop.createEntry(parent, input.value, type); browserSelection = node; await refreshFolderTreeAndAssets(); if (type === 'file') addDocument(node, '', folder.assets); statusText.textContent = `Created ${node.name}`; }
+      try { const node = await desktop.createEntry(parent, input.value, type); browserSelection = node; await refreshFolderTreeAndAssets(); if (type === 'file') addDocument(node, node.content ?? window.HandoutStarter, folder.assets); statusText.textContent = `Created ${node.name}`; }
       catch (failure) { error.textContent = failure.message; submit.disabled = false; }
     }); input.focus();
   }
@@ -2095,6 +2161,7 @@ if (window.handoutDesktop) {
   }
   async function importEditorImage(file, selectionStart, selectionEnd, action = 'Pasted', trailingText = '') {
     if (!selectedFile) throw new Error('Open a saved Markdown handout before importing an image.');
+    if (selectedFile.untitled) throw new Error('Save this document before importing an image.');
     const imported = await desktop.importImage(selectedFile.path, new Uint8Array(await file.arrayBuffer()));
     const documentState = documents.get(selectedFile.path);
     if (documentState) documentState.assets = [...(documentState.assets || []), imported];
@@ -2288,7 +2355,10 @@ if (window.handoutDesktop) {
       const filePath = requireGoogleHandout();
       if (command === 'google-link') return await showGoogleLink(await desktop.googleDocLink(filePath));
       if (command === 'google-export-pdf') {
-        const result = await desktop.googleExportPdf(layoutSelect.value, currentHandoutTitle());
+        render();
+        const exportPdf = () => desktop.googleExportPdf(pdfLayout(), currentHandoutTitle());
+        const result = isSlideDocument() ? await slideStudio.withAllSlides(exportPdf) : await exportPdf();
+        if (!result) return;
         statusText.textContent = `Exported ${result.name} to Google Drive`;
         return showGoogleLink(result, 'Drive PDF link and QR', 'Internet needed. Your phone must have access to this PDF in Google Drive.');
       }
@@ -2322,35 +2392,13 @@ if (window.handoutDesktop) {
       }
     } catch (error) { statusText.textContent = `Google Drive: ${error.message}`; }
   }
-  desktop.onMenuCommand(async ({ command, payload }) => {
-    if (command === 'new-handout') return makeNewHandout();
-    if (command === 'open-file') return chooseFile();
-    if (command === 'open-folder') return chooseFolder();
-    if (command === 'open-recent') return openRecentPath(payload);
-    if (command === 'open-recent-folder') return chooseFolder(payload);
-    if (command === 'save') return saveCurrent();
-    if (command === 'print') return printHandout();
-    if (command === 'export-pdf') return exportHandout();
-    if (command.startsWith('google-')) return googleCommand(command);
-    if (command === 'toggle-answers') return toggleAnswers();
-    if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
-    if (command === 'wrap-lines') return setWrapLines(payload);
-    if (command === 'show-whitespace') return setShowWhitespace(payload);
-    if (command === 'set-layout' && layouts[payload]) { layoutSelect.value = payload; return render(); }
-    if (command === 'set-theme' && ['default', 'classic', 'modern', 'spacious'].includes(payload)) {
-      document.body.dataset.handoutTheme = payload;
-      return render();
-    }
-    if (command === 'find') return showFind();
-    if (command === 'insert-snippet' && snippets[payload]) return insertSnippet(snippets[payload]);
-    if (command === 'open-snippet-dialog' && ['question', 'rubric', 'columns', 'table'].includes(payload)) return openSnippetDialog(payload);
-    if (command === 'open-handout-guide') {
+  async function showSyntaxGuide(guideName) {
       try {
-        const name = payload.split(/[\\/]/).pop();
+        const name = guideName.split(/[\\/]/).pop();
         const text = await desktop.readGuide(name);
         document.querySelector('.supporting-preview')?.remove();
         const panel = document.createElement('aside'); panel.className = 'supporting-preview'; panel.setAttribute('aria-label', 'Syntax guide');
-        const title = document.createElement('strong'); title.textContent = name === 'AI_HANDOUT_GUIDE.md' ? 'AI Handout Syntax Guide' : 'Handout Markdown Guide';
+        const title = document.createElement('strong'); title.textContent = name === 'SLIDES_GUIDE.md' ? 'Slide Syntax Guide' : name === 'AI_HANDOUT_GUIDE.md' ? 'AI Handout Syntax Guide' : 'Handout Markdown Guide';
         const copy = document.createElement('button'); copy.textContent = 'Copy entire guide';
         const save = document.createElement('button'); save.textContent = 'Save as…';
         save.onclick = async () => {
@@ -2365,8 +2413,37 @@ if (window.handoutDesktop) {
         panel.append(title, copy, save, close, area); document.body.append(panel); close.focus();
         panel.addEventListener('keydown', event => { if (event.key === 'Escape') panel.remove(); });
       } catch (error) { statusText.textContent = `Could not open guide: ${error.message}`; }
-      return;
+
+  }
+  document.addEventListener('slides:guide', () => void showSyntaxGuide('SLIDES_GUIDE.md'));
+  desktop.onMenuCommand(async ({ command, payload }) => {
+    if (command === 'new-handout') return makeNewHandout();
+    if (command === 'new-slides') return makeUntitledSlides();
+    if (command === 'export-pptx') return exportSlidesPowerPoint();
+    if (command === 'present-slides') return slideStudio.present();
+    if (command === 'exit-presentation') return slideStudio.stopPresentation();
+    if (command === 'open-file') return chooseFile();
+    if (command === 'open-folder') return chooseFolder();
+    if (command === 'open-recent') return openRecentPath(payload);
+    if (command === 'open-recent-folder') return chooseFolder(payload);
+    if (command === 'save') return saveCurrent();
+    if (command === 'print') return printHandout();
+    if (command === 'export-pdf') return exportHandout();
+    if (command.startsWith('google-')) return googleCommand(command);
+    if (command === 'toggle-answers' && !isSlideDocument()) return toggleAnswers();
+    if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
+    if (command === 'wrap-lines') return setWrapLines(payload);
+    if (command === 'show-whitespace') return setShowWhitespace(payload);
+    if (command === 'set-layout' && !isSlideDocument() && layouts[payload]) { layoutSelect.value = payload; return render(); }
+    if (command === 'set-theme' && !isSlideDocument() && ['default', 'classic', 'modern', 'spacious'].includes(payload)) {
+      document.body.dataset.handoutTheme = payload;
+      return render();
     }
+    if (command === 'find') return showFind();
+    if (command === 'slide-snippet' && isSlideDocument()) { slideStudio.insertSnippet(payload);if(payload==='table')return openSnippetDialog('table');return; }
+    if (command === 'insert-snippet' && !isSlideDocument() && snippets[payload]) return insertSnippet(snippets[payload]);
+    if (command === 'open-snippet-dialog' && !isSlideDocument() && ['question', 'rubric', 'columns', 'table'].includes(payload)) return openSnippetDialog(payload);
+    if (command === 'open-handout-guide') return showSyntaxGuide(payload);
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });

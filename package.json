@@ -6,7 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js",
+    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js && node tests/test-slides.js",
     "package": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -40,7 +40,9 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0",
+    "image-size": "^2.0.4",
     "mammoth": "^1.13.0",
+    "pptxgenjs": "^4.0.1",
     "qrcode-generator": "^2.0.4",
     "yauzl": "^3.4.0"
   },
@@ -50,6 +52,9 @@
     },
     "exceljs": {
       "uuid": "^11.1.1"
+    },
+    "pptxgenjs": {
+      "image-size": "^2.0.4"
     }
   }
 }

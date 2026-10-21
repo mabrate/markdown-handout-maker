@@ -29,7 +29,9 @@ npm start
 
 In the app, choose **File → Open Folder…** to work with a folder of Markdown
 handouts, or **File → Open File…** for one handout. Use **File → Save** or
-Ctrl/Cmd+S to write changes back to the selected file.
+Ctrl/Cmd+S to write changes back to the selected file. New handouts start with
+`layout: letter` YAML, Name/Date/Period fields, and a level-one title. This starter
+is also used when creating a handout from the file browser.
 
 ## Preview navigation
 
@@ -192,3 +194,89 @@ it with your browser and Canvas installation on the target operating system.
 
 Run `node tests/test-app-lifecycle.cjs` with the optional Playwright setup to check
 native Electron startup and clean shutdown using a temporary app profile.
+
+## Markdown slideshows
+
+Choose **File → New Slide Deck**. Each document declares its own mode with
+`type: slides` in its opening YAML. Existing handouts keep their normal controls.
+
+```markdown
+---
+type: slides
+theme: classroom
+aspect: 16:9
+---
+
+# Lesson title
+
+A short introduction.
+
+---
+
+# Investigate
+
+:::columns
+:::column
+- Observe the example.
+- Test an idea.
+
+:::column
+![Evidence](images/example.png)
+:::
+
+:::notes
+Teacher reminders and answers belong here.
+:::
+```
+
+Use `---` between slides and `:::columns` / `:::column` / `:::` for side-by-side
+content. Optional `widths=1/3,2/3` sets column proportions. `:::center` centers a
+content block. There is no slide layout selector.
+
+Use `:::background` around one Markdown image for a full-slide, cropped background.
+Use `:::text x=10% y=65% width=80% size=54 color=white` around text to position it
+over the image. Optional background overlays improve contrast. Click positioned
+text to reveal Move and Width handles; dragging updates the Markdown. Both blocks
+work in presenting, PDF, and editable PowerPoint export. Click a background or text
+block, or put the editor cursor inside it, to open contextual settings for image
+cropping, overlays, text size, color, fonts, alignment, and position. Use
+**Slides → Snippets** for Columns, Background, Text, Notes, QR code, and Table.
+See the slide guide for the full syntax and examples.
+
+Only the current slide is shown in the preview. Move the editor cursor to another
+slide, use the outline, or choose **Previous slide** / **Next slide**. Templates
+include Blank content, Bell-ringer, Fullscreen image with text, and Title slide,
+all ordinary editable Markdown. QR codes and image widths use the handout syntax;
+resize them proportionally in the preview. Markdown tables remain native editable
+PowerPoint tables, and checklists and grid/cell blocks are also supported.
+Themes are Classroom, Light, and Dark, with 16:9 or 4:3 aspect ratios.
+
+**Present** displays only the slide, hiding app menus and navigation controls.
+Click/tap, arrow keys, Space, and Page Up/Down navigate; Home/End jump to the first
+or last slide. Shift-click or right-click goes back. Escape exits and restores
+editing and menus.
+
+**Export PowerPoint…** exports editable text, tables, images, and speaker notes.
+PNG, JPEG, GIF, and SVG are supported; convert WebP to PNG first. Images must be
+local to the lesson folder; export does not download website images. PowerPoint
+changes do not sync back into Markdown. **Export PDF…** and printing include the
+entire deck, one slide per page. Notes, editor controls, and warnings stay out of
+the projected slides and PDFs. Review warnings before sharing.
+
+The slide parser, shared geometry, preview, stylesheet, and exporter are separate
+from handout parsing and pagination. The example is in
+[demo/example-slides.md](demo/example-slides.md). **Help → Slide Syntax Guide**
+opens the [guide](demo/SLIDES_GUIDE.md), including Copy and Save as actions for an AI
+agent. Keep image files beside the deck or in a nearby image folder when sharing.
+
+`npm test` includes slide parsing, layout blocks, editable PowerPoint objects,
+notes, and image-path checks. Optional checks use the Playwright setup above:
+
+```bash
+node tests/test-slides-browser.cjs
+node tests/test-slides-electron.cjs
+```
+
+The native check requires Poppler's `pdfinfo` and `pdftotext` to verify complete
+PDF export and notes exclusion. Check the PowerPoint file on the target computer
+before teaching, since fonts and line wrapping can differ.

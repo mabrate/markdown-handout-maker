@@ -25,15 +25,10 @@
     }
   }
 
-  function renderQrBlock(value, attributes = '') {
+  function createQrSvg(value) {
     const result = validatedUrl(value);
-    if (result.error) {
-      return `<div class="qr-code-error" role="note">${escapeHtml(result.error)}</div>`;
-    }
-    if (typeof qrcodeFactory !== "function") {
-      return '<div class="qr-code-error" role="note">QR code generator is unavailable.</div>';
-    }
-
+    if (result.error) return result;
+    if (typeof qrcodeFactory !== 'function') return { error: 'QR code generator is unavailable.' };
     try {
       const qr = qrcodeFactory(0, "H");
       qr.addData(result.url, "Byte");
@@ -43,16 +38,21 @@
         margin: 4,
         scalable: true
       }).replace("<svg ", '<svg aria-hidden="true" focusable="false" ');
-      const safeUrl = escapeHtml(result.url);
-      const attributeText = String(attributes);
-      const width = attributeText.match(/(?:^|\s)width=([0-9.]+(?:in|cm|mm|px|%))(?:\s|$)/i);
-      const float = attributeText.match(/(?:^|\s)\.(float-left|float-right)(?:\s|$)/i);
-      const classes = `qr-code${float ? ` ${float[1].toLowerCase()}` : ''}`;
-      return `<figure class="${classes}" data-qr-value="${safeUrl}" role="img" aria-label="QR code for ${safeUrl}"${width ? ` style="width:${width[1]}"` : ''}>${svg}</figure>`;
-    } catch {
-      return '<div class="qr-code-error" role="note">This URL is too long to make a QR code.</div>';
-    }
+      return { url: result.url, svg };
+    } catch { return { error: 'This URL is too long to make a QR code.' }; }
   }
 
-  return { renderQrBlock, validatedUrl };
+  function renderQrBlock(value, attributes = '') {
+    const result = createQrSvg(value);
+    if (result.error) return `<div class="qr-code-error" role="note">${escapeHtml(result.error)}</div>`;
+    const svg = result.svg;
+    const safeUrl = escapeHtml(result.url);
+    const attributeText = String(attributes);
+    const width = attributeText.match(/(?:^|\s)width=([0-9.]+(?:in|cm|mm|px|%))(?:\s|$)/i);
+    const float = attributeText.match(/(?:^|\s)\.(float-left|float-right)(?:\s|$)/i);
+    const classes = `qr-code${float ? ` ${float[1].toLowerCase()}` : ''}`;
+    return `<figure class="${classes}" data-qr-value="${safeUrl}" role="img" aria-label="QR code for ${safeUrl}"${width ? ` style="width:${width[1]}"` : ''}>${svg}</figure>`;
+  }
+
+  return { renderQrBlock, validatedUrl, createQrSvg };
 });

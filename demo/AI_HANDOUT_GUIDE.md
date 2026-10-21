@@ -11,6 +11,8 @@ Use this guide when creating or revising a printable classroom handout for The M
 - Write pages in normal reading order. Use explicit page breaks only when the content needs them.
 - Keep the handout practical to revise later. Prefer short, independent sections over a layout whose parts depend on fixed numbering or fragile spacing.
 
+Click an element in the handout preview to highlight its source Markdown and scroll the editor to it. List items and table rows select their own source; clicking an image also keeps its resize control available. Ctrl-click links (⌘-click on Mac) to open them in your browser.
+
 ## YAML front matter
 
 An optional YAML block may appear at the first line of a handout. The app removes it from the preview, printout, and PDF:

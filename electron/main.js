@@ -10,6 +10,8 @@ let googleSession = null;
 let editorWrapLines = false;
 let editorShowWhitespace = false;
 let handoutTheme = 'default';
+let documentMode = 'handout';
+let presentationState = null;
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const recentLimit = 12;
@@ -19,7 +21,7 @@ async function saveSettings(settings) { await fs.mkdir(app.getPath('userData'), 
 function isInsideRoot(filePath) { return currentRoot && (filePath === currentRoot || filePath.startsWith(currentRoot + path.sep)); }
 async function readTree(folder) { const entries = await fs.readdir(folder, { withFileTypes: true }); return Promise.all(entries.filter(e => !e.name.startsWith('.')).sort((a,b) => a.name.localeCompare(b.name)).map(async e => { const p = path.join(folder, e.name); const image = imageExtension.test(e.name); return e.isDirectory() ? { type: 'folder', name: e.name, path: p, children: await readTree(p) } : { type: 'file', name: e.name, path: p, markdown: markdownExtension.test(e.name), image, ...(image ? { url: pathToFileURL(p).toString() } : {}) }; })); }
 async function assetsIn(folder, root = folder, output = []) { const entries = await fs.readdir(folder, { withFileTypes: true }); for (const e of entries) { if (e.name.startsWith('.')) continue; const p = path.join(folder, e.name); if (e.isDirectory()) await assetsIn(p, root, output); else if (imageExtension.test(e.name)) output.push({ relative: path.relative(root,p).split(path.sep).join('/'), url: pathToFileURL(p).toString() }); } return output; }
-function pdfOptions(layout) { const sizes = { letter:{pageSize:'Letter',landscape:false}, 'letter-landscape':{pageSize:'Letter',landscape:true}, a4:{pageSize:'A4',landscape:false}, 'half-portrait':{pageSize:{width:139700,height:215900},landscape:false}, 'half-landscape':{pageSize:{width:215900,height:139700},landscape:false}, 'half-duplicate-portrait':{pageSize:'Letter',landscape:true}, 'half-duplicate-landscape':{pageSize:'Letter',landscape:false}, 'booklet-letter':{pageSize:'Letter',landscape:true}, booklet:{pageSize:'Tabloid',landscape:true} }; return { printBackground:true, marginsType:1, ...(sizes[layout] || sizes.letter) }; }
+function pdfOptions(layout) { if (layout === 'slides-wide' || layout === 'slides-standard') return { printBackground: true, preferCSSPageSize: true, pageSize: { width: layout === 'slides-wide' ? 338667 : 254000, height: 190500 }, margins: { top: 0, bottom: 0, left: 0, right: 0 } }; const sizes = { letter:{pageSize:'Letter',landscape:false}, 'letter-landscape':{pageSize:'Letter',landscape:true}, a4:{pageSize:'A4',landscape:false}, 'half-portrait':{pageSize:{width:139700,height:215900},landscape:false}, 'half-landscape':{pageSize:{width:215900,height:139700},landscape:false}, 'half-duplicate-portrait':{pageSize:'Letter',landscape:true}, 'half-duplicate-landscape':{pageSize:'Letter',landscape:false}, 'booklet-letter':{pageSize:'Letter',landscape:true}, booklet:{pageSize:'Tabloid',landscape:true} }; return { printBackground:true, marginsType:1, ...(sizes[layout] || sizes.letter) }; }
 function safeDocumentName(title, fallback = 'handout') { const cleaned = String(title || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '').replace(/\s+/g, ' ').trim().replace(/^\.+|\.+$/g, ''); return cleaned || fallback; }
 function sendMenuCommand(command, payload) { mainWindow?.webContents.send('menu:command', { command, payload }); }
 async function refreshApplicationMenu() {
@@ -44,15 +46,18 @@ async function refreshApplicationMenu() {
   ];
   const quickSnippet = (label, id, accelerator) => ({ label, ...(accelerator ? { accelerator } : {}), click: () => sendMenuCommand('insert-snippet', id) });
   const snippetDialog = (label, id) => ({ label, click: () => sendMenuCommand('open-snippet-dialog', id) });
+  if (presentationState) return;
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
       { label: 'New Handout', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('new-handout') },
+      { label: 'New Slide Deck', accelerator: 'CmdOrCtrl+Alt+N', click: () => sendMenuCommand('new-slides') },
       { label: 'Open File…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('open-file') },
       { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand('open-folder') },
       { label: 'Open Recent', submenu: recentMenu.length ? recentMenu : [{ label: 'No recent files or folders', enabled: false }] },
       { type: 'separator' }, { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
       { type: 'separator' }, { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => sendMenuCommand('export-pdf') },
+      { label: 'Export PowerPoint…', enabled: documentMode === 'slides', click: () => sendMenuCommand('export-pptx') },
       { label: 'Google Drive', submenu: [
         { label: 'Settings and sign in…', click: () => sendMenuCommand('google-settings') },
         { label: 'Export PDF to Drive…', click: () => sendMenuCommand('google-export-pdf') },
@@ -66,7 +71,7 @@ async function refreshApplicationMenu() {
       { type: 'separator' }, ...(process.platform === 'darwin' ? [{ role: 'close' }] : [{ role: 'quit' }])
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, { type: 'separator' }, { label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => sendMenuCommand('find') }] },
-    { label: 'Snippets', submenu: [
+    { label: 'Snippets', enabled: documentMode !== 'slides', submenu: [
       { label: 'Basics', submenu: [
         quickSnippet('Handout Boilerplate', 'boilerplate'), { type: 'separator' },
         quickSnippet('Heading', 'heading'), quickSnippet('Checklist', 'checklist'),
@@ -83,21 +88,26 @@ async function refreshApplicationMenu() {
       ] }
     ] },
     { label: 'View', submenu: [
-      { label: 'Toggle Answers', click: () => sendMenuCommand('toggle-answers') },
+      { label: 'Toggle Answers', enabled: documentMode !== 'slides', click: () => sendMenuCommand('toggle-answers') },
       { label: 'Toggle Handout Files Panel', click: () => sendMenuCommand('toggle-panel', 'file') },
       { label: 'Toggle Markdown Editor Panel', click: () => sendMenuCommand('toggle-panel', 'editor') },
       { type: 'separator' },
       { label: 'Wrap Lines', type: 'checkbox', checked: editorWrapLines, click: menuItem => { editorWrapLines = menuItem.checked; sendMenuCommand('wrap-lines', editorWrapLines); } },
       { label: 'Show Whitespace', type: 'checkbox', checked: editorShowWhitespace, click: menuItem => { editorShowWhitespace = menuItem.checked; sendMenuCommand('show-whitespace', editorShowWhitespace); } },
-      { type: 'separator' }, { label: 'Page Layout', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
-      { label: 'Handout Theme', submenu: [
+      { type: 'separator' }, { label: 'Page Layout', enabled: documentMode !== 'slides', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
+      { label: 'Handout Theme', enabled: documentMode !== 'slides', submenu: [
         ['Default', 'default'], ['Classic', 'classic'], ['Modern', 'modern'], ['Spacious', 'spacious']
       ].map(([label, value]) => ({ label, type: 'radio', checked: handoutTheme === value, click: () => { handoutTheme = value; sendMenuCommand('set-theme', value); } })) },
       { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
     ] },
+    { label: 'Slides', enabled: documentMode === 'slides', submenu: [
+      { label: 'Present', accelerator: 'F5', click: () => sendMenuCommand('present-slides') },
+      { label: 'Snippets', submenu: [['Columns', 'columns'], ['Background', 'background'], ['Text', 'text'], ['Notes', 'notes'], ['QR code', 'qr'], ['Table…', 'table'], ['Centered text', 'center'], ['Fit text', 'fit'], ['Checklist', 'checklist'], ['Card grid', 'grid']].map(([label, value]) => ({ label, click: () => sendMenuCommand('slide-snippet', value) })) },
+      { label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }
+    ] },
     { role: 'windowMenu' },
-    { role: 'help', submenu: [{ label: 'AI Handout Syntax Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'AI_HANDOUT_GUIDE.md')) }, { label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
+    { role: 'help', submenu: [{ label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }, { label: 'AI Handout Syntax Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'AI_HANDOUT_GUIDE.md')) }, { label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
   ]));
 }
 async function addRecent(filePath) { const settings = await readSettings(); const recentFiles = [filePath, ...(settings.recentFiles || []).filter(item => item !== filePath)].slice(0, recentLimit); await saveSettings({...settings, recentFiles}); await refreshApplicationMenu(); return recentFiles; }
@@ -106,9 +116,29 @@ function openExternalLink(url) {
     if (['http:', 'https:'].includes(new URL(url).protocol)) void shell.openExternal(url);
   } catch {}
 }
+async function setPresentation(active) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (active) {
+    if (presentationState) return;
+    presentationState = { fullScreen: mainWindow.isFullScreen(), menuVisible: process.platform !== 'darwin' && mainWindow.isMenuBarVisible() };
+    Menu.setApplicationMenu(null);
+    if (process.platform !== 'darwin') { mainWindow.setMenu(null); mainWindow.setMenuBarVisibility(false); }
+    mainWindow.setFullScreen(true);
+  } else {
+    const previous = presentationState; if (!previous) return;
+    presentationState = null;
+    if (!previous.fullScreen) mainWindow.setFullScreen(false);
+    await refreshApplicationMenu();
+    if (!presentationState && !mainWindow.isDestroyed() && process.platform !== 'darwin') mainWindow.setMenuBarVisibility(previous.menuVisible);
+  }
+}
 function createWindow() {
   mainWindow = new BrowserWindow({ title:productName, icon:path.join(__dirname,'..','assets','markdown-handout-maker-icon.png'), width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } });
   const contents = mainWindow.webContents;
+  mainWindow.on('leave-full-screen', () => { if (presentationState) { sendMenuCommand('exit-presentation'); void setPresentation(false); } });
+  contents.on('before-input-event', (event, input) => { if (presentationState && input.type === 'keyDown' && input.key === 'Escape') { event.preventDefault(); sendMenuCommand('exit-presentation'); } });
+  contents.on('did-start-loading', () => { if (presentationState) void setPresentation(false); });
+  mainWindow.on('closed', () => { if (presentationState) { presentationState = null; void refreshApplicationMenu(); } });
   contents.on('will-navigate', (event, url) => {
     if (url === contents.getURL() || url.startsWith(`${contents.getURL().split('#')[0]}#`)) return;
     event.preventDefault();
@@ -145,8 +175,8 @@ ipcMain.handle('files:open-dialog', async () => { const settings = await readSet
 ipcMain.handle('files:recent', async () => { const settings = await readSettings(); const valid=[]; for (const filePath of settings.recentFiles || []) { try { if (markdownExtension.test(filePath)) { await fs.access(filePath); valid.push({path:filePath,name:path.basename(filePath)}); } } catch {} } return valid; });
 ipcMain.handle('files:open-recent', async (_e, filePath) => { if (!markdownExtension.test(filePath)) throw Error('Only Markdown files can be opened.'); const content=await fs.readFile(filePath,'utf8'); if (!isInsideRoot(filePath)) currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {root:currentRoot,path:filePath,name:path.basename(filePath),content,assets:await assetsIn(currentRoot),recentFiles}; });
 ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExtension.test(p)) throw Error('File is outside selected folder.'); await addRecent(p); return fs.readFile(p,'utf8'); }); ipcMain.handle('files:save', async (_e,p,content) => { if(!markdownExtension.test(p)||(!isInsideRoot(p)&&path.dirname(p)!==currentRoot)) throw Error('File is outside selected folder.'); await fs.writeFile(p,content,'utf8'); return true; });
-ipcMain.handle('files:save-new', async (_event, content) => { const result = await dialog.showSaveDialog(mainWindow, { title: 'Save handout', defaultPath: currentRoot ? path.join(currentRoot, 'new-handout.md') : 'new-handout.md', filters: [{ name: 'Markdown', extensions: ['md'] }] }); if (result.canceled || !result.filePath) return null; const filePath = result.filePath; await fs.writeFile(filePath, content, 'utf8'); if (!isInsideRoot(filePath)) currentRoot = path.dirname(filePath); await addRecent(filePath); return { path: filePath, name: path.basename(filePath), assets: await assetsIn(currentRoot) }; });
-ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,'','utf8'); return result.filePath; });
+ipcMain.handle('files:save-new', async (_event, content) => { const isSlides = require('../renderer/slides').metadata(content).enabled; const result = await dialog.showSaveDialog(mainWindow, { title: isSlides ? 'Save slide deck' : 'Save handout', defaultPath: currentRoot ? path.join(currentRoot, isSlides ? 'new-slides.md' : 'new-handout.md') : isSlides ? 'new-slides.md' : 'new-handout.md', filters: [{ name: 'Markdown', extensions: ['md'] }] }); if (result.canceled || !result.filePath) return null; const filePath = result.filePath; await fs.writeFile(filePath, content, 'utf8'); if (!isInsideRoot(filePath)) currentRoot = path.dirname(filePath); await addRecent(filePath); return { path: filePath, name: path.basename(filePath), assets: await assetsIn(currentRoot) }; });
+ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,require('../renderer/handout-starter'),'utf8'); return result.filePath; });
 ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
   if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');
   const renamed = await renameDocumentFile(filePath, requestedName);
@@ -171,16 +201,34 @@ ipcMain.handle('browser:open-external', async (_event, target) => {
   if (error) throw Error(error);
   return true;
 });
+ipcMain.handle('document:mode', async (_event, mode, theme) => {
+  if (!['handout', 'slides'].includes(mode)) throw Error('Unknown document mode.');
+  documentMode = mode;
+  if (['default', 'classic', 'modern', 'spacious'].includes(theme)) handoutTheme = theme;
+  await refreshApplicationMenu();
+});
+ipcMain.handle('slides:presentation', (event, active) => {
+  if (event.sender !== mainWindow.webContents || typeof active !== 'boolean') throw Error('Invalid presentation request.');
+  return setPresentation(active);
+});
+ipcMain.handle('slides:powerpoint', async (_event, content, documentPath) => {
+  const { buffer, deck } = await require('./slidesExport').buildPresentation(content, { root: currentRoot, documentPath });
+  const title = require('../renderer/slides').plain(deck.slides[0].outlineTitle || deck.slides[0].title) || 'Lesson slides';
+  const result = await dialog.showSaveDialog(mainWindow, { title: 'Export PowerPoint', defaultPath: `${safeDocumentName(title)}.pptx`, filters: [{ name: 'PowerPoint', extensions: ['pptx'] }] });
+  if (result.canceled || !result.filePath) return null;
+  await fs.writeFile(result.filePath, buffer);
+  return result.filePath;
+});
 ipcMain.handle('links:open', (_event, url) => {
   if (typeof url !== 'string' || !/^https?:$/i.test(new URL(url).protocol)) throw Error('Only web links can be opened.');
   return shell.openExternal(url);
 });
 ipcMain.handle('help:guide', (_event, name) => {
-  if (!['AI_HANDOUT_GUIDE.md', 'HANDOUT_MARKDOWN.md'].includes(name)) throw Error('Unknown guide.');
+  if (!['AI_HANDOUT_GUIDE.md', 'HANDOUT_MARKDOWN.md', 'SLIDES_GUIDE.md'].includes(name)) throw Error('Unknown guide.');
   return fs.readFile(path.join(__dirname, '..', 'demo', name), 'utf8');
 });
 ipcMain.handle('help:save-guide', async (_event, name) => {
-  if (!['AI_HANDOUT_GUIDE.md', 'HANDOUT_MARKDOWN.md'].includes(name)) throw Error('Unknown guide.');
+  if (!['AI_HANDOUT_GUIDE.md', 'HANDOUT_MARKDOWN.md', 'SLIDES_GUIDE.md'].includes(name)) throw Error('Unknown guide.');
   const sourcePath = path.join(__dirname, '..', 'demo', name);
   const content = await fs.readFile(sourcePath, 'utf8');
   const result = await dialog.showSaveDialog(mainWindow, {
