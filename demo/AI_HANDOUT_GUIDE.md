@@ -13,6 +13,19 @@ Use this guide when creating or revising a printable classroom handout for The M
 
 Click an element in the handout preview to highlight its source Markdown and scroll the editor to it. List items and table rows select their own source; clicking an image also keeps its resize control available. Ctrl-click links (⌘-click on Mac) to open them in your browser.
 
+### Preview settings
+
+Click a supported element to open its contextual settings above the handout. The row stays visible while you scroll. Changes update the Markdown and support Undo; the controls do not appear in printing or PDF exports.
+
+- **Images:** image path, alt text, width, and in-flow/left-float/right-float placement. Existing image titles and other attributes are preserved.
+- **QR codes:** web URL, width, and placement. Use an `http://` or `https://` URL.
+- **Questions:** points, answer-line count for short-answer questions, and a read-only teacher answer. Short-answer keys and marked correct choices appear in the settings even when answers are hidden in the handout. Missing keys show "No answer provided." Prompts, choices, correct-answer markers, IDs, and teacher answers remain in the source.
+- **Grids:** column count, fractional widths such as `1/3,2/3`, and card borders. Changing the column count clears custom widths and reflows the existing cells.
+- **Drawing and answer spaces:** height/line count, drawing style, and inline/new-line answer placement.
+- **Markdown tables:** click a cell to change its column's alignment.
+
+Image and QR widths accept `in`, `cm`, `mm`, `px`, or `%`, such as `2in` or `40%`. Leave width blank to restore automatic sizing. Clicking content inside a question or grid also shows the containing block's settings. Text and headings keep their click-to-source navigation without contextual controls. More complex content remains editable in the highlighted Markdown. Choose **Close settings** to dismiss the row.
+
 ## YAML front matter
 
 An optional YAML block may appear at the first line of a handout. The app removes it from the preview, printout, and PDF:

@@ -1,0 +1,36 @@
+'use strict';
+const assert = require('assert/strict');
+const settings = require('../renderer/handout-settings');
+function apply(text,target,key,value) {
+  const edit=settings.edit(text,target,key,value);assert.ok(edit);
+  return text.slice(0,edit.start)+edit.text+text.slice(edit.end);
+}
+const media='---\nname: Test\n---\n![Same](first.png){.float-left width=2in keep=yes} ![Same](second.png "Title"){width=3cm}\n\n[qr:https://example.com]{.float-right width=1in}\n';
+const image={kind:'image',line:3,endLine:4,occurrence:1};
+assert.equal(apply(media,image,'width','25%'),media.replace('width=3cm','width=25%'));
+assert.equal(apply(media,image,'path','lesson photos/test (2).png'),media.replace('second.png','lesson%20photos/test%20%282%29.png'));
+assert.equal(apply(media,{...image,occurrence:0},'float','float-right'),media.replace('.float-left width=2in keep=yes','width=2in keep=yes .float-right'));
+assert.equal(settings.edit(media,image,'width','1in;color:red'),null);
+assert.equal(settings.edit(media,image,'alt','bad]\n# Heading'),null);
+const qr={kind:'qr',line:5,endLine:6};assert.equal(settings.edit(media,qr,'url','javascript:alert(1)'),null);
+assert.ok(apply(media,qr,'url','https://school.test/lesson').includes('[qr:https://school.test/lesson]{.float-right width=1in}'));
+const question=':::question id=lesson type=short lines=3 points=2\nPrompt\n:::answer\nAnswer\n:::\n:::';
+assert.equal(apply(question,{kind:'question',line:0},'lines',5),question.replace(' lines=3','').replace('points=2','points=2 lines=5'));
+assert.equal(apply(question,{kind:'question',line:0},'points',''),question.replace(' points=2',''));
+assert.equal(settings.edit(question,{kind:'question',line:0},'lines',31),null);
+const grid=':::grid widths=1/3,2/3 cards custom=yes\n:::cell\nFirst\n:::cell\nSecond\n:::';
+assert.ok(apply(grid,{kind:'grid',line:0},'columns',3).startsWith(':::grid cards custom=yes columns=3\n'));
+assert.equal(settings.edit(grid,{kind:'grid',line:0},'widths','1/0,2/3'),null);
+assert.equal(apply('{{space:4:box}}',{kind:'space',line:0},'variant','dots'),'{{space:4:dots}}');
+assert.equal(apply('Answer {{lines:2:inline}}',{kind:'lines',line:0},'count',4),'Answer {{lines:4:inline}}');
+assert.equal(settings.read('## **My title**',{kind:'heading',line:0}),null);
+assert.equal(settings.read('Paragraph',{kind:'text',line:0,endLine:1}),null);
+const table='| Name | Count |\n| :--- | ---: |\n| Seeds | 3 |';
+assert.equal(apply(table,{kind:'table',line:0,column:1},'align','center'),table.replace('---: |',':---: |'));
+assert.equal(settings.read('text',{kind:'image',line:0}),null);
+assert.deepEqual(settings.read(question,{kind:'question',line:0}).answers,{answer:'Answer',correctChoices:[]});
+const multiple=':::question type=mc\nPick one.\n- Wrong\n- First correct *\n  continued\n- Also correct*\n:::\n\n:::question type=short\nOther\n:::answer\nOther answer\n:::\n:::';
+assert.deepEqual(settings.read(multiple,{kind:'question',line:0}).answers,{answer:'',correctChoices:[{index:1,text:'First correct\n  continued'},{index:2,text:'Also correct'}]});
+assert.deepEqual(settings.read(':::question type=true-false\nTrue?\n- True\n- False *\n:::',{kind:'question',line:0}).answers.correctChoices,[{index:1,text:'False'}]);
+assert.deepEqual(settings.read(':::question type=short\nPrompt\n:::',{kind:'question',line:0}).answers,{answer:'',correctChoices:[]});
+console.log('Handout contextual setting source edits passed');

@@ -40,6 +40,15 @@ checklists, question choices, and Markdown table rows use their original source
 locations, so repeated wording does not jump to the first occurrence. The editor
 reveals the selected item's beginning with line wrapping accounted for.
 
+Handout preview clicks also open contextual settings for images, QR codes,
+questions, grids, drawing/answer spaces, and Markdown table column
+alignment. The settings stay visible while scrolling, update Markdown, and support
+Undo. They are hidden from printing and PDF exports. Image/QR widths accept units
+such as `2in` or `40%`; leave width blank for automatic sizing. Nested content also
+exposes its containing question and grid settings. Question settings show the teacher
+answer or marked correct choices while student preview answers remain hidden.
+Text and headings keep click-to-source navigation without contextual controls.
+
 ## File browser
 
 Open a folder to browse its handouts and images. Select a folder, then use **+**
@@ -131,6 +140,10 @@ With Playwright and its Chromium browser installed, run
 set `CHROME_PATH` to its executable. `PLAYWRIGHT_MODULE` optionally selects an
 existing Playwright package. This check uses a mocked desktop bridge; native
 macOS focus and selection behavior should also be checked in the packaged app.
+
+With the same browser setup and `pdftotext` installed, run
+`node tests/test-handout-settings.cjs` to check contextual handout editing,
+Undo, nested blocks, duplicate sheets, and the absence of controls in PDFs.
 
 ### Other files and ZIP archives
 

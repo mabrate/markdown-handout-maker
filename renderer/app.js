@@ -21,6 +21,7 @@ const slideStudio = window.SlideStudio.mount({ source, preview, previewPanel, pa
   edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout,
   guide: () => document.dispatchEvent(new Event('slides:guide'))
 });
+const handoutInspector = window.HandoutSettings.mount({source, preview, previewPanel, edit: replaceEditorSelection, isSlides: isSlideDocument});
 function isSlideDocument() { return window.HandoutSlides.metadata(source.value).enabled; }
 function pdfLayout() { return isSlideDocument() ? (window.HandoutSlides.parse(source.value).settings.aspect === '4:3' ? 'slides-standard' : 'slides-wide') : layoutSelect.value; }
 function slideImageUrl(src) {
@@ -397,7 +398,8 @@ function preprocessLegacyMarkdown(markdown) {
   let text = markdown;
   const brTokens = [];
   text = text.replace(/<br\s*\/?>/gi, match => `@@LEGACY_BR_${brTokens.push(match) - 1}@@`);
-  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)(?:\{([^}]*)\})?/g, (_, alt, path, title, attrs = "") => {
+  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+(?:"([^"\n]*)"|&quot;([^\n]*?)&quot;))?\)(?:\{([^}]*)\})?/g, (_, alt, path, quotedTitle, encodedTitle, attrs = "") => {
+    const title = quotedTitle ?? encodedTitle;
     const classes = attrs.includes(".float-left") ? "float-left" : attrs.includes(".float-right") ? "float-right" : "";
     const width = attrs.match(/width=([0-9.]+(?:in|cm|mm|px|%))/);
     const localAsset = assetMap.get(decodeURIComponent(path)) || assetMap.get(path);
@@ -528,7 +530,7 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
           i++;
           continue;
         }
-        if (/^:::(question|wrap|grid|checklist)(?:\s+.*)?$/.test(nested)) depth++;
+        if (/^:::(question|answer|wrap|grid|checklist)(?:\s+.*)?$/.test(nested)) depth++;
         else if (nested === ":::") {
           if (depth > 0) depth--;
           else break;
@@ -678,7 +680,7 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
       const cellHtml = parts.map(part => `<div class="grid-cell">${parseBlocks(part.content, numbering, part.offset).map(blockItem => blockItem.html).join("")}</div>`).join("");
       const columns = Math.max(1, Math.min(4, Number(block.attr.columns) || parts.length || 2));
       const cardClass = block.attr.cards ? " cards" : "";
-      const widths = block.attr.widths ? block.attr.widths.split(",").map(value => { const [numerator, denominator] = value.split("/").map(Number); return Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0 ? `${numerator}fr` : "1fr"; }).join(" ") : `repeat(${columns}, minmax(0, 1fr))`;
+      const widths = block.attr.widths ? block.attr.widths.split(",").map(value => { const [numerator, denominator] = value.split("/").map(Number); return Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0 ? `${numerator / denominator}fr` : "1fr"; }).join(" ") : `repeat(${columns}, minmax(0, 1fr))`;
       return located(`<div class="grid${cardClass}" style="--grid-template:${widths}">${cellHtml}</div>`);
     }
 
@@ -927,7 +929,7 @@ function render() {
   const mode = isSlideDocument() ? 'slides' : 'handout';
   const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default');
   if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default').catch(() => {}); }
-  if (slideStudio.render(source.value, slideImageUrl)) { statusText.textContent = 'Slide preview updated'; return; }
+  if (slideStudio.render(source.value, slideImageUrl)) { handoutInspector.hide(); statusText.textContent = 'Slide preview updated'; return; }
   document.querySelector('.media-resize-outline')?.remove();
   const previousScroll = previewPanel.scrollTop;
   totalPoints = [...source.value.matchAll(/:::question(?:\s+[^\n]*)?/g)].reduce((sum, match) => {
@@ -940,6 +942,7 @@ function render() {
   const prefixLength = source.value.length - visibleSource.length;
   const sourceOffset = (source.value.slice(0, prefixLength).match(/\n/g) || []).length;
   paginate(parseBlocks(visibleSource, { questionNumber: 1 }, sourceOffset));
+  handoutInspector.refresh();
   statusText.textContent = "Preview updated";
   requestAnimationFrame(() => {
     previewPanel.scrollTop = previousScroll;
@@ -1313,6 +1316,7 @@ if (window.handoutDesktop) {
     if (media) {
       event.stopPropagation();
       jumpToPreviewSource(media);
+      handoutInspector.show(media);
       if (!media.classList.contains('qr-code')) {
         const navigationId = previewNavigationId;
         // Let source reveal and preview scrolling settle before positioning the handle.
@@ -1324,6 +1328,7 @@ if (window.handoutDesktop) {
     }
     document.querySelector('.media-resize-outline')?.remove();
     if (event.target.closest('[data-source-start][data-source-end]')) jumpToPreviewSource(event.target);
+    handoutInspector.show(event.target);
   });
 
   function saveActiveState() {

@@ -443,3 +443,17 @@ body[data-handout-theme="spacious"] .handout-page li { margin: .05in 0; }
 .unsaved-dialog::backdrop { background: #0005; }
 .unsaved-dialog button { margin: 8px 8px 0 0; padding: 7px 18px; cursor: pointer; }
 @media print { .unsaved-dialog { display: none !important; } }
+
+.handout-inspector { position:sticky; top:42px; z-index:4; display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:10px 14px; background:#eef6fa; border-bottom:1px solid #b5cbd7; font-size:12px; }
+.handout-inspector[hidden] { display:none; }
+.handout-settings-group { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.handout-settings-group + .handout-settings-group { border-left:1px solid #b5cbd7; padding-left:12px; }
+.handout-inspector label { display:flex; align-items:center; gap:4px; }
+.handout-inspector input, .handout-inspector select, .handout-inspector button { font:inherit; padding:4px 6px; }
+.handout-inspector input { width:140px; }
+.handout-inspector input[type=number] { width:65px; }
+.handout-inspector input[type=checkbox] { width:auto; }
+.handout-inspector input[aria-label=Width] { width:95px; }
+@media print { .handout-inspector { display:none !important; } }
+.handout-question-answers { min-width:160px; max-width:360px; }
+.handout-question-answers > div { max-height:120px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:4px; }
