@@ -4,6 +4,14 @@ Use this guide when an AI agent creates or revises presentations for The Markdow
 
 Separate slides with a line containing three dashes: `---`. Arrange content with `:::` blocks when needed. There are no slide layout types to select.
 
+## Choosing and creating images
+
+- **Prefer public-domain or CC0 images:** use relevant photographs, historical images, and scientific illustrations. Verify the status on each source page; record its link, creator, and rights statement in the slide's `:::notes`.
+- **Choose visuals that teach:** show evidence, details, or comparisons. Vary compositions while keeping a coherent style. Skip decorative images that add little.
+- **Create custom visuals purposefully:** specify the subject, teaching purpose, viewpoint, composition, and style. Use polished generated illustrations when useful; reserve SVG for diagrams, charts, and labeled relationships. Avoid rough placeholder drawings and repetitive generic scenes.
+- **Check accuracy:** review details and labels. Identify generated illustrations in notes; do not present them as documentary evidence.
+- **Deliver real assets:** save images in `images/` and use relative filenames. If search, download, or generation is unavailable, state that and put an image request or source link in notes. Never invent files or rights claims, or silently substitute crude SVGs.
+
 ## Layout rules for generated decks
 
 - Default to **two columns whenever a slide combines an image with explanatory text**. Keep the title above the columns. Do not stack a long paragraph or bullet list above or below a full-width picture.
@@ -163,9 +171,13 @@ Notes are visible below the current slide preview and exported to PowerPoint's s
 
 ## Preview and navigation
 
-Only the current slide appears in the preview. Move the text cursor into another slide to preview it, click its title in the outline, or use **Previous slide** and **Next slide**. Click any non-player part of the slide, its outline entry, Previous slide, or Next slide, then use Right/Down arrow for the next slide and Left/Up arrow for the previous slide. The counter identifies the current slide and total slide count.
+Only the current slide appears in the preview. Move the text cursor into another slide to preview it, click its thumbnail in the slide strip, or use **Previous slide** and **Next slide**. Click any non-player part of the slide, its outline entry, Previous slide, or Next slide, then use Right/Down arrow for the next slide and Left/Up arrow for the previous slide. The counter identifies the current slide and total slide count.
 
-Click a slide title, paragraph, bullet, image, table row, or code block in the preview to highlight its Markdown in the editor. The editor scrolls to reveal the selection and keeps a visible highlight while keyboard focus stays in the slide preview, so arrow keys still change slides. Previous/Next and numbered slide buttons also reveal and highlight the destination slide's heading or first block. Click the code editor when you want the keyboard to edit Markdown. Player controls retain their own arrow-key behavior; click outside a video to resume slide navigation. Ctrl-click a link (⌘-click on Mac) opens it in your browser.
+Drag a thumbnail to rearrange slides. A blue insertion line shows the destination; hold near either edge of the strip to scroll through a longer deck. The complete slide moves in the Markdown, including presenter notes, images, and other blocks. The moved slide stays selected. Undo/Redo works from the preview with Ctrl+Z / Ctrl+Shift+Z (⌘ on Mac). For keyboard reordering, focus a thumbnail and press Alt+Shift+Left or Alt+Shift+Right.
+
+Thumbnails show the slide's layout and images. Videos use a static play symbol, and presenter notes stay private. The strip is hidden during presenting and in exported files.
+
+Click a slide title, paragraph, bullet, image, table row, or code block in the preview to highlight its Markdown in the editor. The editor scrolls to reveal the selection and keeps a visible highlight while keyboard focus stays in the slide preview, so arrow keys still change slides. Previous/Next and slide thumbnails also reveal and highlight the destination slide's heading or first block. Click the code editor when you want the keyboard to edit Markdown. Player controls retain their own arrow-key behavior; click outside a video to resume slide navigation. Ctrl-click a link (⌘-click on Mac) opens it in your browser.
 
 **Add slide** inserts a `---` separator and the selected template after the current slide. Templates are ordinary editable Markdown:
 
@@ -312,6 +324,7 @@ Review overflow and image warnings before exporting. Split crowded content into 
 - Keep text brief and tables small enough to read on a projector.
 - Put teacher reminders and answers in `:::notes`, not on the visible slide.
 - Use real image filenames and descriptive alt text.
+- Prefer verified public-domain/CC0 images; use purposeful, accurate custom visuals when needed, and record sources or generation details in notes.
 - Do not add custom HTML, CSS, layout attributes, animations, or invented image files.
 
 ## Embedded videos

@@ -12,9 +12,19 @@
 .slide-inspector input[type=text] { width:170px; }
 .slide-inspector input, .slide-inspector select, .slide-inspector button { font:inherit; padding:4px 6px; }
 .slide-inspector span { color:#426074; }
-.slide-outline { display:flex; gap:6px; overflow-x:auto; padding:8px 14px; border-bottom:1px solid #c6d0d5; }
-.slide-outline button { flex:0 0 auto; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:5px 9px; color:#304958; background:#fff; border:1px solid #b9c8cf; border-radius:3px; cursor:pointer; }
-.slide-outline button[aria-current=true] { color:#fff; background:#175a80; border-color:#175a80; }
+.slide-outline { display:flex; gap:10px; overflow-x:auto; padding:9px 14px; border-bottom:1px solid #c6d0d5; scroll-padding:14px; }
+.slide-outline button { position:relative; flex:0 0 146px; width:146px; padding:6px; color:#304958; background:#f7f9fa; border:1px solid #b9c8cf; border-radius:4px; cursor:grab; text-align:left; }
+.slide-outline button:active { cursor:grabbing; }
+.slide-outline button[aria-current=true] { color:#fff; background:#175a80; border-color:#175a80; box-shadow:0 0 0 1px #175a80; }
+.slide-outline button:focus-visible { outline:3px solid #258cba; outline-offset:2px; }
+.slide-thumbnail { position:relative; display:block; overflow:hidden; background:white; pointer-events:none; border:1px solid #aabac5; box-sizing:content-box; }
+.slide-thumbnail .slide-canvas { position:absolute; left:0; top:0; pointer-events:none; user-select:none; }
+.slide-thumbnail-label { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; height:30px; margin-top:5px; overflow:hidden; overflow-wrap:anywhere; font:11px/15px Arial,sans-serif; pointer-events:none; }
+.slide-video-thumbnail { display:flex; align-items:center; justify-content:center; background:#172c3b; color:white; font:72px Arial,sans-serif; }
+.slide-outline .drop-before::before, .slide-outline .drop-after::after { content:''; position:absolute; z-index:2; top:0; bottom:0; width:4px; border-radius:2px; background:#2382b5; }
+.slide-outline .drop-before::before { left:-8px; }
+.slide-outline .drop-after::after { right:-8px; }
+.slide-reorder-status { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 body.slides-document #preview { display:block; padding:24px; }
 .slide-card { margin:0 auto 25px; width:fit-content; max-width:100%; }
 .slide-frame { position:relative; overflow:hidden; box-shadow:0 3px 12px #0003; background:white; }

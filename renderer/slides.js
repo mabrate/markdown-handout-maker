@@ -351,6 +351,21 @@
     }
     return result;
   }
+  // Move complete source chunks, using parser boundaries so separators inside
+  // fenced code and teacher notes stay attached to their slide.
+  function reorderEdit(text, from, to) {
+    const deck=parse(text),count=deck.slides.length;
+    if(!deck.enabled || !Number.isInteger(from) || !Number.isInteger(to) || from<0 || to<0 || from>=count || to>=count || from===to || deck.warnings.some(warning=>warning.includes('missing their closing')))return null;
+    const rows=text.split('\n'),offset=line=>Math.min(text.length,rows.slice(0,line).reduce((sum,row)=>sum+row.length+1,0));
+    const start=offset(deck.slides[0].startLine),eol=text.includes('\r\n')?'\r\n':'\n';
+    const chunks=deck.slides.map(slide=>text.slice(offset(slide.startLine),offset(slide.endLine)));
+    const [moved]=chunks.splice(from,1);chunks.splice(to,0,moved);
+    let body=chunks.map((chunk,index)=>index<chunks.length-1 && !chunk.endsWith('\n')?chunk+eol:chunk).join('---'+eol);
+    // An initial empty slide needs its own opening separator; otherwise the
+    // parser treats its whitespace as the gap after document metadata.
+    if(parse(text.slice(0,start)+body).slides.length<count)body='---'+eol+body;
+    return {start,end:text.length,text:body,index:to};
+  }
   // An explicit source edit, never an invisible layout change. Only uncomplicated
   // one-image slides qualify; manual columns, backgrounds and overlays stay intact.
   function imageTextEdit(text, index, imageDimensions = new Map()) {
@@ -514,5 +529,5 @@
     return lines.join('\n') + text.slice(meta.prefix.length);
   }
   const starter = '---\ntype: slides\ntheme: classroom\naspect: 16:9\n---\n\n# New lesson\n\nA short introduction to today’s learning.\n\n---\n\n# Investigate\n\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::\n\n---\n\n# Reflect\n\nWhat changed your thinking today?\n';
-  return { metadata, parse, scene, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, setting, themes, starter, plain, blocksFromMarkdown };
+  return { metadata, parse, scene, reorderEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, setting, themes, starter, plain, blocksFromMarkdown };
 });

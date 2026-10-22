@@ -22,7 +22,7 @@ let totalPoints = 0;
 let currentDocumentPath = null;
 let lastDocumentMode;
 const slideStudio = window.SlideStudio.mount({ source, preview, previewPanel, pageCount,
-  edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout, video: videoAssetUrl,
+  edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout, video: videoAssetUrl, refresh: render,
   guide: () => document.dispatchEvent(new Event('slides:guide'))
 });
 const handoutInspector = window.HandoutSettings.mount({source, preview, previewPanel, edit: replaceEditorSelection, isSlides: isSlideDocument});
@@ -1205,6 +1205,12 @@ if (window.handoutDesktop) {
     if (!wrappers[key]) return;
     event.preventDefault();
     wrapEditorSelection(...wrappers[key]);
+  });
+  previewPanel.addEventListener('keydown',event=>{
+    if(!isSlideDocument() || !(event.ctrlKey||event.metaKey) || event.altKey || !['z','y'].includes(event.key.toLowerCase()) || !event.target.closest('#preview,.slide-outline,.slide-navigation'))return;
+    event.preventDefault();event.stopPropagation();
+    if(event.key.toLowerCase()==='y'||event.shiftKey)redoEditorChange();else undoEditorChange();
+    preview.focus({preventScroll:true});
   });
   resetEditorHistory();
 

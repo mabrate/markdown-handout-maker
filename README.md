@@ -257,7 +257,9 @@ cropping, overlays, text size, color, fonts, alignment, and position. Use
 See the slide guide for the full syntax and examples.
 
 Only the current slide is shown in the preview. Move the editor cursor to another
-slide, use the outline, or choose **Previous slide** / **Next slide**. Templates
+slide, click a thumbnail, or choose **Previous slide** / **Next slide**. Drag thumbnails
+to reorder complete slides and their notes directly in the Markdown. Undo/Redo is
+available from the preview; Alt+Shift+Left/Right moves a focused thumbnail. Templates
 include Blank content, Bell-ringer, Fullscreen image with text, and Title slide,
 all ordinary editable Markdown. QR codes and image widths use the handout syntax;
 resize them proportionally in the preview. Markdown tables remain native editable
