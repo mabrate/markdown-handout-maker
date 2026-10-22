@@ -4,6 +4,29 @@ Use this guide when an AI agent creates or revises presentations for The Markdow
 
 Separate slides with a line containing three dashes: `---`. Arrange content with `:::` blocks when needed. There are no slide layout types to select.
 
+## Layout rules for generated decks
+
+- Default to **two columns whenever a slide combines an image with explanatory text**. Keep the title above the columns. Do not stack a long paragraph or bullet list above or below a full-width picture.
+- Start with `:::columns widths=3/5,2/5`: concise text on the left, one image on the right. Use equal halves for a balanced image and short text; give a wide image more room when the text is very short. Portrait images generally need less width.
+- Aim for 3–5 short bullets or roughly 35–60 body words per image-and-text slide. These are planning targets, not a guarantee of fit. Split dense material across slides and move teacher detail into `:::notes` rather than shrinking everything into one slide.
+- Omit image dimensions initially. The app preserves the image proportions and fits it inside the remaining column space. A `width` parameter is a maximum, not permission to push content off the slide. Avoid fixed image heights unless a specific size is required.
+- Use the **Two columns: text + image** template for a starter. For an existing simple slide with one image, **Auto layout** chooses column proportions using text length, image aspect ratio, and estimated overflow, then writes ordinary `:::columns` Markdown. It preserves the title and teacher notes. It does not replace existing columns, backgrounds, or positioned text, and may still recommend splitting very long content.
+- Review the preview and overflow warnings. Use real available image filenames; do not invent assets.
+
+```md
+# What does the evidence show?
+
+:::columns widths=3/5,2/5
+:::column
+- Describe one visible feature.
+- Connect it to the key idea.
+- State the evidence for your explanation.
+
+:::column
+![Describe the actual lesson image](images/specimen.jpg)
+:::
+```
+
 ## Start a deck
 
 Choose **File → New Slide Deck**, or create a `.md` file beginning with this YAML:
@@ -140,15 +163,16 @@ Notes are visible below the current slide preview and exported to PowerPoint's s
 
 ## Preview and navigation
 
-Only the current slide appears in the preview. Move the text cursor into another slide to preview it, click its title in the outline, or use **Previous slide** and **Next slide**. Click an empty part of the slide or Tab into the preview, then use Right/Down arrow for the next slide and Left/Up arrow for the previous slide. The counter identifies the current slide and total slide count.
+Only the current slide appears in the preview. Move the text cursor into another slide to preview it, click its title in the outline, or use **Previous slide** and **Next slide**. Click any non-player part of the slide, its outline entry, Previous slide, or Next slide, then use Right/Down arrow for the next slide and Left/Up arrow for the previous slide. The counter identifies the current slide and total slide count.
 
-Click a slide title, paragraph, bullet, image, table row, or code block in the preview to highlight its Markdown in the editor. The editor scrolls to reveal the selection. Ctrl-click a link (⌘-click on Mac) opens it in your browser.
+Click a slide title, paragraph, bullet, image, table row, or code block in the preview to highlight its Markdown in the editor. The editor scrolls to reveal the selection and keeps a visible highlight while keyboard focus stays in the slide preview, so arrow keys still change slides. Previous/Next and numbered slide buttons also reveal and highlight the destination slide's heading or first block. Click the code editor when you want the keyboard to edit Markdown. Player controls retain their own arrow-key behavior; click outside a video to resume slide navigation. Ctrl-click a link (⌘-click on Mac) opens it in your browser.
 
 **Add slide** inserts a `---` separator and the selected template after the current slide. Templates are ordinary editable Markdown:
 
 - **Blank content:** a simple heading and content placeholder.
 - **Bell-ringer:** a class topic, opening question, agenda, and private teacher notes.
 - **Fullscreen image with text:** a cropped background, dark overlay, and movable white title. Set the image filename in its background settings.
+- **Two columns: text + image:** a title, three brief teaching points, and an image in a separate column. Replace `image.jpg` with a real lesson image.
 - **Title slide:** a large, centered title and a separate subtitle. Both are independently movable and use the current theme's text color.
 
 **Append slide** adds the selected template at the end of the deck, regardless of which slide you are editing.
@@ -289,3 +313,32 @@ Review overflow and image warnings before exporting. Split crowded content into 
 - Put teacher reminders and answers in `:::notes`, not on the visible slide.
 - Use real image filenames and descriptive alt text.
 - Do not add custom HTML, CSS, layout attributes, animations, or invented image files.
+
+## Embedded videos
+
+Use **Slides → Snippets → YouTube video** or **Local video**:
+
+```md
+# Observe the garden
+
+[youtube:https://www.youtube.com/watch?v=M7lc1UVf-VE]{start=30 width=8in}
+
+---
+# Our field recording
+
+[video:media/garden-tour.mp4]{width=8in}
+```
+
+Both blocks work in columns. Width accepts `in`, `cm`, `mm`, `px`, or `%`; omitted width uses the available space. Players use a 16:9 area. `start` is an optional YouTube start time in whole seconds. Watch, share, Shorts, embed URLs, and bare YouTube IDs are accepted.
+
+YouTube loads only after **Load YouTube video** is clicked and requires internet access and permission from the video owner to embed it. Local videos use ordinary playback controls and work offline. Keep local videos inside the open lesson folder, referenced relative to the Markdown file. The file-browser video preview includes **Insert video**. MP4 is recommended; other recognized formats (M4V, WebM, OGV/OGG, MOV) depend on platform and codec support.
+
+Playback controls work during presenting without advancing the slide. Switching slides or leaving presentation stops the previous player. Click outside the player, or focus the slide, to resume slide navigation; Escape exits presentation.
+
+PDF and print output show video reference cards. PowerPoint exports include local video files as embedded media (up to 200 MB per file) and YouTube as online video objects. PowerPoint playback depends on the version, platform, codecs, and—in YouTube's case—network access. The local video is included in the PPTX, so the exported file does not need the original video alongside it. Actual playback should be checked in the PowerPoint installation used for class.
+
+## How image sizes are chosen
+
+The app reads each image's actual dimensions and preserves its aspect ratio. A flowing image fits both its column width and the height left after reserving space for following content. Images with a `width` parameter use it as a maximum and can shrink further to fit the available height. QR codes keep their square sizing rules. Explicit image heights remain manual constraints and can still cause overflow. Background images continue to cover the whole slide and crop excess edges. Preview and PowerPoint share the same geometry.
+
+**Auto layout** is an explicit, undoable edit. It tries several two-column proportions and prefers arrangements that fit the estimated text and image dimensions. It does not silently rearrange your source while you type, and cannot judge the educational importance or visual detail of an image. If text alone exceeds the slide, split it across slides.

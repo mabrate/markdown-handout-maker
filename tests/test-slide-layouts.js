@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('assert/strict'),slides=require('../renderer/slides');
+const prefix='---\ntype: slides\n---\n',body='- Observe the organism carefully.\n- Compare its shape with the example.\n- Record one piece of evidence.\n- Explain what you notice.';
+const source=prefix+'# Observations\n\n'+body+'\n\n![Specimen](portrait.png){width=8in}\n\n:::notes\nPrivate teacher reminder.\n:::\n\n---\n# Next slide\n\nLeave this unchanged.\n';
+const dimensions=new Map([['portrait.png',{width:600,height:1200}]]);
+const initial=slides.scene(slides.parse(source),0,dimensions),picture=initial.elements.find(element=>element.type==='image');assert.ok(picture.y+picture.h<=6.96);assert.ok(Math.abs(picture.w/picture.h-.5)<1e-6,'Preserve natural image proportions while fitting available height');
+const edit=slides.imageTextEdit(source,0,dimensions);assert.ok(edit);assert.match(edit.text,/:::columns widths=/);assert.match(edit.text,/:::column\n- Observe/);assert.match(edit.text,/:::column\n!\[Specimen\]/);assert.match(edit.text,/:::notes\nPrivate teacher reminder\.\n:::/);
+const revised=source.slice(0,edit.start)+edit.text+source.slice(edit.end),deck=slides.parse(revised);assert.equal(deck.slides.length,2);assert.equal(deck.slides[1].notes,'');assert.equal(slides.plain(deck.slides[1].title),'Next slide');assert.equal(revised.slice(edit.start+edit.text.length),source.slice(edit.end));assert.equal(deck.slides[0].notes,'Private teacher reminder.');assert.equal(slides.scene(deck,0,dimensions).overflow,false);
+assert.equal(slides.imageTextEdit(revised,0,dimensions),null,'Keep existing manual columns');
+const short=prefix+'# Look\n\nA short explanation.\n\n![Picture](image.png)';
+const wide=slides.imageTextEdit(short,0,new Map([['image.png',{width:1800,height:700}]]));const tall=slides.imageTextEdit(short,0,new Map([['image.png',{width:700,height:1800}]]));assert.match(wide.text,/widths=2\/5,3\/5/);assert.match(tall.text,/widths=3\/5,2\/5/);
+assert.equal(slides.imageTextEdit(prefix+'# Two\n\nText\n\n![A](a.png)\n\n![B](b.png)',0),null);
+assert.equal(slides.imageTextEdit(prefix+':::background\n![A](a.png)\n:::\n\nText',0),null);
+assert.equal(slides.imageTextEdit(prefix+'# QR\n\nText\n\n[qr:https://example.com]',0),null);
+const crlf=source.replace(/\n/g,'\r\n'),windows=slides.imageTextEdit(crlf,0,dimensions);assert.ok(windows);assert.equal(windows.text.replace(/\r\n/g,'').includes('\n'),false);assert.equal(crlf.slice(windows.end),source.slice(edit.end).replace(/\n/g,'\r\n'));
+console.log('Content-aware image/text columns, aspect-preserving sizing, notes, manual layouts and line endings passed');

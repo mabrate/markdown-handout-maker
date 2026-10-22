@@ -25,6 +25,7 @@ async function checkOfficeArchive(file) {
 async function previewDocument(root, target) {
   const file = await checkedPath(root, target);
   const stat = await fs.stat(file);
+  if(stat.isFile() && /\.(mp4|m4v|webm|ogv|ogg|mov)$/i.test(file))return {kind:'video',url:pathToFileURL(file).href};
   if (!stat.isFile() || stat.size > 20 * 1024 * 1024) throw Error('Preview supports files up to 20 MB. Open this file in its default app.');
   const ext = path.extname(file).toLowerCase();
   if (ext === '.pdf') return { kind: 'pdf', url: pathToFileURL(file).href };

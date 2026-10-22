@@ -38,6 +38,7 @@ function rebaseReferences(content, oldPath, newPath) {
   return content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g).map((part, index) => index % 2 ? part : part
     .replace(/(!?\[[^\]\n]*\]\(\s*)(?:<([^>]+)>|([^\s)]+))/g, (all, prefix, angle, plain) => prefix + (angle !== undefined ? `<${rebase(angle)}>` : rebase(plain)))
     .replace(/^(\s{0,3}\[[^\]\n]+\]:\s*)(?:<([^>]+)>|(\S+))/gm, (all, prefix, angle, plain) => prefix + (angle !== undefined ? `<${rebase(angle)}>` : rebase(plain)))
+    .replace(/(\[video:)([^\]\n]+)(\])/gi, (all,prefix,url,close) => prefix + rebase(url) + close)
     .replace(/(\b(?:src|href)\s*=\s*)(["'])(.*?)\2/gi, (all, prefix, quote, url) => prefix + quote + rebase(url) + quote)).join('');
 }
 async function moveHandout(root, source, parent, content) {

@@ -14,8 +14,9 @@
     }
     const themeSelect = select('Slide theme', Object.entries(model.themes).map(([value, theme]) => [value, theme.name]), 'Theme');
     const aspectSelect = select('Slide aspect ratio', [['16:9', '16:9'], ['4:3', '4:3']], 'Aspect');
-    const templateSelect = select('New slide', [['content', 'Blank content'], ['bell-ringer', 'Bell-ringer'], ['image-text', 'Fullscreen image with text'], ['title', 'Title slide']], 'Template');
+    const templateSelect = select('New slide', [['content', 'Blank content'], ['bell-ringer', 'Bell-ringer'], ['image-text', 'Fullscreen image with text'], ['title', 'Title slide'], ['image-columns', 'Two columns: text + image']], 'Template');
     const templates = {
+      'image-columns': '# Slide topic\n\n:::columns widths=3/5,2/5\n:::column\n## Key idea\n\n- Make one clear point.\n- Add a short supporting detail.\n- Ask students what they notice.\n\n:::column\n![Describe the image](image.jpg)\n:::',
       content: '# New slide\n\nAdd your content here.',
       'image-text': ':::background overlay=dark opacity=35\n![Background](image.jpg)\n:::\n\n:::text x=8% y=65% width=84% size=54 color=white\n**Your title here**\n:::',
       title: ':::text x=8% y=25% width=84% size=72 color=$ink align=center\n**Presentation title**\n:::\n\n:::text x=12% y=52% width=76% size=32 color=$ink align=center\nSubtitle or a short description\n:::',
@@ -38,6 +39,8 @@
         background: '\n:::background\n![Background](image.jpg)\n:::\n\n',
         text: '\n:::text x=10% y=65% width=80% size=54 color=white\n**Your text here**\n:::\n\n',
         notes: '\n:::notes\nTeacher reminders go here.\n:::\n\n',
+        youtube: '\n[youtube:https://www.youtube.com/watch?v=M7lc1UVf-VE]\n\n',
+        video: '\n[video:media/clip.mp4]\n\n',
         qr: '\n[qr:https://example.com]{width=1.5in}\n\n',
         center: '\n:::center\n## Centered text\n\nAdd your content here.\n:::\n\n',
         checklist: '\n:::checklist\n- First item\n- Second item\n:::\n\n',
@@ -47,11 +50,12 @@
       const offset = lineOffset(kind === 'background' ? deck.slides[selected].startLine : deck.slides[selected].endLine);
       source.setSelectionRange(offset, offset); options.edit(snippets[kind], 1);
     }
+    const autoLayoutButton=button('Auto layout',()=>applyEdit(model.imageTextEdit(source.value,selected,imageDimensions))); autoLayoutButton.title='Arrange one image and its text in columns; preserve notes and choose widths to fit the content.';
     button('Present', present); button('Export PowerPoint…', options.pptx); button('Export PDF…', options.pdf);
     const navigation = document.createElement('div'); navigation.className = 'slide-navigation'; navigation.hidden = true;
     const previous = document.createElement('button'), next = document.createElement('button'), counter = document.createElement('span');
     previous.textContent = 'Previous slide'; next.textContent = 'Next slide'; counter.setAttribute('aria-live', 'polite');
-    previous.onclick = () => jump(selected - 1); next.onclick = () => jump(selected + 1); navigation.append(previous, counter, next);
+    previous.onclick = () => jump(selected - 1, false); next.onclick = () => jump(selected + 1, false); navigation.append(previous, counter, next);
     const outline = document.createElement('nav'); outline.className = 'slide-outline'; outline.hidden = true; outline.setAttribute('aria-label', 'Slide outline');
     const summary = document.createElement('p'); summary.className = 'slide-warning-summary'; summary.hidden = true; summary.setAttribute('role', 'status');
     previewPanel.insertBefore(toolbar, previewPanel.firstChild); toolbar.after(navigation, outline, summary);
@@ -66,13 +70,18 @@
       const index = deck.slides.findIndex(slide => line >= (slide.markerLine >= 0 ? slide.markerLine : slide.startLine) && line < slide.endLine);
       return index >= 0 ? index : line < deck.slides[0].startLine ? 0 : deck.slides.length - 1;
     }
-    function jump(index, focusEditor = true) {
+    function jump(index, focusEditor = false) {
       if (!deck || index < 0 || index >= deck.slides.length) return;
+      // Commit the destination before rendering. Preview navigation owns the
+      // current slide; asynchronous textarea selection events must not undo it.
+      const slide=deck.slides[index],first=slide.blocks.find(block=>Number.isInteger(block.sourceStart)),firstLine=first?.sourceStart ?? slide.startLine,location=slide.titleSource||{sourceStart:firstLine,sourceEnd:firstLine+1};
+      if(focusEditor)source.focus();else preview.focus({preventScroll:true});
+      source.setSelectionRange(lineOffset(location.sourceStart),Math.min(source.value.length,lineOffset(location.sourceEnd)));
       showCurrent(index);
-      const offset = lineOffset(deck.slides[index].startLine); source.setSelectionRange(offset, offset); source.scrollTop = deck.slides[index].startLine * 22.4;
-      if (focusEditor) source.focus(); else preview.focus({ preventScroll: true });
+      source.dispatchEvent(new CustomEvent('editor:reveal-lines',{detail:{startLine:location.sourceStart,endLine:location.sourceEnd,focusEditor}}));
     }
     preview.addEventListener('keydown', event => {
+      if (event.target.closest('.video-player')) return;
       if (!mode || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (!['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation();
@@ -99,7 +108,7 @@
         input.value = value; input.onchange = () => { if (input.checkValidity()) change(config.values || ['text', 'color'].includes(input.type) ? input.value : Number(input.value)); else input.reportValidity(); };
         input.addEventListener('click', event => event.stopPropagation()); wrapper.append(input); inspector.append(wrapper); return input;
       };
-      if (element.background) {
+      if (element.type==='video') { const hint=document.createElement('span');hint.textContent='Edit the video URL, filename, width, or start time in the highlighted Markdown. Click the player to play.';inspector.append(hint); } else if (element.background) {
         const imagePath=field('Image path', element.src, value => {const edit=model.backgroundEdit(source.value,element,{imagePath:value});imagePath.setCustomValidity(edit?'':'Use a relative image filename from your lesson folder.');if(edit)applyEdit(edit);else imagePath.reportValidity();}, { type: 'text' });
         imagePath.oninput=()=>imagePath.setCustomValidity('');
         field('Crop position', element.position, value => applyEdit(model.backgroundEdit(source.value, element, { position: value })), { values: ['center','left','right','top','bottom','top-left','top-right','bottom-left','bottom-right'].map(value => [value,value]) });
@@ -190,7 +199,7 @@
       }};
       for (const [elementIndex, element] of scene.elements.entries()) {
         let item;
-        if (element.type === 'image') {
+        if (element.type === 'video') { item=window.HandoutVideo.create(element,options.video||imageResolver); } else if (element.type === 'image') {
           item = document.createElement('img'); item.alt = element.alt; item.src = element.qrSvg ? element.src : imageResolver(element.src) || '';
           if (element.qrSvg) item.classList.add('slide-qr');
           if (element.background) { item.classList.add('slide-background'); item.style.objectFit = 'cover'; item.style.objectPosition = `${element.anchor[0] * 100}% ${element.anchor[1] * 100}%`; }
@@ -228,6 +237,7 @@
         } else node.append(item);
       }
       if (interactive) node.addEventListener('click', event => {
+        if (event.target.closest('.video-player')) return;
         if (node.dataset.suppressClick) { delete node.dataset.suppressClick; event.preventDefault(); event.stopImmediatePropagation(); return; }
         const selected = event.target.closest('.slide-positioned-host');
         node.querySelectorAll('.slide-positioned-host').forEach(host => host.classList.toggle('is-selected', host === selected));
@@ -260,7 +270,7 @@
         if (button.disabled) button.title = action === 'fit' ? 'Automatic text fitting is already enabled, or a block needs fixing.' : scenes[index].elements.some(element => element.background || element.positioned) ? 'This slide uses a background or manually positioned text. Edit its blocks or use text fitting.' : 'Needs at least two paragraphs or list items, with no existing columns or incomplete blocks.';
         button.onclick = event => {
           event.stopPropagation();
-          const edit = model.overflowEdit(source.value, index, action); if (!edit) return;
+          const edit = (action==='columns' && model.imageTextEdit(source.value,index,imageDimensions)) || model.overflowEdit(source.value, index, action); if (!edit) return;
           source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0);
         };
         actions.append(button);
@@ -275,10 +285,12 @@
       }
     }
     function showCurrent(index) {
-      selected = index; preview.replaceChildren(card(index));
+      selected = index; window.HandoutVideo.stop(preview); preview.replaceChildren(card(index));
       counter.textContent = `${index + 1} / ${scenes.length}`; previous.disabled = index === 0; next.disabled = index === scenes.length - 1;
       pageCount.textContent = `Slide ${index + 1} of ${scenes.length} · ${deck.settings.aspect}`;
       outline.querySelectorAll('button').forEach((button, n) => button.setAttribute('aria-current', n === index ? 'true' : 'false'));
+      outline.querySelector('[aria-current=true]')?.scrollIntoView({block:'nearest',inline:'nearest'});
+      autoLayoutButton.disabled=!model.imageTextEdit(source.value,selected,imageDimensions);
       refreshInspector();
       previewPanel.scrollTop = 0;
       requestAnimationFrame(() => { fit(); checkOverflow(preview); });
@@ -303,23 +315,25 @@
     function stopPresentation() { if (presentation) presentation.close(); }
     function present() {
       if (!mode || presentation) return;
+      window.HandoutVideo.stop(preview);
       presentationIndex = selected;
       let enteredFullscreen = false;
       presentation = document.createElement('dialog'); presentation.className = 'slide-presentation'; presentation.setAttribute('aria-label', 'Slideshow presentation'); presentation.setAttribute('aria-description', 'Use arrow keys or click to change slides. Escape returns to editing.'); presentation.tabIndex = -1;
       stage = document.createElement('div'); stage.className = 'slide-stage';
-      function draw() { stage.replaceChildren(canvas(scenes[presentationIndex])); presentation.dataset.slideIndex = presentationIndex; requestAnimationFrame(fitStage); }
+      function draw() { window.HandoutVideo.stop(stage); stage.replaceChildren(canvas(scenes[presentationIndex])); presentation.dataset.slideIndex = presentationIndex; requestAnimationFrame(fitStage); }
       function advance(delta) { presentationIndex = Math.max(0, Math.min(scenes.length - 1, presentationIndex + delta)); draw(); }
       presentation.append(stage); document.body.append(presentation); presentation.showModal();
       presentation.addEventListener('keydown', event => {
         event.stopPropagation();
+        if (event.target.closest('.video-player') && event.key !== 'Escape') return;
         if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(event.key)) { event.preventDefault(); advance(1); }
         else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(event.key)) { event.preventDefault(); advance(-1); }
         else if (event.key === 'Home') { event.preventDefault(); presentationIndex = 0; draw(); }
         else if (event.key === 'End') { event.preventDefault(); presentationIndex = scenes.length - 1; draw(); }
         else if (event.key === 'Escape') { event.preventDefault(); stopPresentation(); }
       });
-      presentation.addEventListener('click', event => { const link = event.target.closest('a'); if (link) { event.preventDefault(); if (event.ctrlKey || event.metaKey) window.handoutDesktop?.openWebLink(link.href); } else advance(event.shiftKey ? -1 : 1); });
-      presentation.addEventListener('contextmenu', event => { event.preventDefault(); advance(-1); });
+      presentation.addEventListener('click', event => { if(event.target.closest('.video-player')){window.HandoutVideo.activate(event);return;} const link = event.target.closest('a'); if (link) { event.preventDefault(); if (event.ctrlKey || event.metaKey) window.handoutDesktop?.openWebLink(link.href); } else advance(event.shiftKey ? -1 : 1); });
+      presentation.addEventListener('contextmenu', event => { if(event.target.closest('.video-player'))return;event.preventDefault(); advance(-1); });
       const onFullscreen = () => { if (enteredFullscreen && !document.fullscreenElement) stopPresentation(); else fitStage(); };
       document.addEventListener('fullscreenchange', onFullscreen);
       const nativeTask = window.handoutDesktop?.setPresentation ? window.handoutDesktop.setPresentation(true) : null;
@@ -327,7 +341,7 @@
         document.removeEventListener('fullscreenchange', onFullscreen); const old = presentation; presentation = null; stage = null;
         if (nativeTask) nativeTask.then(() => window.handoutDesktop.setPresentation(false)).catch(() => {});
         if (enteredFullscreen && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-        old.remove(); if (mode && !suppressPresentationJump) jump(Math.min(presentationIndex, deck.slides.length - 1)); suppressPresentationJump = false;
+        window.HandoutVideo.stop(old); old.remove(); if (mode && !suppressPresentationJump) jump(Math.min(presentationIndex, deck.slides.length - 1)); suppressPresentationJump = false;
       }, { once: true });
       draw(); presentation.focus();
       if (!nativeTask && !document.fullscreenElement) document.documentElement.requestFullscreen?.().then(() => { enteredFullscreen = true; fitStage(); }).catch(() => {});
@@ -345,7 +359,7 @@
       deck = parsed; imageResolver = resolveImage; imageDimensions=new Map();
       const loading=[];
       const collect=blocks=>{for(const block of blocks){
-        if(block.type==='image' && !block.qrSvg && (block.mediaWidth || block.mediaHeight)){
+        if(block.type==='image' && !block.qrSvg){
           const url=resolveImage(block.src);if(url){
             if(!dimensionCache.has(url)){
               const entry={value:null};const image=new Image();image.src=url;
@@ -357,16 +371,16 @@
         if(block.blocks)collect(block.blocks);if(block.columns)block.columns.forEach(collect);
       }};deck.slides.forEach(slide=>collect(slide.blocks));
       scenes = deck.slides.map((_, index) => model.scene(deck, index,imageDimensions));
-      imageReady=Promise.all(loading).then(results=>{if(deck!==parsed)return;let changed=false;for(const result of results)if(result?.value){imageDimensions.set(result.src,result.value);changed=true;}if(changed){scenes=deck.slides.map((_,index)=>model.scene(deck,index,imageDimensions));showCurrent(selected);}});
+      imageReady=Promise.all(loading).then(results=>{if(deck!==parsed)return;let changed=false;for(const result of results)if(result?.value){imageDimensions.set(result.src,result.value);changed=true;}if(changed){scenes=deck.slides.map((_,index)=>model.scene(deck,index,imageDimensions));const focused=preview.contains(document.activeElement);showCurrent(selected);if(focused)preview.focus({preventScroll:true});}});
       themeSelect.value = deck.settings.theme; aspectSelect.value = deck.settings.aspect;
       outline.replaceChildren();
-      for (const [index, slide] of deck.slides.entries()) { const item = document.createElement('button'); item.textContent = `${index + 1}. ${model.plain(slide.outlineTitle || slide.title) || 'Untitled slide'}`; item.onclick = () => jump(index); outline.append(item); }
+      for (const [index, slide] of deck.slides.entries()) { const item = document.createElement('button'); item.textContent = `${index + 1}. ${model.plain(slide.outlineTitle || slide.title) || 'Untitled slide'}`; item.onclick = () => jump(index, false); outline.append(item); }
       if (deck.warnings.length) { summary.hidden = false; summary.textContent = deck.warnings.join(' '); }
       let style = document.querySelector('#dynamic-page-size'); if (!style) { style = document.createElement('style'); style.id = 'dynamic-page-size'; document.head.append(style); }
       style.textContent = `@page { size: ${scenes[0].width}in 7.5in; margin: 0; }`;
       showCurrent(cursorSlide()); syncSelection(); return true;
     }
-    function syncSelection() { if (mode && deck) {
+    function syncSelection(event) { if(event && document.activeElement!==source)return; if (mode && deck) {
       const index = cursorSlide(); if (index !== selected) showCurrent(index);
       const line=source.value.slice(0,source.selectionStart).split('\n').length-1;
       const target=scenes[selected].elements.find(element=>!element.footer && line >= (element.background?element.blockStart:element.sourceStart) && line < (element.background?element.blockEnd:element.sourceEnd));

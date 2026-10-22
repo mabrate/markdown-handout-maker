@@ -357,3 +357,23 @@ Ask for individual evidence of learning. {{lines:3:inline}}
 ```
 
 My handout request follows:
+
+## Embedded videos
+
+Use a standalone line for a YouTube video or a local video file:
+
+```md
+[youtube:https://www.youtube.com/watch?v=M7lc1UVf-VE]
+
+[youtube:https://youtu.be/M7lc1UVf-VE?t=30]{width=5in start=30}
+
+[video:media/garden-tour.mp4]{width=5in}
+```
+
+- Insert these from **Snippets → YouTube Video** or **Local Video**. Replace the example URL or filename.
+- YouTube supports watch/share/Shorts/embed URLs and bare video IDs. Click **Load YouTube video**, then use its player. An internet connection and a video that permits embedding are required. The app uses YouTube's privacy-enhanced player and does not load it until clicked.
+- `start` is an optional YouTube start time in whole seconds (0–86400). A URL's `t` or `start` value is used when the explicit setting is absent.
+- `width` accepts `in`, `cm`, `mm`, `px`, or `%`. Leave it out for the available column width. Videos use a 16:9 player area.
+- Local filenames are relative to the Markdown file and must resolve inside the open lesson folder. Use `%20` for spaces, or insert the video from its file-browser preview. MP4 is recommended; M4V, WebM, OGV/OGG, and MOV are also recognized, with playback depending on the file's codecs and the platform.
+- Click a video in the file browser to preview it, then choose **Insert video**. Local playback works offline and does not copy the video into Markdown. Keep the video with the lesson files when sharing.
+- Printed handouts and PDFs show a reference card with the YouTube URL or local filename instead of an interactive player. Video syntax inside fenced code remains literal.

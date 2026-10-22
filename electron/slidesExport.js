@@ -77,7 +77,17 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
           margin: 0, valign: 'top', lineSpacingMultiple: 1.2, paraSpaceAfter: 0, fit: 'none' });
         continue;
       }
-      if (element.type === 'text') {
+      if (element.type === 'video') {
+        if(element.provider==='youtube')page.addMedia({...position,type:'online',link:`https://www.youtube.com/embed/${element.id}${element.start?'?start='+element.start:''}`});
+        else {
+          try {
+            if(!root)throw Error('Save the deck in its lesson folder before exporting a local video.');
+            const file=await checkedPath(root,path.resolve(documentPath?path.dirname(documentPath):root,decodeURIComponent(element.src)));
+            const stat=await fs.stat(file);if(!stat.isFile()||stat.size>200*1024*1024)throw Error('Use a video file smaller than 200 MB for PowerPoint export.');
+            page.addMedia({...position,type:'video',path:file});
+          }catch(error){throw Error(`Slide ${index+1}, video “${element.value}”: ${error.message}`);}
+        }
+      } else if (element.type === 'text') {
         let runs = element.runs.map(run => ({ text: run.text, options: { bold: !!(run.bold || element.bold), italic: !!run.italic, ...(run.code ? { fontFace: 'Courier New' } : {}), ...(run.href ? { hyperlink: { url: run.href }, ...(element.positioned ? { color: element.color } : {}) } : {}) } }));
         if(element.positioned && element.paragraphs?.some(paragraph=>paragraph.bullet)){
           runs=[];

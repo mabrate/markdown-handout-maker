@@ -6,6 +6,10 @@ const layoutSelect = document.querySelector("#layout-select");
 const previewPanel = document.querySelector(".preview-panel");
 const workspace = document.querySelector(".workspace");
 const assetMap = new Map();
+const videoObjectUrls = new Set();
+const videoAssetMap = new Map();
+function clearAssets() { for (const url of videoObjectUrls) URL.revokeObjectURL(url); videoObjectUrls.clear(); videoAssetMap.clear(); assetMap.clear(); }
+function videoAssetUrl(src) { let decoded; try { decoded = decodeURIComponent(src); } catch { return null; } return videoAssetMap.get(src) || videoAssetMap.get(decoded) || null; }
 let renderTimer;
 let liveSourceVersion = null;
 let liveAssetMode = false;
@@ -18,7 +22,7 @@ let totalPoints = 0;
 let currentDocumentPath = null;
 let lastDocumentMode;
 const slideStudio = window.SlideStudio.mount({ source, preview, previewPanel, pageCount,
-  edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout,
+  edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout, video: videoAssetUrl,
   guide: () => document.dispatchEvent(new Event('slides:guide'))
 });
 const handoutInspector = window.HandoutSettings.mount({source, preview, previewPanel, edit: replaceEditorSelection, isSlides: isSlideDocument});
@@ -83,6 +87,8 @@ Teacher answer
   heading: "## New section\n\n",
   checklist: ":::checklist\n- First checklist item\n- Second checklist item\n- Third checklist item\n:::\n\n",
   question: ":::question type=short lines=3\nWhat is the answer?\n:::answer\nTeacher answer\n:::\n\n",
+  youtube: "[youtube:https://www.youtube.com/watch?v=M7lc1UVf-VE]\n\n",
+  video: "[video:media/clip.mp4]\n\n",
   "multiple-choice": ":::question type=mc\nWhich answer is correct?\n- First choice\n- Correct choice *\n- Third choice\n:::\n\n",
   lines: "{{lines:3}}\n\n",
   "inline-lines": "Answer here: {{lines:2:inline}}\n\n",
@@ -320,7 +326,7 @@ Draw one food chain and label the producer and consumers.
 {{space:8:dots}}
 `;
 
-if (!window.handoutDesktop) source.value = example;
+if (!window.handoutDesktop) { source.value = example; preview.addEventListener('click', event => window.HandoutVideo.activate(event)); }
 
 function escapeHtml(value) {
   return value.replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -442,14 +448,22 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
     const placeholder = /^@@BLOCK(\d+)@@$/.exec(value);
     if (placeholder) placeholders[Number(placeholder[1])].sourceLocation = location;
   };
-  let i = 0;
+  let i = 0, codeFence = null;
 
   while (i < lines.length) {
     iterationStart = i;
     const line = lines[i];
+    const fenceMarker = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if(fenceMarker){if(!codeFence)codeFence=fenceMarker[1];else if(codeFence[0]===fenceMarker[1][0]&&fenceMarker[1].length>=codeFence.length)codeFence=null;emit(line);i++;continue;}
+    if(codeFence){emit(line);i++;continue;}
     if (!line.trim()) { emit(""); i++; continue; }
     if (/^ {0,3}#{1,2}(?:\s|$)/.test(line)) emit("<!--HANDOUT_QUESTION_RESET-->");
 
+    const video = window.HandoutVideo.parse(line);
+    if (video) {
+      const token = `@@BLOCK${placeholders.length}@@`;
+      placeholders.push({ type: 'video', video }); emit(token); i++; continue;
+    }
     const qrMatch = line.match(/^\s*\[qr:([^\]]*)\](?:\{([^}]*)\})?\s*$/i);
     if (qrMatch) {
       const token = `@@BLOCK${placeholders.length}@@`;
@@ -659,6 +673,8 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
     if (block.type === "pagebreak") {
       return '<div class="handout-pagebreak" aria-hidden="true"></div>';
     }
+
+    if (block.type === 'video') return located(window.HandoutVideo.markup(block.video, videoAssetUrl));
 
     if (block.type === "qr") {
       return located(window.HandoutQr.renderQrBlock(block.value, block.attributes));
@@ -930,6 +946,7 @@ function render() {
   const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default');
   if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default').catch(() => {}); }
   if (slideStudio.render(source.value, slideImageUrl)) { handoutInspector.hide(); statusText.textContent = 'Slide preview updated'; return; }
+  window.HandoutVideo.stop(preview);
   document.querySelector('.media-resize-outline')?.remove();
   const previousScroll = previewPanel.scrollTop;
   totalPoints = [...source.value.matchAll(/:::question(?:\s+[^\n]*)?/g)].reduce((sum, match) => {
@@ -958,11 +975,14 @@ function scheduleRender() {
 async function loadFiles(files) {
   liveAssetMode = false;
   liveSourceVersion = null;
-  assetMap.clear();
+  clearAssets();
   let markdownFile;
   for (const file of files) {
     const relative = file.webkitRelativePath ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name;
     if (/\.md(?:own)?$/i.test(file.name) && !markdownFile) markdownFile = file;
+    if (window.HandoutVideo.extensions.test(file.name)) {
+      const url = URL.createObjectURL(file); videoObjectUrls.add(url); videoAssetMap.set(relative,url); assetMap.set(relative, url); assetMap.set(file.name, url);
+    }
     if (file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name)) {
       const url = await fileToDataUrl(file);
       assetMap.set(relative, url);
@@ -1086,13 +1106,16 @@ if (window.handoutDesktop) {
   const searchHighlight = document.createElement("pre");
   searchHighlight.className = "search-highlight";
   searchHighlight.setAttribute("aria-hidden", "true");
+  const selectionHighlight = document.createElement('pre');
+  selectionHighlight.className = 'source-selection-highlight';
+  selectionHighlight.setAttribute('aria-hidden','true');
   const whitespaceHighlight = document.createElement("pre");
   whitespaceHighlight.className = "whitespace-highlight";
   whitespaceHighlight.setAttribute("aria-hidden", "true");
   const lineMeasure = document.createElement("div");
   lineMeasure.className = "line-measure";
   lineMeasure.setAttribute("aria-hidden", "true");
-  editorSurface.append(lineNumbers, highlight, searchHighlight, whitespaceHighlight, lineMeasure, source);
+  editorSurface.append(lineNumbers, highlight, searchHighlight, selectionHighlight, whitespaceHighlight, lineMeasure, source);
   source.classList.add("highlighted-source");
   let selectedFile = null;
   let dirty = false;
@@ -1202,13 +1225,22 @@ if (window.handoutDesktop) {
         endLine = Math.min(endLine, Number(nested.dataset.sourceStart));
       }
     }
+    revealSourceLines(first,endLine,!isSlideDocument());
+  }
+  function revealSourceLines(first,endLine,focusEditor=false) {
+    const lines=source.value.split('\n');
+    if(!Number.isInteger(first)||!Number.isInteger(endLine)||first<0||first>=lines.length||endLine<=first)return;
+    endLine=Math.min(endLine,lines.length);
     while (endLine > first + 1 && !lines[endLine - 1].trim()) endLine--;
     const start = lines.slice(0, first).reduce((sum, line) => sum + line.length + 1, 0);
     const end = start + lines.slice(first, endLine).join('\n').length;
     const navigationId = ++previewNavigationId;
-    source.focus({ preventScroll: true });
+    // Electron can restore an old caret when an unfocused textarea is selected.
+    // Commit the range while focused, then return keyboard control to the slide.
+    source.focus({preventScroll:true});
     source.setSelectionRange(start, end);
     syncNativeSelection();
+    if(!focusEditor)preview.focus({preventScroll:true});
     // A mirror uses the textarea's actual width and font metrics, including wrapped
     // lines. Apply the measured scroll after focus/selection have settled.
     const reveal = () => {
@@ -1231,6 +1263,7 @@ if (window.handoutDesktop) {
     requestAnimationFrame(() => { reveal(); requestAnimationFrame(reveal); });
     statusText.textContent = first + 1 === endLine ? `Editing line ${first + 1}` : `Editing lines ${first + 1}–${endLine}`;
   }
+  source.addEventListener('editor:reveal-lines',event=>{const detail=event.detail||{};revealSourceLines(detail.startLine,detail.endLine,!!detail.focusEditor);});
   function selectResizableMedia(media) {
     document.querySelector('.media-resize-outline')?.remove();
     const isQrCode = media.classList.contains('qr-code');
@@ -1312,6 +1345,7 @@ if (window.handoutDesktop) {
         return;
       }
     }
+    if (event.target.closest('.video-player')) { window.HandoutVideo.activate(event); event.stopPropagation(); return; }
     const media = event.target.closest('img[data-image-index], .qr-code[data-qr-index]');
     if (media) {
       event.stopPropagation();
@@ -1538,6 +1572,7 @@ if (window.handoutDesktop) {
     highlight.innerHTML = `${highlightMarkdown(source.value)}\n`;
     whitespaceHighlight.innerHTML = showWhitespace ? whitespaceHtml(source.value) : "";
     syncLineNumbers();
+    selectionHighlight.scrollTop = source.scrollTop; selectionHighlight.scrollLeft = source.scrollLeft;
     highlight.scrollTop = source.scrollTop;
     highlight.scrollLeft = source.scrollLeft;
     searchHighlight.scrollTop = source.scrollTop;
@@ -1562,6 +1597,10 @@ if (window.handoutDesktop) {
     const hasSelection = source.selectionStart !== source.selectionEnd;
     source.classList.toggle('show-native-selection', hasSelection);
     editorSurface.classList.toggle('native-selection', hasSelection);
+    selectionHighlight.hidden=!hasSelection;
+    if(hasSelection){const start=source.selectionStart,end=source.selectionEnd;selectionHighlight.replaceChildren(document.createTextNode(source.value.slice(0,start)));const mark=document.createElement('mark');mark.textContent=source.value.slice(start,end);selectionHighlight.append(mark,document.createTextNode(source.value.slice(end)+'\n'));}
+    else selectionHighlight.replaceChildren();
+    selectionHighlight.scrollTop=source.scrollTop;selectionHighlight.scrollLeft=source.scrollLeft;
   }
   syncHighlight();
   source.addEventListener("input", syncHighlight);
@@ -1885,19 +1924,24 @@ if (window.handoutDesktop) {
     });
   }
   async function showDocumentPreview(node) {
-    document.querySelector('.supporting-preview')?.remove();
+    const oldPreview=document.querySelector('.supporting-preview'); window.HandoutVideo.stop(oldPreview); oldPreview?.remove();
     const panel = document.createElement('aside'); panel.className = 'supporting-preview'; panel.setAttribute('aria-label', `Preview ${node.name}`);
     const heading = document.createElement('strong'); heading.textContent = node.name;
     const open = document.createElement('button'); open.textContent = 'Open in default app'; open.onclick = () => void browserAction('external', node);
-    const close = document.createElement('button'); close.textContent = 'Close preview'; close.onclick = () => { panel.remove(); };
+    const dismiss=()=>{window.HandoutVideo.stop(panel);panel.remove();};
+    const close = document.createElement('button'); close.textContent = 'Close preview'; close.onclick = dismiss;
     const body = document.createElement('div'); body.className = 'supporting-preview-body'; body.textContent = 'Loading preview…';
     panel.append(heading, open, close, body); document.body.append(panel);
-    panel.addEventListener('keydown', event => { if (event.key === 'Escape') { panel.remove(); } }); close.focus();
+    panel.addEventListener('keydown', event => { if (event.key === 'Escape') { dismiss(); } }); close.focus();
     try {
       const preview = await desktop.previewDocument(node.path); if (!panel.isConnected) return;
       body.replaceChildren();
       if (preview.note) { const note = document.createElement('p'); note.textContent = preview.note; body.append(note); }
       if (preview.kind === 'pdf') { const frame = document.createElement('iframe'); frame.src = preview.url; frame.title = node.name; body.append(frame); }
+      if (preview.kind === 'video') {
+        const video=document.createElement('video');video.src=preview.url;video.controls=true;video.preload='metadata';video.style.width='100%';body.append(video);
+        const insert=document.createElement('button');insert.textContent='Insert video';insert.onclick=async()=>{try{if(!selectedFile||selectedFile.untitled)throw Error('Open a saved handout or slide deck first.');const relative=await desktop.imageReference(selectedFile.path,node.path);replaceEditorSelection(`\n[video:${encodedMarkdownPath(relative)}]\n\n`);dismiss();}catch(error){statusText.textContent=error.message;}};panel.insertBefore(insert,body);
+      }
       if (preview.kind === 'text') { const pre = document.createElement('pre'); pre.textContent = preview.text; body.append(pre); }
       for (const sheet of preview.sheets || []) {
         const title = document.createElement('h3'); title.textContent = sheet.name; body.append(title);
@@ -2127,14 +2171,16 @@ if (window.handoutDesktop) {
     catch (error) { statusText.textContent = `Could not save: ${error.message}`; return false; }
   }
   function setAssets(assets) {
-    assetMap.clear();
+    clearAssets();
     assets.forEach(asset => {
       assetMap.set(asset.relative, asset.url);
+      if(window.HandoutVideo.extensions.test(asset.relative))videoAssetMap.set(asset.relative,asset.url);
       assetMap.set(asset.relative.split('/').pop(), asset.url);
     });
     // Resolve against the handout location so nested documents and moved handouts
     // still select the correct image when several folders use the same filename.
     if (selectedFile && !selectedFile.untitled) {
+      videoAssetMap.clear();
       const documentUrl = new URL('file://' + selectedFile.path.split('/').map(encodeURIComponent).join('/'));
       assets.forEach(asset => {
         const target = new URL(asset.url);
@@ -2142,6 +2188,7 @@ if (window.handoutDesktop) {
         const to = target.pathname.split('/');
         while (from.length && to.length && from[0] === to[0]) { from.shift(); to.shift(); }
         const relative = [...from.map(() => '..'), ...to].join('/');
+        if(window.HandoutVideo.extensions.test(asset.relative)){videoAssetMap.set(relative,asset.url);videoAssetMap.set(decodeURIComponent(relative),asset.url);}
         assetMap.set(decodeURIComponent(relative), asset.url);
         assetMap.set(relative, asset.url);
       });

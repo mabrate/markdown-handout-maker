@@ -13,14 +13,15 @@ let handoutTheme = 'default';
 let documentMode = 'handout';
 let presentationState = null;
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
+const videoExtension = /\.(mp4|m4v|webm|ogv|ogg|mov)$/i;
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const recentLimit = 12;
 const productName = 'The Markdown Handout Maker';
 async function readSettings() { try { return JSON.parse(await fs.readFile(settingsPath(), 'utf8')); } catch { return {}; } }
 async function saveSettings(settings) { await fs.mkdir(app.getPath('userData'), { recursive: true }); await fs.writeFile(settingsPath(), JSON.stringify(settings), 'utf8'); }
 function isInsideRoot(filePath) { return currentRoot && (filePath === currentRoot || filePath.startsWith(currentRoot + path.sep)); }
-async function readTree(folder) { const entries = await fs.readdir(folder, { withFileTypes: true }); return Promise.all(entries.filter(e => !e.name.startsWith('.')).sort((a,b) => a.name.localeCompare(b.name)).map(async e => { const p = path.join(folder, e.name); const image = imageExtension.test(e.name); return e.isDirectory() ? { type: 'folder', name: e.name, path: p, children: await readTree(p) } : { type: 'file', name: e.name, path: p, markdown: markdownExtension.test(e.name), image, ...(image ? { url: pathToFileURL(p).toString() } : {}) }; })); }
-async function assetsIn(folder, root = folder, output = []) { const entries = await fs.readdir(folder, { withFileTypes: true }); for (const e of entries) { if (e.name.startsWith('.')) continue; const p = path.join(folder, e.name); if (e.isDirectory()) await assetsIn(p, root, output); else if (imageExtension.test(e.name)) output.push({ relative: path.relative(root,p).split(path.sep).join('/'), url: pathToFileURL(p).toString() }); } return output; }
+async function readTree(folder) { const entries = await fs.readdir(folder, { withFileTypes: true }); return Promise.all(entries.filter(e => !e.name.startsWith('.')).sort((a,b) => a.name.localeCompare(b.name)).map(async e => { const p = path.join(folder, e.name); const image = imageExtension.test(e.name), video = videoExtension.test(e.name); return e.isDirectory() ? { type: 'folder', name: e.name, path: p, children: await readTree(p) } : { type: 'file', name: e.name, path: p, markdown: markdownExtension.test(e.name), image, video, ...((image || video) ? { url: pathToFileURL(p).toString() } : {}) }; })); }
+async function assetsIn(folder, root = folder, output = []) { const entries = await fs.readdir(folder, { withFileTypes: true }); for (const e of entries) { if (e.name.startsWith('.')) continue; const p = path.join(folder, e.name); if (e.isDirectory()) await assetsIn(p, root, output); else if (imageExtension.test(e.name) || (videoExtension.test(e.name) && await checkedPath(root,p).then(()=>true,()=>false))) output.push({ relative: path.relative(root,p).split(path.sep).join('/'), url: pathToFileURL(p).toString() }); } return output; }
 function pdfOptions(layout) { if (layout === 'slides-wide' || layout === 'slides-standard') return { printBackground: true, preferCSSPageSize: true, pageSize: { width: layout === 'slides-wide' ? 338667 : 254000, height: 190500 }, margins: { top: 0, bottom: 0, left: 0, right: 0 } }; const sizes = { letter:{pageSize:'Letter',landscape:false}, 'letter-landscape':{pageSize:'Letter',landscape:true}, a4:{pageSize:'A4',landscape:false}, 'half-portrait':{pageSize:{width:139700,height:215900},landscape:false}, 'half-landscape':{pageSize:{width:215900,height:139700},landscape:false}, 'half-duplicate-portrait':{pageSize:'Letter',landscape:true}, 'half-duplicate-landscape':{pageSize:'Letter',landscape:false}, 'booklet-letter':{pageSize:'Letter',landscape:true}, booklet:{pageSize:'Tabloid',landscape:true} }; return { printBackground:true, marginsType:1, ...(sizes[layout] || sizes.letter) }; }
 function safeDocumentName(title, fallback = 'handout') { const cleaned = String(title || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '').replace(/\s+/g, ' ').trim().replace(/^\.+|\.+$/g, ''); return cleaned || fallback; }
 function sendMenuCommand(command, payload) { mainWindow?.webContents.send('menu:command', { command, payload }); }
@@ -83,7 +84,7 @@ async function refreshApplicationMenu() {
         { type: 'separator' }, quickSnippet('Total Points', 'total-points'), quickSnippet('Grade Box', 'grade-box')
       ] },
       { label: 'Layout', submenu: [
-        quickSnippet('Image + Text Wrap', 'wrap'), quickSnippet('QR Code', 'qr'), snippetDialog('Columns…', 'columns'),
+        quickSnippet('Image + Text Wrap', 'wrap'), quickSnippet('QR Code', 'qr'), quickSnippet('YouTube Video', 'youtube'), quickSnippet('Local Video', 'video'), snippetDialog('Columns…', 'columns'),
         snippetDialog('Table…', 'table'), quickSnippet('Page Break', 'pagebreak'), quickSnippet('Style Block', 'style')
       ] }
     ] },
@@ -103,7 +104,7 @@ async function refreshApplicationMenu() {
     ] },
     { label: 'Slides', enabled: documentMode === 'slides', submenu: [
       { label: 'Present', accelerator: 'F5', click: () => sendMenuCommand('present-slides') },
-      { label: 'Snippets', submenu: [['Columns', 'columns'], ['Background', 'background'], ['Text', 'text'], ['Notes', 'notes'], ['QR code', 'qr'], ['Table…', 'table'], ['Centered text', 'center'], ['Fit text', 'fit'], ['Checklist', 'checklist'], ['Card grid', 'grid']].map(([label, value]) => ({ label, click: () => sendMenuCommand('slide-snippet', value) })) },
+      { label: 'Snippets', submenu: [['Columns', 'columns'], ['Background', 'background'], ['Text', 'text'], ['Notes', 'notes'], ['QR code', 'qr'], ['YouTube video', 'youtube'], ['Local video', 'video'], ['Table…', 'table'], ['Centered text', 'center'], ['Fit text', 'fit'], ['Checklist', 'checklist'], ['Card grid', 'grid']].map(([label, value]) => ({ label, click: () => sendMenuCommand('slide-snippet', value) })) },
       { label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }
     ] },
     { role: 'windowMenu' },
@@ -135,9 +136,19 @@ async function setPresentation(active) {
 function createWindow() {
   mainWindow = new BrowserWindow({ title:productName, icon:path.join(__dirname,'..','assets','markdown-handout-maker-icon.png'), width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } });
   const contents = mainWindow.webContents;
+  // File-based desktop renderers do not send a web Referer. Identify this app
+  // for YouTube's embedded player, without changing other network requests.
+  contents.session.webRequest.onBeforeSendHeaders({urls:['https://www.youtube-nocookie.com/embed/*','https://www.youtube.com/embed/*']},(details,callback)=>{
+    const headers={...details.requestHeaders};
+    if(details.webContentsId===contents.id && details.resourceType==='subFrame'){
+      for(const key of Object.keys(headers))if(key.toLowerCase()==='referer')delete headers[key];
+      headers.Referer='https://'+require('../package.json').build.appId+'/';
+    }
+    callback({requestHeaders:headers});
+  });
   mainWindow.on('leave-full-screen', () => { if (presentationState) { sendMenuCommand('exit-presentation'); void setPresentation(false); } });
   contents.on('before-input-event', (event, input) => { if (presentationState && input.type === 'keyDown' && input.key === 'Escape') { event.preventDefault(); sendMenuCommand('exit-presentation'); } });
-  contents.on('did-start-loading', () => { if (presentationState) void setPresentation(false); });
+  contents.on('did-start-navigation', details => { if (presentationState && details.isMainFrame && !details.isSameDocument) void setPresentation(false); });
   mainWindow.on('closed', () => { if (presentationState) { presentationState = null; void refreshApplicationMenu(); } });
   contents.on('will-navigate', (event, url) => {
     if (url === contents.getURL() || url.startsWith(`${contents.getURL().split('#')[0]}#`)) return;
@@ -274,9 +285,10 @@ ipcMain.handle('assets:import-image', async (_event, documentPath, imageBytes) =
   if (!(imageBytes instanceof Uint8Array)) throw new Error('The clipboard did not provide valid image data.');
   return importImageAsset(documentPath, imageBytes);
 });
-ipcMain.handle('assets:reference', (_event, documentPath, imagePath) => {
+ipcMain.handle('assets:reference', async (_event, documentPath, imagePath) => {
   if (typeof documentPath !== 'string' || !markdownExtension.test(documentPath) || !isInsideRoot(documentPath)) throw new Error('Open a saved Markdown handout before inserting an image.');
-  if (typeof imagePath !== 'string' || !imageExtension.test(imagePath) || !isInsideRoot(imagePath)) throw new Error('The selected image is outside the open folder.');
+  if (typeof imagePath !== 'string' || !(imageExtension.test(imagePath)||videoExtension.test(imagePath))) throw new Error('Choose an image or video from the open folder.');
+  await checkedPath(currentRoot,imagePath);
   return path.relative(path.dirname(documentPath), imagePath).split(path.sep).join('/');
 });
 ipcMain.handle('assets:rename-image', async (_event, imagePath, requestedName) => {

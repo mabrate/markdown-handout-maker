@@ -127,13 +127,14 @@ body {
 .editor-surface.wrap-lines #source,
 .editor-surface.wrap-lines .source-highlight,
 .editor-surface.wrap-lines .search-highlight,
+.editor-surface.wrap-lines .source-selection-highlight,
 .editor-surface.wrap-lines .whitespace-highlight {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .editor-surface { position: relative; display: flex; min-height: 0; flex: 1; background: #fafbfb; overflow: hidden; }
 .source-highlight { position: absolute; z-index: 0; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: #21303a; background: #fafbfb; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
-.search-highlight { position: absolute; z-index: 1; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
+.search-highlight, .source-selection-highlight { position: absolute; z-index: 1; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
 .whitespace-highlight { position: absolute; z-index: 2; inset: 0; overflow: hidden; margin: 0; padding: 20px 20px 20px 58px; color: transparent; background: transparent; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2; pointer-events: none; }
 .whitespace-space, .whitespace-tab, .whitespace-eol { position: relative; }
 .whitespace-space::before, .whitespace-tab::before, .whitespace-eol::before { position: absolute; color: #91a0a8; font-weight: 400; }
@@ -457,3 +458,7 @@ body[data-handout-theme="spacious"] .handout-page li { margin: .05in 0; }
 @media print { .handout-inspector { display:none !important; } }
 .handout-question-answers { min-width:160px; max-width:360px; }
 .handout-question-answers > div { max-height:120px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:4px; }
+
+.source-selection-highlight mark { color:transparent; background:#85baf5; border-radius:2px; }
+.editor-surface:focus-within .source-selection-highlight { visibility:hidden; }
+.highlighted-source.show-native-selection:not(:focus)::selection { background:transparent; color:#21303a; }

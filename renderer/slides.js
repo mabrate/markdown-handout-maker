@@ -1,8 +1,8 @@
 /* Shared slideshow parser and geometry. Handout parsing stays in app.js. */
 (function (root, factory) {
-  const api = factory(typeof module === 'object' ? require('./vendor/markdown-it.min.js') : root.markdownit, typeof module === 'object' ? require('./qr-block') : root.HandoutQr);
+  const api = factory(typeof module === 'object' ? require('./vendor/markdown-it.min.js') : root.markdownit, typeof module === 'object' ? require('./qr-block') : root.HandoutQr, typeof module === 'object' ? require('./video-block') : root.HandoutVideo);
   if (typeof module === 'object') module.exports = api; else root.HandoutSlides = api;
-})(typeof window === 'object' ? window : globalThis, function (MarkdownIt, qr) {
+})(typeof window === 'object' ? window : globalThis, function (MarkdownIt, qr, video) {
   'use strict';
   const markdown = new MarkdownIt({ html: false, breaks: true });
   const themes = {
@@ -124,6 +124,13 @@
         if (fence) { append(line); index++; continue; }
         const marker = /^:::(?:column|cell)\s*$/.test(line) ? 'column' : /^:::\s*$/.test(line) ? 'close' : null;
         if (stops.includes(marker)) { flush(); return { blocks, stop: marker }; }
+        const movie = video.parse(line);
+        if (movie) {
+          flush();
+          if (movie.error) { warnings.push(movie.error); blocks.push({type:'text',runs:[{text:movie.error}],sourceStart:sourceLines[index],sourceEnd:sourceLines[index]+1}); }
+          else blocks.push({...movie,sourceStart:sourceLines[index],sourceEnd:sourceLines[index]+1});
+          index++;continue;
+        }
         const qrLine = line.match(/^\s*\[qr:([^\]]*)\](?:\{([^}]*)\})?\s*$/i);
         if (qrLine) {
           flush(); const result = qr.createQrSvg(qrLine[1]);
@@ -254,7 +261,13 @@
     function mediaBox(block, parentWidth, available = 2.7) {
       const dimensions = imageDimensions.get(block.src), ratio = block.qrSvg ? 1 : dimensions ? dimensions.width / dimensions.height : 1.5;
       const requestedWidth = lengthInches(block.mediaWidth, parentWidth), requestedHeight = lengthInches(block.mediaHeight, parentWidth);
-      if (!block.qrSvg && requestedWidth === null && requestedHeight === null) return { w: parentWidth, h: Math.max(.4, available - .2) };
+      if (!block.qrSvg && requestedHeight === null) {
+        // Width is a maximum: preserve the image's aspect ratio and reserve room
+        // for the text that follows, rather than pushing it off the slide.
+        const maxWidth=Math.min(parentWidth,Math.max(.2,available-.2)*ratio);
+        const w=Math.min(maxWidth,requestedWidth || parentWidth);
+        return {w,h:w/ratio,maxWidth};
+      }
       const w = Math.min(parentWidth, requestedWidth || (requestedHeight ? requestedHeight * ratio : 1.5));
       return { w, h: requestedHeight || w / ratio };
     }
@@ -279,6 +292,7 @@
       return blocks.reduce((total, block) => {
         if (['background', 'positioned-text'].includes(block.type)) return total;
         if (block.type === 'image') return total + mediaBox(block, w).h + .2;
+        if (block.type === 'video') return total + Math.min(w, lengthInches(block.mediaWidth,w) || w) * 9 / 16 + .45;
         if (block.type === 'center' || block.type === 'fit') return total + estimate(block.blocks, w);
         if (block.type === 'columns') { const sizes = columnSizes(block, w); return total + Math.max(...block.columns.map((col, i) => estimate(col, sizes[i]))) + .2; }
         if (block.type === 'table') return total + block.rows.reduce((sum, row) => sum + Math.max(...row.map(cell => textHeight([{ text: cell }], w / Math.max(1, row.length) - .16, 19 * scale))) + .18, 0) + .22;
@@ -298,7 +312,8 @@
           y = Math.max(y, ...block.columns.map((col, n) => { const end = stack(col, left, y, sizes[n], y + Math.max(.4, available - gap), align); left += sizes[n] + .4; return end; })) + gap;
           for(const card of cards)card.h=Math.max(.3,y-gap-top+.16);
         } else if (block.type === 'center' || block.type === 'fit') y = stack(block.blocks, x, y, w, y + available, block.type === 'center' ? 'center' : align);
-        else if (block.type === 'image') { const box = mediaBox(block, w, available); elements.push({ ...block, x: block.mediaAlign === 'right' ? x + w - box.w : x, y, ...box, maxWidth:w }); y += box.h + .2; }
+        else if (block.type === 'video') { const boxWidth=Math.min(w,lengthInches(block.mediaWidth,w)||w,Math.max(2,(available-.25)*16/9)); const h=boxWidth*9/16+.25; elements.push({...block,x,y,w:boxWidth,h});y+=h+.2; }
+        else if (block.type === 'image') { const box = mediaBox(block, w, available); elements.push({ ...block, x: block.mediaAlign === 'right' ? x + w - box.w : x, y, maxWidth:w, ...box }); y += box.h + .2; }
         else if (block.type === 'table') { const h = estimate([block], w) - .22; elements.push({ ...block, x, y, w, h, fontSize: 19 * scale }); y += h + .22; }
         else {
           const size = fontSize(block), markerWidth = block.bullet ? Math.max(.28, block.bullet.length * .17) : 0;
@@ -336,8 +351,52 @@
     }
     return result;
   }
+  // An explicit source edit, never an invisible layout change. Only uncomplicated
+  // one-image slides qualify; manual columns, backgrounds and overlays stay intact.
+  function imageTextEdit(text, index, imageDimensions = new Map()) {
+    const deck=parse(text), slide=deck.slides[index];
+    if(!deck.enabled || !slide || slide.warnings.length || !slide.blocks.every(block=>['text','image'].includes(block.type)))return null;
+    const images=slide.blocks.filter(block=>block.type==='image');
+    if(images.length!==1 || images[0].qrSvg || !slide.blocks.some(block=>block.type==='text'))return null;
+    const image=images[0], lines=text.split(/\r?\n/), picture=lines.slice(image.sourceStart,image.sourceEnd).join('\n').trim();
+    if(image.sourceEnd!==image.sourceStart+1 || !/^!\[[^\]]*\]\([^\n]+\)(?:\{[^}]*\})?$/.test(picture))return null;
+    const title=slide.titleSource?lines.slice(slide.titleSource.sourceStart,slide.titleSource.sourceEnd).join('\n'):'';
+    const content=[],notes=[];let inNotes=false, fence=null;
+    for(let line=slide.startLine;line<slide.endLine;line++){
+      const value=lines[line];
+      if(inNotes){notes.push(value);if(/^:::\s*$/.test(value))inNotes=false;continue;}
+      const code=value.match(/^ {0,3}(`{3,}|~{3,})/);
+      if(code){if(!fence)fence=code[1];else if(code[1][0]===fence[0]&&code[1].length>=fence.length)fence=null;}
+      if(!fence && !code && /^:::notes\s*$/.test(value)){inNotes=true;notes.push(value);continue;}
+      if(line===image.sourceStart || (slide.titleSource && line>=slide.titleSource.sourceStart && line<slide.titleSource.sourceEnd))continue;
+      content.push(value);
+    }
+    if(inNotes)return null;
+    let body=content.join('\n').trim();
+    if(slide.fit)body=body.replace(/^:::fit\s*\n/,'').replace(/\n:::\s*$/,'').trim();
+    if(!body)return null;
+    const offset=line=>Math.min(text.length,lines.slice(0,line).reduce((sum,value)=>sum+value.length+(text.includes('\r\n')?2:1),0));
+    const start=offset(slide.startLine),end=offset(slide.endLine),eol=text.includes('\r\n')?'\r\n':'\n';
+    const dimensions=imageDimensions.get(image.src),ratio=dimensions?dimensions.width/dimensions.height:1.5;
+    const length=plain(slide.blocks.filter(block=>block.type==='text').flatMap(block=>block.runs)).length;
+    const preferred=length>420?'2/3,1/3':length>220 || ratio<.85?'3/5,2/5':length<100 && ratio>1.8?'2/5,3/5':'1/2,1/2';
+    const widths=[preferred,...['1/2,1/2','3/5,2/5','2/3,1/3','2/5,3/5'].filter(value=>value!==preferred)];
+    let best=null;
+    for(const [rank,width] of widths.entries()){
+      let value=(title?title+'\n\n':'')+':::columns widths='+width+'\n:::column\n'+body+'\n\n:::column\n'+picture+'\n:::';
+      if(slide.fit)value=':::fit\n'+value+'\n:::';
+      value+=(notes.length?'\n\n'+notes.join('\n'):'')+'\n\n';
+      value=value.replace(/\n/g,eol);
+      const proposed=parse(text.slice(0,start)+value+text.slice(end)),layout=scene(proposed,index,imageDimensions);
+      const overflow=Math.max(0,...layout.elements.filter(element=>!element.footer).map(element=>element.y+element.h-6.96));
+      const score=overflow*1000+(layout.overflow?100:0)+rank;
+      if(!best || score<best.score)best={start,end,text:value,score};
+    }
+    return best && {start:best.start,end:best.end,text:best.text};
+  }
   // Return a source edit for one slide, preserving other slides and private notes.
   function overflowEdit(text, index, action) {
+    if(action==='columns'){const smart=imageTextEdit(text,index);if(smart)return smart;}
     const deck = parse(text), slide = deck.slides[index];
     if (!deck.enabled || !slide || !['fit', 'columns'].includes(action)) return null;
     const positioned = blocks => blocks.some(block => ['background', 'positioned-text'].includes(block.type) || (block.blocks && positioned(block.blocks)) || (block.columns && block.columns.some(positioned)));
@@ -455,5 +514,5 @@
     return lines.join('\n') + text.slice(meta.prefix.length);
   }
   const starter = '---\ntype: slides\ntheme: classroom\naspect: 16:9\n---\n\n# New lesson\n\nA short introduction to today’s learning.\n\n---\n\n# Investigate\n\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::\n\n---\n\n# Reflect\n\nWhat changed your thinking today?\n';
-  return { metadata, parse, scene, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, setting, themes, starter, plain, blocksFromMarkdown };
+  return { metadata, parse, scene, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, setting, themes, starter, plain, blocksFromMarkdown };
 });

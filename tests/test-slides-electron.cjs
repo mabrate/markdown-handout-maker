@@ -31,7 +31,7 @@ const Zip = require('jszip');
   await page.locator('.slide-outline button').first().click();
   await application.evaluate(async({Menu})=>{for(let n=0;n<100;n++){if(Menu.getApplicationMenu().items.find(i=>i.label==='File').submenu.items.find(i=>i.label==='Export PowerPoint…').enabled)return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('Slide menu did not become active');});
   const menus=await application.evaluate(({Menu})=>{const menu=Menu.getApplicationMenu();return {pptx:menu.items.find(i=>i.label==='File').submenu.items.find(i=>i.label==='Export PowerPoint…').enabled,handout:menu.items.find(i=>i.label==='Snippets').enabled,snippets:menu.items.find(i=>i.label==='Slides').submenu.items.find(i=>i.label==='Snippets').submenu.items.map(i=>i.label)};});
-  assert.equal(menus.pptx,true);assert.equal(menus.handout,false);assert.deepEqual(menus.snippets,['Columns','Background','Text','Notes','QR code','Table…','Centered text','Fit text','Checklist','Card grid']);
+  assert.equal(menus.pptx,true);assert.equal(menus.handout,false);assert.deepEqual(menus.snippets,['Columns','Background','Text','Notes','QR code','YouTube video','Local video','Table…','Centered text','Fit text','Checklist','Card grid']);
   await page.screenshot({path:'/tmp/handout-slides-native-preview.png'});
   await page.getByRole('button',{name:'Present',exact:true}).click();await page.locator('.slide-presentation').waitFor();
   await application.evaluate(async({Menu,BrowserWindow})=>{for(let n=0;n<100;n++){if(Menu.getApplicationMenu()===null&&BrowserWindow.getAllWindows()[0].isFullScreen())return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('Presentation should hide menus and enter full screen');});

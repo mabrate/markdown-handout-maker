@@ -293,3 +293,36 @@ node tests/test-slides-electron.cjs
 The native check requires Poppler's `pdfinfo` and `pdftotext` to verify complete
 PDF export and notes exclusion. Check the PowerPoint file on the target computer
 before teaching, since fonts and line wrapping can differ.
+
+## Embedded videos
+
+Handouts and slides accept `[youtube:URL]` and `[video:media/clip.mp4]` on their
+own lines, optionally followed by `{width=5in}`. YouTube also accepts `start=30`
+in seconds. Use the corresponding Snippets menu entries, or preview a local
+video in the file browser and choose **Insert video**. YouTube loads on click;
+local videos play offline from the open lesson folder. MP4 is recommended;
+other recognized video formats depend on platform/codec support.
+
+Players work in slide presentation mode without advancing the slide when used.
+PDFs and printing show reference cards. PowerPoint exports embed local video
+files and include YouTube online video objects; check playback in the intended
+PowerPoint version. The syntax guides include examples and export details.
+
+Video regressions: `node tests/test-videos-browser.cjs` (Chrome/Playwright and
+`pdftotext`) and `node tests/test-videos-electron.cjs` (Electron/Playwright).
+Both accept `PLAYWRIGHT_MODULE`; browser checks also accept `CHROME_PATH`.
+Local playback is tested with a one-second generated green WebM fixture; the
+browser YouTube test uses a mock frame. YouTube's app identity header follows
+[the embedded-player requirements](https://developers.google.com/youtube/terms/required-minimum-functionality#api-client-identity-and-credentials).
+
+Slide preview clicks keep keyboard focus in the preview while highlighting the
+matching Markdown. Previous/Next and outline clicks also support arrow navigation.
+The **Two columns: text + image** template and **Auto layout** help arrange
+one-image slides; Auto layout writes editable columns and preserves teacher notes.
+Flowing images preserve their proportions and fit the available column height as
+well as width. The slide guide includes layout rules for AI-generated decks.
+
+Preview selection regression checks: `node tests/test-slide-preview-selection.cjs`
+uses a 28-slide deck to check persistent source highlights, numbered/next slide
+navigation, and delayed editor-selection events. Set `NATIVE_ELECTRON=1` to run
+the same checks in Electron; the browser version accepts `CHROME_PATH`.
