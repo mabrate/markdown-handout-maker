@@ -47,6 +47,38 @@ body {
 .app-dialog-close:hover, .app-dialog-close:focus-visible { color: #fff; background: var(--accent); outline: 2px solid #8fcbd2; outline-offset: 2px; }
 .app-dialog-description { color: var(--muted); }
 .app-dialog footer { flex-wrap: wrap; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 12px; }
+.document-settings-trigger { flex: none; margin-left: auto; min-height: 32px; border: 1px solid #91a3ab; border-radius: 6px; padding: 5px 9px; color: #314651; background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+.document-settings-trigger:hover { background: #d9f2f3; }
+.document-settings-trigger:disabled { opacity: .5; cursor: default; }
+.editor-panel .panel-heading > .panel-toggle { margin-left: 0; }
+.document-settings-dialog { width: min(740px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: hidden; border: 0; border-radius: 10px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 18px 60px #0006; }
+.document-settings-dialog::backdrop { background: #102e3c99; }
+.document-settings-form { display: flex; flex-direction: column; width: 100%; max-height: calc(100vh - 48px); overflow: hidden; padding: 22px; border: 0; border-radius: 0; box-shadow: none; }
+.document-settings-form > header, .document-settings-form > footer, .document-settings-form > p { flex-shrink: 0; }
+.document-settings-content { min-height: 0; overflow: auto; padding-right: 6px; }
+.document-settings-form h3 { margin: 0 0 6px; color: var(--accent-dark); font-size: 16px; }
+.document-settings-form p { margin: 6px 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.document-settings-content section { margin: 18px 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.document-settings-form label { display: block; font-weight: 650; font-size: 13px; }
+.document-settings-form input, .document-settings-form textarea, .document-settings-form select { display: block; width: 100%; min-height: 36px; margin-top: 5px; border: 1px solid #91a3ab; border-radius: 6px; padding: 7px 9px; color: var(--ink); background: #fff; font: inherit; font-size: 13px; }
+.document-settings-form textarea { resize: vertical; line-height: 1.45; }
+.document-settings-form input:focus, .document-settings-form textarea:focus, .document-settings-form select:focus { outline: 3px solid #8fcbd255; border-color: var(--accent); }
+.document-settings-form [hidden] { display: none !important; }
+.document-settings-form button:not(.app-dialog-close) { min-height: 34px; border: 1px solid #91a3ab; border-radius: 6px; padding: 7px 11px; color: #314651; background: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+.document-settings-form button:hover:not(:disabled):not(.app-dialog-close) { background: #e7f2f4; }
+.document-settings-form button:disabled { opacity: .5; cursor: default; }
+.document-settings-form .document-settings-apply { color: #fff; border-color: var(--accent); background: var(--accent); font-weight: 650; }
+.document-settings-form .document-settings-apply:hover:not(:disabled) { background: var(--accent-dark); }
+.document-settings-form .document-settings-yaml { margin-right: auto; }
+.document-settings-form .document-settings-error { max-height: 130px; overflow: auto; color: #a12929; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lesson-property { margin: 14px 0; padding: 12px; border: 1px solid #d2dde2; border-radius: 8px; background: #f6f9fa; }
+.lesson-property-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lesson-property-heading code { color: var(--muted); font-size: 11px; }
+.lesson-property-heading select { width: auto; max-width: 200px; margin: 0 0 0 auto; }
+.lesson-property-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lesson-property-add select, .lesson-property-add input { flex: 1 1 190px; width: auto; min-width: 0; margin: 0; }
+.lesson-property-add button { flex: none; }
+@media print { .document-settings-dialog { display: none !important; } }
 
 .workspace {
   --file-width: 18vw; --editor-width: 32vw;

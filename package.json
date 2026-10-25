@@ -6,9 +6,10 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-handout-settings.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js && node tests/test-slides.js && node tests/test-slide-layouts.js && node tests/test-slide-reorder.js && node tests/test-video-block.js",
+    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-handout-settings.js && node tests/test-document-settings.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js && node tests/test-slides.js && node tests/test-slide-layouts.js && node tests/test-slide-reorder.js && node tests/test-video-block.js",
     "package": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "build:yaml": "node scripts/build-yaml.cjs"
   },
   "build": {
     "appId": "org.classroom.handoutmaker",
@@ -36,7 +37,9 @@
   },
   "devDependencies": {
     "electron": "^44.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
+    "yaml": "^2.9.1"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

@@ -273,18 +273,32 @@ const layouts = {
 };
 const requestedLayout = new URLSearchParams(window.location.search).get("layout");
 if (requestedLayout && layouts[requestedLayout]) layoutSelect.value = requestedLayout;
+let metadataLayout = null;
+let metadataLayoutFallback = layoutSelect.value;
+function syncDocumentLayout() {
+  let value;
+  try { value = window.HandoutDocumentSettings.read(source.value).document.get('layout'); } catch { /* Keep invalid YAML editable in the source. */ }
+  if (typeof value === 'string' && Object.hasOwn(layouts, value)) {
+    if (metadataLayout === null) metadataLayoutFallback = layoutSelect.value;
+    layoutSelect.value = value; metadataLayout = value;
+  } else if (metadataLayout !== null) { layoutSelect.value = metadataLayoutFallback; metadataLayout = null; }
+}
+const documentSettings = window.HandoutDocumentSettings.mount({
+  source, trigger: document.querySelector('#document-settings-button'), layouts,
+  appLayout: () => metadataLayout === null ? layoutSelect.value : metadataLayoutFallback, edit: replaceEditorSelection, refresh: render
+});
 
 function setSourceContent(content) {
+  metadataLayout = null; metadataLayoutFallback = layoutSelect.value;
   source.value = content;
   source.dispatchEvent(new Event("input", { bubbles: true }));
   source.dispatchEvent(new Event("editor:content-loaded"));
-  const frontMatter = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
-  const layoutSetting = frontMatter && frontMatter[1].match(/^layout\s*:\s*([\w-]+)\s*$/m);
-  if (layoutSetting && layouts[layoutSetting[1]]) layoutSelect.value = layoutSetting[1];
+  syncDocumentLayout();
 }
 
 function withoutDocumentSettings(markdown) {
-  return markdown.replace(/^---\s*\n[\s\S]*?\n---\s*(?:\n|$)/, "");
+  try { const part = window.HandoutDocumentSettings.split(markdown); return markdown.slice(part.end); }
+  catch { return markdown; }
 }
 
 const example = `# Ecosystems Review
@@ -942,6 +956,7 @@ function render() {
   // An immediate render supersedes any pending input render. Avoid replacing
   // the preview again while the user is selecting or dragging an element.
   clearTimeout(renderTimer);
+  syncDocumentLayout();
   const mode = isSlideDocument() ? 'slides' : 'handout';
   const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default');
   if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default').catch(() => {}); }
@@ -1007,7 +1022,7 @@ function fileToDataUrl(file) {
 document.querySelector("#file-input").addEventListener("change", event => loadFiles([...event.target.files]));
 document.querySelector("#folder-input").addEventListener("change", event => loadFiles([...event.target.files]));
 source.addEventListener("input", scheduleRender);
-layoutSelect.addEventListener("change", render);
+layoutSelect.addEventListener("change", () => documentSettings.setLayout(layoutSelect.value));
 async function printHandout() {
   render();
   const print = async () => {
@@ -1752,12 +1767,14 @@ if (window.handoutDesktop) {
     overlay.querySelector('.app-dialog-close').focus();
   }
   let automaticRefreshPending = false;
+  let draggedFolderPath = null;
+  let browserMovePending = false;
   async function refreshFolderTreeAndAssets(automatic = false) {
     const expected = folder;
-    if (!expected || (automatic && tree.querySelector('.browser-create'))) return;
+    if (!expected || (automatic && (draggedFolderPath || browserMovePending || tree.querySelector('.browser-create')))) return;
     const refreshed = await desktop.refreshFolder();
     if (!refreshed || folder !== expected || (refreshed.path && refreshed.path !== expected.path)) return;
-    if (automatic && tree.querySelector('.browser-create')) return;
+    if (automatic && (draggedFolderPath || browserMovePending || tree.querySelector('.browser-create'))) return;
     const assetsChanged = JSON.stringify(expected.assets) !== JSON.stringify(refreshed.assets);
     if (automatic && !assetsChanged && JSON.stringify(expected.tree) === JSON.stringify(refreshed.tree)) return;
     const panel = tree.closest('.file-panel');
@@ -2023,7 +2040,8 @@ if (window.handoutDesktop) {
     });
   }
   function showCreateMenu(node, event) {
-    showBrowserMenu([['New handout', () => createInline(node.path, 'file')], ['New folder', () => createInline(node.path, 'folder')], ...externalActions({ ...node, type: 'folder' })], event);
+    showBrowserMenu([['New handout', () => createInline(node.path, 'file')], ['New folder', () => createInline(node.path, 'folder')],
+      ...(node.path !== folder.path ? [['Move to…', () => chooseMoveFolder({ ...node, type: 'folder' })]] : []), ...externalActions({ ...node, type: 'folder' })], event);
   }
   function showBrowserMenu(actions, event) {
     document.querySelector('.image-context-menu')?.remove();
@@ -2051,19 +2069,44 @@ if (window.handoutDesktop) {
       catch (failure) { error.textContent = failure.message; submit.disabled = false; }
     }); input.focus();
   }
-  async function moveTreeFile(node, parent) {
+  async function moveTreeEntry(node, parent) {
+    if (browserMovePending) return;
+    browserMovePending = true;
     saveActiveState();
     try {
+      const isFolder = node.type === 'folder';
       const state = documents.get(node.path);
-      const moved = await desktop.moveHandout(node.path, parent, state?.content);
-      if (state) {
+      const drafts = isFolder ? [...documents.values()].filter(state => withinBrowserPath(node.path, state.file.path)).map(state => ({ path: state.file.path, content: state.content })) : [];
+      const moved = isFolder ? await desktop.moveFolder(node.path, parent, drafts) : await desktop.moveHandout(node.path, parent, state?.content);
+      if (isFolder && moved.path !== node.path) {
+        saveFolderExpansion();
+        const relocate = value => withinBrowserPath(node.path, value) ? moved.path + value.slice(node.path.length) : value;
+        const contents = new Map(moved.documents.map(document => [document.oldPath, document.content]));
+        const entries = [...documents].map(([oldPath, documentState]) => {
+          if (withinBrowserPath(node.path, oldPath)) {
+            documentState.file = { ...documentState.file, path: relocate(oldPath) };
+            if (contents.has(oldPath)) documentState.content = contents.get(oldPath);
+          }
+          return [relocate(oldPath), documentState];
+        });
+        documents.clear(); for (const [path, documentState] of entries) documents.set(path, documentState);
+        if (activePath && withinBrowserPath(node.path, activePath)) {
+          activePath = relocate(activePath); const active = documents.get(activePath); selectedFile = active.file;
+          dirty = active.dirty; loadingDocument = true; setSourceContent(active.content); loadingDocument = false; markDirty(dirty);
+          source.setSelectionRange(active.selectionStart, active.selectionEnd); source.scrollTop = active.scrollTop; source.scrollLeft = active.scrollLeft;
+        }
+        const expansion = [...expandedFolders].map(([path, open]) => [relocate(path), open]);
+        expandedFolders.clear(); for (const [path, open] of expansion) expandedFolders.set(path, open);
+      } else if (state) {
         documents.delete(node.path); state.file = { ...state.file, path: moved.path, name: moved.name }; state.content = moved.content; documents.set(moved.path, state);
         if (activePath === node.path) { activePath = moved.path; selectedFile = state.file; dirty = state.dirty; loadingDocument = true; setSourceContent(moved.content); loadingDocument = false; markDirty(dirty); }
       }
       browserSelection = { ...node, path: moved.path }; expandedFolders.set(parent, true);
-      await refreshFolderTreeAndAssets(); drawTabs(); syncTreeSelection(true); render(); statusText.textContent = `Moved ${moved.name}`;
-    } catch (error) { statusText.textContent = `Could not move file: ${error.message}`; }
+      await refreshFolderTreeAndAssets(); drawTabs(); syncTreeSelection(true); saveFolderExpansion(); render(); statusText.textContent = `Moved ${moved.name}`;
+    } catch (error) { statusText.textContent = `Could not move ${node.type === 'folder' ? 'folder' : 'file'}: ${error.message}`; }
+    finally { browserMovePending = false; }
   }
+  function withinBrowserPath(parent, target) { return target === parent || target.startsWith(parent + '/') || target.startsWith(parent + '\\'); }
   function chooseMoveFolder(node) {
     const overlay = document.createElement('div'); overlay.className = 'app-dialog-overlay';
     const panel = document.createElement('form'); panel.className = 'image-rename-dialog'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', `Move ${node.name}`);
@@ -2071,33 +2114,49 @@ if (window.handoutDesktop) {
     const select = document.createElement('select'); select.setAttribute('aria-label', 'Destination folder');
     function addOption(path, label) { const option = document.createElement('option'); option.value = path; option.textContent = label; select.append(option); }
     addOption(folder.path, folder.name);
-    function walk(nodes, prefix) { for (const n of nodes) if (n.type === 'folder') { addOption(n.path, prefix + n.name); walk(n.children, prefix + n.name + '/'); } } walk(folder.tree, '');
+    function walk(nodes, prefix) { for (const n of nodes) if (n.type === 'folder' && !(node.type === 'folder' && withinBrowserPath(node.path, n.path))) { addOption(n.path, prefix + n.name); walk(n.children, prefix + n.name + '/'); } } walk(folder.tree, '');
     const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.onclick = () => overlay.remove();
     const submit = document.createElement('button'); submit.textContent = 'Move';
-    const note = document.createElement('p'); note.textContent = node.markdown ? 'Moving updates relative image and link paths. Unsaved edits stay unsaved.' : 'Move this file into the selected folder.';
+    const note = document.createElement('p'); note.textContent = node.type === 'folder' ? 'Move this folder and all its contents. Relative links in its handouts are updated; unsaved edits stay unsaved.' : node.markdown ? 'Moving updates relative image and link paths. Unsaved edits stay unsaved.' : 'Move this file into the selected folder.';
     panel.append(heading, note, select, cancel, submit); overlay.append(panel); document.body.append(overlay);
     overlay.addEventListener('keydown', e => { if (e.key === 'Escape') overlay.remove(); });
-    panel.onsubmit = e => { e.preventDefault(); overlay.remove(); void moveTreeFile(node, select.value); }; select.focus();
+    panel.onsubmit = e => { e.preventDefault(); overlay.remove(); void moveTreeEntry(node, select.value); }; select.focus();
   }
   function installFolderDrop(element, destination) {
     const isFileDrag = event => [...(event.dataTransfer?.types || [])].some(type => type === 'Files' || type === 'application/x-handout-path');
     element.addEventListener('dragover', event => {
       if (!isFileDrag(event)) return;
-      event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; element.classList.add('drop-target');
+      event.stopPropagation();
+      if (draggedFolderPath && withinBrowserPath(draggedFolderPath, destination())) { event.dataTransfer.dropEffect = 'none'; element.classList.remove('drop-target'); return; }
+      event.preventDefault(); event.dataTransfer.dropEffect = 'move'; element.classList.add('drop-target');
     });
     element.addEventListener('dragleave', () => element.classList.remove('drop-target'));
     element.addEventListener('drop', async event => {
       if (!isFileDrag(event)) return;
       event.preventDefault(); event.stopPropagation(); element.classList.remove('drop-target');
       const paths = [...(event.dataTransfer.files || [])].map(file => desktop.droppedFilePath(file));
-      const legacyPath = event.dataTransfer.getData('application/x-handout-path'); if (legacyPath) paths.push(legacyPath);
-      const find = (nodes, path) => { for (const node of nodes) { if (node.type === 'file' && node.path === path) return node; if (node.children) { const match = find(node.children, path); if (match) return match; } } };
+      const draggedPath = event.dataTransfer.getData('application/x-handout-path'); if (draggedPath) paths.push(draggedPath);
+      finishFolderDrag();
+      const find = (nodes, path) => { for (const node of nodes) { if (node.path === path) return node; if (node.children) { const match = find(node.children, path); if (match) return match; } } };
       for (const path of new Set(paths)) {
         const node = find(folder.tree, path);
-        if (node) await moveTreeFile(node, destination());
-        else statusText.textContent = 'Only files in the open folder can be moved here.';
+        if (node) await moveTreeEntry(node, destination());
+        else statusText.textContent = 'Only files and folders in the open folder can be moved here.';
       }
     });
+  }
+  function finishFolderDrag() {
+    draggedFolderPath = null;
+    document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
+  }
+  function installFolderDrag(element, node) {
+    element.draggable = true;
+    element.addEventListener('dragstart', event => {
+      event.stopPropagation(); draggedFolderPath = node.path;
+      event.dataTransfer.setData('application/x-handout-path', node.path);
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    element.addEventListener('dragend', finishFolderDrag);
   }
   installFolderDrop(folderName, () => folder?.path);
   installFolderDrop(tree, () => folder?.path);
@@ -2117,6 +2176,7 @@ if (window.handoutDesktop) {
         const summary = document.createElement('summary'); summary.textContent = node.name; summary.title = node.path; details.append(summary);
         summary.addEventListener('click', () => { browserSelection = node; });
         summary.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showCreateMenu(node, event); });
+        installFolderDrag(summary, node);
         installFolderDrop(summary, () => node.path);
         addTree(node.children, details); item.append(details);
       } else if (node.markdown) {
@@ -2485,6 +2545,7 @@ if (window.handoutDesktop) {
     if (command === 'open-recent') return openRecentPath(payload);
     if (command === 'open-recent-folder') return chooseFolder(payload);
     if (command === 'save') return saveCurrent();
+    if (command === 'document-settings') return documentSettings.open();
     if (command === 'print') return printHandout();
     if (command === 'export-pdf') return exportHandout();
     if (command.startsWith('google-')) return googleCommand(command);
@@ -2492,7 +2553,10 @@ if (window.handoutDesktop) {
     if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
     if (command === 'wrap-lines') return setWrapLines(payload);
     if (command === 'show-whitespace') return setShowWhitespace(payload);
-    if (command === 'set-layout' && !isSlideDocument() && layouts[payload]) { layoutSelect.value = payload; return render(); }
+    if (command === 'set-layout' && !isSlideDocument() && layouts[payload]) {
+      try { return documentSettings.setLayout(payload); }
+      catch (error) { statusText.textContent = `Could not change layout: ${error.message}`; }
+    }
     if (command === 'set-theme' && !isSlideDocument() && ['default', 'classic', 'modern', 'spacious'].includes(payload)) {
       document.body.dataset.handoutTheme = payload;
       return render();

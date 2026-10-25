@@ -40,7 +40,13 @@ Use only these app-supported parameters:
 
 | Parameter | Values and behavior |
 | --- | --- |
-| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the layout when the handout opens. |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the page layout. |
+| `lesson-info` | Optional nested activity metadata: `title`, `audience`, `assignment`, `learning-goals`, `success-criteria`, `prior-knowledge`, `duration-minutes`, and `scaffolding`. Custom lesson properties are allowed. Keep activity metadata inside this mapping, separate from document settings. |
+
+Lesson info is hidden from printouts and does not create student-facing content.
+Preserve it when revising an existing handout. Omit unused properties rather than
+adding an empty template. The app's **Document settings…** dialog edits these
+properties directly in the Markdown.
 
 ## Required opening and heading structure
 

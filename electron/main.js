@@ -3,7 +3,7 @@ const fs = require('fs/promises'); const path = require('path'); const { pathToF
 const { importImageAsset, renameImageAsset } = require('./assetImport');
 const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
 const drive = require('./googleDrive');
-const { createEntry, moveHandout, checkedPath } = require('./fileBrowser');
+const { createEntry, moveHandout, moveFolder, checkedPath } = require('./fileBrowser');
 const { extractArchive } = require('./zipFiles');
 let mainWindow; let currentRoot = null;
 let googleSession = null;
@@ -57,6 +57,7 @@ async function refreshApplicationMenu() {
       { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand('open-folder') },
       { label: 'Open Recent', submenu: recentMenu.length ? recentMenu : [{ label: 'No recent files or folders', enabled: false }] },
       { type: 'separator' }, { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
+      { label: 'Document settings…', click: () => sendMenuCommand('document-settings') },
       { type: 'separator' }, { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => sendMenuCommand('export-pdf') },
       { label: 'Export PowerPoint…', enabled: documentMode === 'slides', click: () => sendMenuCommand('export-pptx') },
       { label: 'Google Drive', submenu: [
@@ -272,6 +273,18 @@ ipcMain.handle('browser:move', async (_event, source, parent, content) => {
     const settings = await readSettings();
     if (settings.googleDocs?.[source]) { settings.googleDocs[moved.path] = settings.googleDocs[source]; delete settings.googleDocs[source]; }
     settings.recentFiles = [...new Set((settings.recentFiles || []).map(p => p === source ? moved.path : p))];
+    await saveSettings(settings); await refreshApplicationMenu();
+  }
+  return moved;
+});
+ipcMain.handle('browser:move-folder', async (_event, source, parent, drafts) => {
+  const moved = await moveFolder(currentRoot, source, parent, drafts);
+  if (moved.path !== source) {
+    const relocate = value => value.startsWith(source + path.sep) ? moved.path + value.slice(source.length) : value;
+    const settings = await readSettings();
+    settings.recentFiles = [...new Set((settings.recentFiles || []).map(relocate))];
+    settings.recentFolders = [...new Set((settings.recentFolders || []).map(value => value === source ? moved.path : relocate(value)))];
+    if (settings.googleDocs) settings.googleDocs = Object.fromEntries(Object.entries(settings.googleDocs).map(([file, value]) => [relocate(file), value]));
     await saveSettings(settings); await refreshApplicationMenu();
   }
   return moved;

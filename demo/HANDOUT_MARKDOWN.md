@@ -9,17 +9,33 @@ File and output conventions:
 
 ## YAML front matter
 
-An optional YAML block at the first line of a handout controls its opening layout. It is removed from the preview, printout, and PDF:
+An optional YAML block at the first line of a handout controls its layout and can
+store activity information. It is removed from the preview, printout, and PDF.
+Use **Settings…** beside the Markdown heading or **File → Document settings…**
+to edit these values:
 
 ```md
 ---
 layout: letter
+lesson-info:
+  title: Exploring food webs
+  audience: Grade 7 science
+  learning-goals:
+    - Describe relationships within a food web.
+  duration-minutes: 25
 ---
 ```
 
 | Parameter | Values and behavior |
 | --- | --- |
-| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the layout when the handout opens. |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Selects the page layout. |
+| `lesson-info` | Optional nested activity information. Suggested keys: `title`, `audience`, `assignment`, `learning-goals`, `success-criteria`, `prior-knowledge`, `duration-minutes`, and `scaffolding`. Custom properties are allowed inside this mapping. |
+
+Add only the lesson fields you need. Learning goals, success criteria, prior
+knowledge, and scaffolding can be lists. Custom fields can hold text, lists,
+numbers, yes/no values, or nested YAML. Lesson info describes the activity; it
+does not create visible headings or content in the handout. Applying settings
+updates the Markdown and supports Undo; save the document normally afterward.
 
 In addition to basic Markdown, The Markdown Handout Maker supports:
 

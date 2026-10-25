@@ -79,6 +79,12 @@ Each slide can have a `#` title followed by ordinary Markdown content. Text, ima
 
 Theme and aspect controls update the YAML. Ordinary Markdown files without `type: slides` remain handouts.
 
+**Settings…** beside the Markdown heading (also **File → Document settings…**)
+edits the deck's theme and aspect ratio and includes an optional **Lesson info**
+section. Activity fields such as audience, learning goals, and duration are
+nested under `lesson-info`. Add custom lesson properties as needed. These values
+remain in the Markdown and do not appear on slides or printouts.
+
 ## Columns
 
 Open a group with `:::columns`, start each column with `:::column`, and close the whole group with `:::`:

@@ -83,17 +83,50 @@ The Google Doc shows Markdown characters as ordinary text in Consolas; it does n
 
 ## YAML front matter
 
-Put an optional YAML block at the very beginning of a handout. The app removes it from the printed preview and PDF, while using these supported settings:
+Choose **Settings…** beside the Markdown heading, or **File → Document settings…**.
+The dialog separates document formatting from **Lesson info**. Choose suggested
+lesson properties or add custom ones as text, lists, numbers, yes/no values, or
+nested YAML. Only fields you fill in are added under `lesson-info`; unused
+suggestions stay out of the file. Remove a field or clear its value to omit it.
+
+**Apply** makes one undoable Markdown edit; **Cancel** leaves the document alone.
+Save the file normally afterward. **Show YAML** selects the frontmatter for
+direct editing. Existing comments and other metadata are retained. Invalid YAML
+must be corrected before applying settings.
+
+Put an optional YAML block at the very beginning of a handout. The app removes it
+from the printed preview and PDF:
 
 ```md
 ---
 layout: letter
+lesson-info:
+  title: Exploring food webs
+  audience: Grade 7 science
+  learning-goals:
+    - Describe relationships within a food web.
+  duration-minutes: 25
+  materials:
+    - Species cards
+    - String
 ---
 ```
 
 | Parameter | Values and behavior |
 | --- | --- |
-| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Sets the initial page layout when the handout opens. |
+| `layout` | `letter`, `letter-landscape`, `a4`, `half-portrait`, `half-landscape`, `half-duplicate-portrait`, `half-duplicate-landscape`, `booklet-letter`, or `booklet`. Sets the page layout. The dialog, source, and View menu update the same setting. |
+| `lesson-info` | Optional nested information about the activity; it does not change the printed content. Custom properties belong inside this mapping. |
+
+Suggested lesson fields are `title`, `audience`, `assignment`, `learning-goals`,
+`success-criteria`, `prior-knowledge`, `duration-minutes`, and `scaffolding`.
+Lists use one item per line in the dialog. All fields are optional; a plain
+handout does not acquire a lesson template automatically. Slide decks use the
+same Lesson info section, alongside their theme and aspect ratio settings.
+
+Run `node tests/test-document-settings.cjs` with the optional Playwright setup
+for the native Electron editing and saving check. The offline YAML bundle and
+license are committed in `renderer/vendor`; regenerate them with
+`npm run build:yaml` after updating the YAML dependency.
 
 ## Build and test
 
@@ -176,6 +209,16 @@ a new file or folder name.
 Expanded subfolders are remembered separately for each folder across sessions.
 New folders start collapsed. Search expansion is temporary; revealing an active
 handout can still expand its parents.
+
+Drag a subfolder by its name onto another folder to move it and all its contents.
+Drop onto the folder name above the tree or empty tree space to move it back to
+the open root. Folders also have a **Move to…** action in their right-click menu.
+Open tabs and expanded subfolders follow the move, unsaved edits stay unsaved,
+and relative links inside moved handouts keep pointing to their resources.
+Moves cannot replace an existing item or put a folder inside itself.
+
+Run `node tests/test-folder-moves.cjs` with the optional Playwright setup to check
+folder moves in Electron using a temporary folder and an isolated app profile.
 
 Run `node tests/test-file-browser-refresh.cjs` with the optional Playwright setup
 described above to check automatic refresh and expansion persistence.
