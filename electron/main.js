@@ -59,6 +59,7 @@ async function refreshApplicationMenu() {
       { type: 'separator' }, { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand('save') },
       { label: 'Document settings…', click: () => sendMenuCommand('document-settings') },
       { type: 'separator' }, { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => sendMenuCommand('export-pdf') },
+      { label: 'Export ZIP…', click: () => sendMenuCommand('export-zip') },
       { label: 'Export PowerPoint…', enabled: documentMode === 'slides', click: () => sendMenuCommand('export-pptx') },
       { label: 'Google Drive', submenu: [
         { label: 'Settings and sign in…', click: () => sendMenuCommand('google-settings') },
@@ -230,6 +231,16 @@ ipcMain.handle('slides:powerpoint', async (_event, content, documentPath) => {
   if (result.canceled || !result.filePath) return null;
   await fs.writeFile(result.filePath, buffer);
   return result.filePath;
+});
+ipcMain.handle('handout:zip', async (event, documentPath, content) => {
+  if (event.sender !== mainWindow.webContents) throw Error('Invalid export request.');
+  const { planHandoutExport, writeHandoutZip } = require('./handoutExport');
+  const plan = await planHandoutExport(currentRoot, validHandoutPath(documentPath), content);
+  const name = path.basename(documentPath).replace(markdownExtension, '');
+  const result = await dialog.showSaveDialog(mainWindow, { title: 'Export handout ZIP', defaultPath: `${name}.zip`, filters: [{ name: 'ZIP archive', extensions: ['zip'] }] });
+  if (result.canceled || !result.filePath) return null;
+  const savedPath = await writeHandoutZip(plan, result.filePath);
+  return { path: savedPath, assetCount: plan.assetCount };
 });
 ipcMain.handle('links:open', (_event, url) => {
   if (typeof url !== 'string' || !/^https?:$/i.test(new URL(url).protocol)) throw Error('Only web links can be opened.');

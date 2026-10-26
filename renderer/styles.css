@@ -244,6 +244,30 @@ body {
 .snippet-dialog .button:hover, .snippet-dialog .button:focus-visible { outline: 3px solid #8fcbd255; outline-offset: 1px; }
 .preview-panel { min-width: 0; overflow: auto; }
 .preview-heading { position: sticky; z-index: 5; top: 0; }
+#present-handout { flex:none; min-height:32px; padding:5px 12px; border:1px solid var(--accent); border-radius:6px; color:#fff; background:var(--accent); font:inherit; font-size:12px; cursor:pointer; }
+#present-handout:hover { background:var(--accent-dark); }
+#present-handout[hidden] { display:none; }
+#present-handout:disabled { opacity:.5; cursor:default; }
+.handout-presenting .workspace { visibility:hidden; }
+.handout-presentation { position:fixed; inset:0; width:100vw; max-width:none; height:100vh; height:100dvh; max-height:none; margin:0; padding:0; border:0; color:#f4f7fa; background:#202830; }
+.handout-presentation[open] { display:grid; grid-template-rows:auto minmax(0,1fr); }
+.handout-presentation::backdrop { background:#202830; }
+.handout-presentation-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 16px; border-bottom:1px solid #ffffff25; background:#182027; font-size:14px; }
+.handout-presentation-title { margin-right:auto; font-weight:650; }
+.handout-presentation-toolbar button { min-width:38px; min-height:38px; padding:7px 12px; border:1px solid #8796a3; border-radius:6px; color:inherit; background:#303e49; font:inherit; cursor:pointer; }
+.handout-presentation-toolbar button:hover { background:#435967; }
+.handout-presentation-toolbar button:disabled { opacity:.4; cursor:default; }
+.handout-presentation-toolbar output { min-width:4ch; text-align:center; font-variant-numeric:tabular-nums; }
+.handout-presentation-toolbar button:focus-visible, #present-handout:focus-visible { outline:3px solid #8fcbd2; outline-offset:2px; }
+.handout-presentation-viewport { min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain; outline:0; }
+.handout-presentation-viewport:focus-visible { box-shadow:inset 0 0 0 2px #8fcbd2; }
+.handout-presentation-pages { display:flex; align-items:center; flex-direction:column; gap:24px; width:max-content; min-width:100%; padding:24px; }
+.handout-presentation-frame { position:relative; flex:none; }
+.handout-presentation-frame > .handout-page, .handout-presentation-frame > .print-sheet { position:absolute; top:0; left:0; transform-origin:top left; }
+.handout-presentation .handout-block { cursor:auto; }
+.handout-presentation .sheet-label, .handout-presentation .oversize-warning::after { display:none; }
+@media (max-width:540px) { .handout-presentation-toolbar { gap:5px; padding:7px; } .handout-presentation-title { display:none; } .handout-presentation-toolbar button { padding:7px 8px; } .handout-presentation-toolbar [data-action="exit"] { margin-left:auto; } }
+@media print { .handout-presentation { display:none !important; } .handout-presenting .workspace { visibility:visible; } }
 #preview { display: flex; align-items: center; flex-direction: column; gap: 28px; padding: 28px; }
 #preview .handout-block { cursor: pointer; }
 #preview .handout-block:hover { outline: 2px solid #215b7566; outline-offset: 3px; }

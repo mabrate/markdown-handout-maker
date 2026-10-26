@@ -12,6 +12,7 @@ The Markdown Handout Maker keeps your source handouts in local folders. Google D
 - Open, create, edit, and save Markdown handouts from a local folder
 - Preview letter, A4, half-sheet, duplicate-half-sheet, 8.5×11 booklet, and 11×17 booklet layouts
 - Print natively, export a PDF, or export a PDF to Google Drive
+- Export the handout Markdown and linked local assets together as a ZIP
 - Sync a handout to a Google Doc with Push, Pull, and a phone QR link
 - Use classroom-focused Markdown additions for answer lines, drawing spaces,
   images, grids, cards, and page breaks
@@ -33,7 +34,22 @@ Ctrl/Cmd+S to write changes back to the selected file. New handouts start with
 `layout: letter` YAML, Name/Date/Period fields, and a level-one title. This starter
 is also used when creating a handout from the file browser.
 
+Choose **File → Export ZIP…** to share the current Markdown (including unsaved
+edits) and its linked local images, videos, and other files. Save a new handout
+first when prompted. The archive keeps the folders needed for relative links to
+work after extraction, including links to assets in parent folders. Only linked
+files are included; web links remain online links. Assets must use relative paths
+inside the open folder. Missing or inaccessible assets stop the export with the
+filename so you can fix the link before sharing.
+
 ## Preview navigation
+
+Click **Present** beside the preview page count to show the current handout
+fullscreen with the editing panels hidden. Scroll normally, use arrow keys or
+Page Up/Down, and enlarge the pages with **−**, **+**, or **Fit width**. Videos
+remain playable. Click **Exit presentation** or press **Esc** to restore the
+workspace, including panel widths and visibility, editor selection, and your
+place in the handout. Presentation does not change the Markdown or save edits.
 
 Click preview text to select its Markdown source. List items, nested items,
 checklists, question choices, and Markdown table rows use their original source

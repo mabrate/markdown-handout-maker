@@ -6,7 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-media-sizing.js && node tests/test-handout-settings.js && node tests/test-document-settings.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js && node tests/test-slides.js && node tests/test-slide-layouts.js && node tests/test-slide-reorder.js && node tests/test-video-block.js",
+    "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-handout-export.js && node tests/test-media-sizing.js && node tests/test-handout-settings.js && node tests/test-document-settings.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js && node tests/test-slides.js && node tests/test-slide-layouts.js && node tests/test-slide-reorder.js && node tests/test-video-block.js",
     "package": "electron-builder --dir",
     "dist": "electron-builder",
     "build:yaml": "node scripts/build-yaml.cjs"
@@ -47,7 +47,8 @@
     "mammoth": "^1.13.0",
     "pptxgenjs": "^4.0.1",
     "qrcode-generator": "^2.0.4",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "jszip": "^3.10.2"
   },
   "overrides": {
     "mammoth": {

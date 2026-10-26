@@ -26,6 +26,9 @@ const slideStudio = window.SlideStudio.mount({ source, preview, previewPanel, pa
   guide: () => document.dispatchEvent(new Event('slides:guide'))
 });
 const handoutInspector = window.HandoutSettings.mount({source, preview, previewPanel, edit: replaceEditorSelection, isSlides: isSlideDocument});
+const handoutPresenter = window.HandoutPresentation.mount({ source, preview, previewPanel, prepare: render,
+  hideTools() { handoutInspector.hide(); document.querySelector('.media-resize-outline')?.remove(); }
+});
 function isSlideDocument() { return window.HandoutSlides.metadata(source.value).enabled; }
 function pdfLayout() { return isSlideDocument() ? (window.HandoutSlides.parse(source.value).settings.aspect === '4:3' ? 'slides-standard' : 'slides-wide') : layoutSelect.value; }
 function slideImageUrl(src) {
@@ -958,6 +961,7 @@ function render() {
   clearTimeout(renderTimer);
   syncDocumentLayout();
   const mode = isSlideDocument() ? 'slides' : 'handout';
+  handoutPresenter.sync(mode === 'handout');
   const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default');
   if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default').catch(() => {}); }
   if (slideStudio.render(source.value, slideImageUrl)) { handoutInspector.hide(); statusText.textContent = 'Slide preview updated'; return; }
@@ -2539,7 +2543,7 @@ if (window.handoutDesktop) {
     if (command === 'new-slides') return makeUntitledSlides();
     if (command === 'export-pptx') return exportSlidesPowerPoint();
     if (command === 'present-slides') return slideStudio.present();
-    if (command === 'exit-presentation') return slideStudio.stopPresentation();
+    if (command === 'exit-presentation') return handoutPresenter.active ? handoutPresenter.stop() : slideStudio.stopPresentation();
     if (command === 'open-file') return chooseFile();
     if (command === 'open-folder') return chooseFolder();
     if (command === 'open-recent') return openRecentPath(payload);
@@ -2548,6 +2552,15 @@ if (window.handoutDesktop) {
     if (command === 'document-settings') return documentSettings.open();
     if (command === 'print') return printHandout();
     if (command === 'export-pdf') return exportHandout();
+    if (command === 'export-zip') {
+      if (!selectedFile) { statusText.textContent = 'Open a handout to export ZIP.'; return; }
+      try {
+        if (selectedFile.untitled && !await saveUntitledHandout()) return;
+        const result = await desktop.exportZip(selectedFile.path, source.value);
+        if (result) statusText.textContent = `ZIP exported with ${result.assetCount} linked asset${result.assetCount === 1 ? '' : 's'}`;
+      } catch (error) { statusText.textContent = `Could not export ZIP: ${error.message}`; }
+      return;
+    }
     if (command.startsWith('google-')) return googleCommand(command);
     if (command === 'toggle-answers' && !isSlideDocument()) return toggleAnswers();
     if (command === 'toggle-panel') return document.querySelector(`.panel-toggle[data-panel="${payload}"]`)?.click();
