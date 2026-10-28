@@ -238,7 +238,7 @@
     finish(lines.length);
     if (notes) warnings.push('Presenter notes are missing their closing ::: marker.');
     if (!slides.length) slides.push({ markerLine: -1, startLine: prefixLines, endLine: lines.length, title: [], outlineTitle: [], blocks: [], notes: '', warnings: [] });
-    return { enabled: true, settings: { theme, aspect }, slides, warnings };
+    return { enabled: true, settings: { theme, aspect, footerImage: meta.values['footer-image'] || '', footerLeft: meta.values['footer-left'] || '', footerCenter: meta.values['footer-center'] || '', footerRight: meta.values['footer-right'] || '', footerPageNumbers: meta.values['footer-page-numbers'] !== 'false' }, slides, warnings };
   }
   function lineCount(text, width, fontSize) {
     // Conservative shared estimate; the browser also checks actual text overflow.
@@ -340,7 +340,25 @@
       const h = addText(block.runs, x, y, w, block.size * scale, { ...block, type: 'text', x, y, w, h: textHeight(block.runs, w, block.size * scale), positioned: true, color: block.color, fontSize: block.size * scale });
       if (x + w > width + .01 || y + h > height + .01) warnings.push('Content extends beyond the slide. Move or resize the positioned text, reduce its size, or use :::fit.');
     }
-    if (!background) elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });
+    if (!background) {
+      const footer = deck.settings;
+      const hasCustom = footer.footerImage || footer.footerLeft || footer.footerCenter || footer.footerRight;
+      if (hasCustom) {
+        const y = 7.12, fontSize = 10.5;
+        if (footer.footerImage) {
+          const dimensions = imageDimensions.get(footer.footerImage), ratio = dimensions ? dimensions.width / dimensions.height : 1.5;
+          const h = .22, w = Math.min(.95, h * ratio);
+          elements.push({ type: 'image', src: footer.footerImage, alt: 'Footer logo', x: margin, y: y - .02, w, h, footer: true });
+        }
+        const leftX = margin + (footer.footerImage ? 1.05 : 0);
+        if (footer.footerLeft) elements.push({ type: 'text', runs: [{ text: footer.footerLeft }], x: leftX, y, w: width / 3 - leftX + .4, h: .24, fontSize, color: theme.muted, footer: true });
+        if (footer.footerCenter) elements.push({ type: 'text', runs: [{ text: footer.footerCenter }], x: width / 3, y, w: width / 3, h: .24, align: 'center', fontSize, color: theme.muted, footer: true });
+        const right = footer.footerRight || (footer.footerPageNumbers ? String(index + 1) : '');
+        if (right) elements.push({ type: 'text', runs: [{ text: right.replace(/\\{page\\}/g, String(index + 1)).replace(/\\{total\\}/g, String(deck.slides.length)) }], x: width * 2 / 3, y, w: width / 3 - margin, h: .24, align: 'right', fontSize, color: theme.muted, footer: true });
+      } else if (footer.footerPageNumbers) {
+        elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });
+      }
+    }
     return { width, height, theme, elements, lists, textScale: scale, warnings: [...new Set(warnings)], overflow: warnings.some(warning => warning.startsWith('Content extends beyond')) };
   }
   function scene(deck, index, imageDimensions) {
