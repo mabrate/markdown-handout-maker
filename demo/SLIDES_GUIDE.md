@@ -4,6 +4,25 @@ Use this guide when an AI agent creates or revises presentations for The Markdow
 
 Separate slides with a line containing three dashes: `---`. Arrange content with `:::` blocks when needed. There are no slide layout types to select.
 
+## Consistent footer on every slide
+
+The optional front matter below adds an image/logo plus independent text boxes in the slide footer. Text stays editable in exported PowerPoint. Relative image paths resolve from the deck's folder.
+
+```yaml
+---
+type: slides
+theme: classroom
+aspect: 16:9
+footer-image: images/school-logo.png
+footer-left: The Village School
+footer-center: Design Thinking
+footer-right: "{page} / {total}"
+footer-page-numbers: true
+---
+```
+
+The footer appears on normal slides, but not on slides with a full-slide background image. Omit any section you do not need. Use `footer-page-numbers: false` to hide automatic page numbers. Without custom footer settings, existing slide-number behavior remains unchanged. Use a small, transparent PNG or SVG for the logo. For more advanced positioning, use the regular `:::text` layout blocks on individual slides.
+
 ## Choosing and creating images
 
 - **Prefer public-domain or CC0 images:** use relevant photographs, historical images, and scientific illustrations. Verify the status on each source page; record its link, creator, and rights statement in the slide's `:::notes`.
