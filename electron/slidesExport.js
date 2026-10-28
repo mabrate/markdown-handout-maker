@@ -48,6 +48,7 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
     }
   }
   for (const [index, slide] of deck.slides.entries()) await loadImages(slide.blocks, index);
+  if (deck.settings.footerImage) await loadImages([{ type: 'image', src: deck.settings.footerImage }], 0);
   for (const [index, slide] of deck.slides.entries()) {
     const scene = slides.scene(deck, index, imageDimensions), page = pptx.addSlide(); page.background = { color: theme.background };
     if (slide.notes) page.addNotes(slide.notes);
