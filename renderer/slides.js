@@ -354,7 +354,7 @@
         if (footer.footerLeft) elements.push({ type: 'text', runs: [{ text: footer.footerLeft }], x: leftX, y, w: width / 3 - leftX + .4, h: .24, fontSize, color: theme.muted, footer: true });
         if (footer.footerCenter) elements.push({ type: 'text', runs: [{ text: footer.footerCenter }], x: width / 3, y, w: width / 3, h: .24, align: 'center', fontSize, color: theme.muted, footer: true });
         const right = footer.footerRight || (footer.footerPageNumbers ? String(index + 1) : '');
-        if (right) elements.push({ type: 'text', runs: [{ text: right.replace(/\\{page\\}/g, String(index + 1)).replace(/\\{total\\}/g, String(deck.slides.length)) }], x: width * 2 / 3, y, w: width / 3 - margin, h: .24, align: 'right', fontSize, color: theme.muted, footer: true });
+        if (right) elements.push({ type: 'text', runs: [{ text: right.replace(/\{page\}/g, String(index + 1)).replace(/\{total\}/g, String(deck.slides.length)) }], x: width * 2 / 3, y, w: width / 3 - margin, h: .24, align: 'right', fontSize, color: theme.muted, footer: true });
       } else if (footer.footerPageNumbers) {
         elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });
       }
