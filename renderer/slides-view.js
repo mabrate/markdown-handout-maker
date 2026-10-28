@@ -450,6 +450,7 @@
         }
         if(block.blocks)collect(block.blocks);if(block.columns)block.columns.forEach(collect);
       }};deck.slides.forEach(slide=>collect(slide.blocks));
+      if (deck.settings.footerImage) collect([{ type: 'image', src: deck.settings.footerImage }]);
       scenes = deck.slides.map((_, index) => model.scene(deck, index,imageDimensions));
       imageReady=Promise.all(loading).then(results=>{if(deck!==parsed)return;let changed=false;for(const result of results)if(result?.value){imageDimensions.set(result.src,result.value);changed=true;}if(changed){scenes=deck.slides.map((_,index)=>model.scene(deck,index,imageDimensions));refreshThumbnails();const focused=preview.contains(document.activeElement);showCurrent(selected);if(focused)preview.focus({preventScroll:true});}});
       themeSelect.value = deck.settings.theme; aspectSelect.value = deck.settings.aspect;
