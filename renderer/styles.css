@@ -105,10 +105,16 @@ body {
 .file-tree ul { margin: 0; padding-left: 15px; list-style: none; }
 .file-tree li { margin: 1px 0; }
 .file-tree details > summary { min-height: 36px; cursor: pointer; padding: 8px 9px; color: #40515b; font-weight: 650; }
-.file-entry { display: block; width: 100%; min-height: 36px; overflow: hidden; border: 0; border-radius: 6px; padding: 8px 10px; color: #273943; background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; font: inherit; cursor: pointer; }
+.file-entry { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; overflow: hidden; border: 0; border-radius: 6px; padding: 8px 10px; color: #273943; background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; font: inherit; cursor: pointer; }
 .file-entry:hover { background: #dbe6e9; }.file-entry.active { color: #fff; background: #215b75; }
-.image-entry { position: relative; padding-left: 30px; color: #607080; cursor: default; }
-.image-entry::before { content: "▧"; position: absolute; left: 10px; color: #748b96; }
+.image-entry { position: relative; color: #607080; cursor: default; }
+.file-entry-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-type-marker { flex: 0 0 27px; box-sizing: border-box; padding: 2px 1px; border: 1px solid #c2ced4; border-radius: 3px; background: #edf1f3; color: #455a66; text-align: center; font: 700 8px/12px Arial, sans-serif; letter-spacing: .1px; }
+.file-type-marker[data-type="markdown"] { background: #e1edf9; color: #21547d; border-color: #b6cde1; }
+.file-type-marker[data-type="pdf"] { background: #fbe7e4; color: #943b31; border-color: #e5c0b9; }
+.file-type-marker[data-type="image"] { background: #e5f2e8; color: #356443; border-color: #bfd7c5; }
+.file-type-marker[data-type="sheet"] { background: #e4f0ed; color: #256454; }
+.file-type-marker[data-type="slides"] { background: #fff0dd; color: #8a541c; }
 .image-entry:hover { background: transparent; }
 .empty-tree { padding: 6px 10px; color: var(--muted); font-size: 12px; }
 .image-context-menu {

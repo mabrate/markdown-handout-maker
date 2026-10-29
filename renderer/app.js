@@ -2170,6 +2170,15 @@ if (window.handoutDesktop) {
   folderName.title = 'Right-click for folder actions';
   folderName.addEventListener('contextmenu', event => { if (folder) { event.preventDefault(); showCreateMenu(folder, event); } });
   tree.addEventListener('contextmenu', event => { if (event.target === tree || event.target.classList.contains('empty-tree')) { event.preventDefault(); if (folder) showCreateMenu(folder, event); } });
+  function labelTreeFile(entry, node) {
+    const extension=node.name.split('.').pop().toLowerCase();
+    const groups={pdf:'pdf',doc:'document',docx:'document',odt:'document',xls:'sheet',xlsx:'sheet',csv:'sheet',ods:'sheet',ppt:'slides',pptx:'slides',odp:'slides',zip:'archive',mp4:'video',webm:'video',mov:'video',mp3:'audio',wav:'audio',ogg:'audio'};
+    const type=node.markdown?'markdown':node.image?'image':groups[extension]||'file';
+    const marker=document.createElement('span');marker.className='file-type-marker';marker.dataset.type=type;marker.setAttribute('aria-hidden','true');
+    marker.textContent=node.markdown?'MD':extension===node.name.toLowerCase()?'FILE':extension.slice(0,4).toUpperCase();
+    const name=document.createElement('span');name.className='file-entry-name';name.textContent=node.name;
+    entry.append(marker,name);
+  }
   function addTree(nodes, parent) {
     const list = document.createElement('ul');
     const query = browserSearch.value.trim().toLowerCase();
@@ -2187,18 +2196,18 @@ if (window.handoutDesktop) {
         installFolderDrop(summary, () => node.path);
         addTree(node.children, details); item.append(details);
       } else if (node.markdown) {
-        const button = document.createElement('button'); button.className = 'file-entry'; button.textContent = node.name; button.title = node.path; button.dataset.filePath = node.path;
+        const button = document.createElement('button'); button.className = 'file-entry'; labelTreeFile(button, node); button.title = node.path; button.dataset.filePath = node.path;
         installNativeDrag(button, node);
         button.addEventListener('click', () => { browserSelection = node; void openFile(node); }); item.append(button);
         button.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); browserSelection = node; showFileContextMenu(node, event); });
       } else if (node.image) {
-        const asset = document.createElement('span'); asset.className = 'file-entry image-entry'; asset.textContent = node.name; asset.title = node.path; asset.tabIndex = 0;
+        const asset = document.createElement('span'); asset.className = 'file-entry image-entry'; labelTreeFile(asset, node); asset.title = node.path; asset.tabIndex = 0;
         installNativeDrag(asset, node);
         asset.addEventListener('click', () => { browserSelection = node; });
         asset.addEventListener('contextmenu', event => { event.preventDefault(); showImageContextMenu(node, event); });
         asset.addEventListener('dblclick', () => showImagePreview(node)); asset.addEventListener('keydown', event => { if (event.key === 'Enter') showImagePreview(node); }); item.append(asset);
       } else {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry external-entry'; button.textContent = node.name; button.title = `${node.path} · Click to preview; drag to another app`;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry external-entry'; labelTreeFile(button, node); button.title = `${node.path} · Click to preview; drag to another app`;
         installNativeDrag(button, node);
         button.addEventListener('click', () => { browserSelection = node; void showDocumentPreview(node); });
         button.addEventListener('dblclick', () => void browserAction('external', node));
