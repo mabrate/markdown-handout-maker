@@ -309,6 +309,81 @@ Place document-specific CSS in a `<style>` block and scope every selector to `.h
 
 Use the built-in syntax when it already solves the problem. Do not add ornamental CSS or JavaScript. Custom HTML and CSS should support the worksheet's instructional purpose and remain compatible with printing. Avoid fixed heights that may clip student text. Prefer inches for print-specific measurements and percentages for table columns.
 
+## Slide footer blocks
+
+Use `:::footer` only when the requested document is a slideshow with `type: slides`
+in its opening YAML. This block is not supported in ordinary printable handouts.
+For a slide deck, follow `SLIDES_GUIDE.md` for the rest of the slide syntax.
+
+A footer contains ordinary Markdown paragraphs and images. Each image and each
+paragraph occupies an equal-width cell in a single horizontal row, in source
+order. Separate paragraphs with blank lines. For example, this creates three
+side-by-side cells: a logo, a lesson label, and a reminder.
+
+```md
+:::footer height=0.8 size=16 color=white background=navy padding=0.12 gap=0.25 align=left persist=true
+![School logo](images/logo.png)
+
+Science · Circuits
+
+Record evidence and explain your thinking.
+:::
+```
+
+Use relative image paths and descriptive alt text. Images retain their aspect
+ratio and fit inside their cells. `align` controls both text and image alignment
+within each cell. Text shrinks to a minimum of 8 pt when necessary; if it still
+does not fit, increase the footer height or shorten the text. Do not put tables,
+videos, columns, or other layout blocks inside a footer.
+
+| Option | Values and behavior | Default |
+| --- | --- | --- |
+| `height` | 0.25–2 inches; use a plain number, such as `height=0.8` | `0.65` |
+| `size` | 8–48 points | `16` |
+| `color` | Supported color name or six-digit hex, such as `white` or `#1b242b` | Theme muted text color |
+| `background` | Supported color name or six-digit hex; omit for transparency | Transparent |
+| `padding` | 0–0.5 inches of vertical padding, reduced when needed for a short footer | `0.12` |
+| `gap` | 0–1 inches between cells, reduced when needed to fit | `0.25` |
+| `align` | `left`, `center`, or `right` within each cell | `left` |
+| `persist` | `true` carries the footer forward to later slides | `false` |
+| `hidden` | `true` suppresses the footer | `false` |
+| `overlay` | `true` overlays content; otherwise flowing slide content reserves space above the footer | `false` |
+
+Supported color names are white, black, red, green, blue, yellow, orange, gray,
+grey, navy, teal, purple, pink, brown, cyan, and magenta. Use `key=value` options
+on the opening line, separated by spaces; do not add units to numeric values.
+
+Persistence starts on the slide containing the block. A later footer with
+`persist=true` replaces the persistent footer. A footer without persistence
+replaces it for that slide only, then the earlier persistent footer resumes.
+Use at most one footer block per slide.
+
+To hide the footer on one slide, include this empty block on that slide:
+
+```md
+:::footer hidden=true
+:::
+```
+
+To turn off the persistent footer for this slide and following slides:
+
+```md
+:::footer hidden=true persist=true
+:::
+```
+
+A later visible footer with `persist=true` can start persistence again. To omit a
+footer from a title slide, place the first persistent footer on the next slide.
+A custom footer replaces the automatic slide number; hiding it also hides that
+number for the affected slide. There are no automatic `{slide}` or `{total}`
+placeholders in footer text.
+
+Footer blocks appear in preview, presentation, PDF, and PowerPoint exports.
+Manually positioned text is not moved to avoid footers. Check for overlap,
+especially with `overlay=true`. The footer properties editor is available by
+clicking footer content, placing the source cursor inside its block, or choosing
+**Footer properties**. Editing an inherited footer updates its original block.
+
 ## Final quality check for AI
 
 Before returning a handout, confirm all of the following:
