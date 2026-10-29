@@ -422,3 +422,29 @@ above the footer. Manually positioned text remains at its specified position.
 Custom footers replace the automatic slide number. They appear in preview,
 presentation, PDF, and editable PowerPoint exports. Footer contents support
 ordinary Markdown paragraphs (including bold, italic, links) and images.
+
+### Edit images in bundled Vector Lab
+
+Right-click a local PNG, JPG, or SVG in the preview or file browser and choose
+**Edit in Vector Lab**. The standalone editor opens in its own window and works
+offline. **Save back to slideshow** updates the original image and refreshes
+the preview; every slide using that file updates. You are prompted before
+replacing the image. Closing with unsaved changes asks before discarding them.
+Images changed externally must be reopened before saving.
+
+SVG objects and editable PNG artwork reopen for editing. Ordinary PNGs open as
+a single raster image. SVGs must contain embedded images rather than external
+image links. JPG edits save back as JPEG; layers are flattened. Use Save SVG in the editor
+to keep a separate editable copy. GIF and WebP are not yet offered.
+The bundled editor is a snapshot, updated separately from the live website.
+Source and rebuild instructions are in `vendor/vector-lab/README.handout.md`.
+
+Choose **Draw image…** beside Document Settings to open a blank Vector Lab
+canvas. **Insert into document** saves an SVG inside the lesson folder and
+inserts its Markdown image reference into the originating open document.
+
+When editing a JPG, choose **Replace with editable PNG** in **Save image format**
+to save an editable PNG and replace matching image references across all open
+documents. These document changes remain unsaved until you save them. The
+original JPG is kept for closed documents that may still reference it. Existing
+PNG files are never silently overwritten during conversion.

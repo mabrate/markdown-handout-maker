@@ -1996,6 +1996,7 @@ if (window.handoutDesktop) {
   function showImageContextMenu(node, event) {
     showBrowserMenu([
       ['Insert into Markdown', () => insertTreeImage(node).catch(error => { statusText.textContent = error.message; })],
+      ...(/\.(png|svg|jpe?g)$/i.test(node.name) ? [['Edit in Vector Lab', () => desktop.editInVectorLab(node.url).catch(error => { statusText.textContent = error.message; })]] : []),
       ['Preview', () => showImagePreview(node)],
       ['Rename…', () => renameTreeImage(node)],
       ...externalActions(node)
@@ -2054,7 +2055,9 @@ if (window.handoutDesktop) {
     const outside = e => { if (!menu.contains(e.target)) close(); };
     const escape = e => { if (e.key === 'Escape') close(); };
     for (const [label, action] of actions) { const button = document.createElement('button'); button.textContent = label; button.type = 'button'; button.addEventListener('click', () => { close(); action(); }); menu.append(button); }
-    document.body.append(menu); menu.style.left = `${Math.max(0, Math.min(event.clientX, innerWidth - menu.offsetWidth - 8))}px`; menu.style.top = `${Math.max(0, Math.min(event.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+    menu.addEventListener('click', event => event.stopPropagation());
+    menu.addEventListener('keydown', event => { event.stopPropagation(); if(event.key==='Escape') { close(); event.preventDefault(); } });
+    (event.target.closest('dialog[open]') || document.body).append(menu); menu.style.left = `${Math.max(0, Math.min(event.clientX, innerWidth - menu.offsetWidth - 8))}px`; menu.style.top = `${Math.max(0, Math.min(event.clientY, innerHeight - menu.offsetHeight - 8))}px`;
     window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape); menu.firstChild.focus();
   }
   function createInline(parent, type) {
@@ -2582,4 +2585,48 @@ if (window.handoutDesktop) {
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
+if (desktop?.editInVectorLab) {
+  const drawButton=document.createElement('button');drawButton.type='button';drawButton.textContent='Draw image…';drawButton.title='Create and insert artwork with Vector Lab';
+  document.getElementById('document-settings-button').before(drawButton);
+  drawButton.onclick=async()=>{try{if(!selectedFile || selectedFile.untitled)throw Error('Save your document before drawing an image.');await desktop.editInVectorLab(null,selectedFile.path);}catch(error){statusText.textContent=error.message;}};
+
+  document.addEventListener('contextmenu', event => {
+    if (!event.target.closest('#preview, .slide-presentation, .handout-presentation')) return;
+    const image = event.target.closest('img');
+    if (!image || !/^file:.*\.(png|svg|jpe?g)(?:[?#]|$)/i.test(image.src)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const url = new URL(image.src); url.search = ''; url.hash = '';
+    showBrowserMenu([['Edit in Vector Lab', () => desktop.editInVectorLab(url.href).catch(error => { statusText.textContent=error.message; })]], event);
+  }, true);
+  window.handoutDesktop.onVectorLabSaved(async (update) => {
+    try {
+    saveActiveState();
+    if(update?.insert || update?.oldPath && update.oldPath!==update.newPath){
+      for(const [documentPath,state] of documents){
+        if(update.insert && documentPath!==update.documentPath)continue;
+        const relative=await desktop.imageReference(documentPath,update.newPath);
+        let updated=state.content;
+        if(update.insert){const position=documentPath===activePath?source.selectionStart:state.selectionStart||0;updated=updated.slice(0,position)+`\n![Drawing](${encodedMarkdownPath(relative)})\n`+updated.slice(position);}
+        else {
+          const oldRelative=await desktop.imageReference(documentPath,update.oldPath);
+          const normalize=value=>{try{return decodeURIComponent(value).replace(/\\/g,'/').replace(/^\.\//,'');}catch{return value;}};
+          updated=updated.replace(/(!\[[^\]]*\]\()([^\s)]+)((?:\s+"[^"]*")?\)(?:\{[^}]*\})?)/g,(match,opening,reference,closing)=>normalize(reference)===normalize(oldRelative)?opening+encodedMarkdownPath(relative)+closing:match);
+        }
+        if(updated!==state.content){
+          if(documentPath===activePath){source.setSelectionRange(0,source.value.length);replaceEditorSelection(updated);}
+          else {state.content=updated;state.dirty=true;}
+        }
+      }
+      drawTabs();
+    }
+    await refreshFolderTreeAndAssets();
+    for (const [key,value] of assetMap) { if(value.startsWith('file:')) {const url=new URL(value);url.searchParams.set('edited',Date.now());assetMap.set(key,url.href);} }
+    render();
+    for (const image of document.querySelectorAll('#preview img[src^="file:"], .handout-presentation img[src^="file:"]')) { const url=new URL(image.src);url.searchParams.set('edited',Date.now());image.src=url.href; }
+    statusText.textContent=update?.insert?'Drawing inserted.':update?.oldPath!==update?.newPath?'PNG saved and links updated in open documents. Original JPG kept.':'Image saved from Vector Lab.';
+    }catch(error){statusText.textContent='Image saved, but document update failed: '+error.message;}
+  });
+}
+
 }

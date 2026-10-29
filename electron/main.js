@@ -437,3 +437,5 @@ ipcMain.handle('google:pull', async (_event, filePath) => {
   await saveSettings(next);
   return { content, url: drive.docUrl(link.id), name: link.name, backupPath };
 });
+
+require('./vectorLab').register({ ipcMain, BrowserWindow, dialog, mainWindow: () => mainWindow, root: () => currentRoot, checkedPath });
