@@ -65,6 +65,30 @@
     if (values.font && !Object.hasOwn(fonts, values.font)) warnings.push('Unknown text font; using Arial.');
     return { x: number('x', 10, 0, 100, true), y: number('y', 65, 0, 100, true), width: number('width', 80, 1, 100, true), size: number('size', 54, 8, 144), color: color || 'FFFFFF', align: ['left', 'center', 'right'].includes(values.align) ? values.align : 'left', font: Object.hasOwn(fonts, values.font) ? fonts[values.font] : 'Arial' };
   }
+  function footerOptions(raw, warnings) {
+    const values = {};
+    for (const part of (raw || '').split(/\s+/).filter(Boolean)) {
+      const match = part.match(/^([a-z]+)=(\S+)$/);
+      if (!match || !['height','size','color','background','padding','gap','persist','hidden','overlay','align'].includes(match[1])) warnings.push(`Unknown footer option “${part}”.`);
+      else values[match[1]] = match[2];
+    }
+    const number = (key, fallback, min, max) => {
+      if (values[key] === undefined) return fallback;
+      const n = Number(values[key]);
+      if (!Number.isFinite(n) || n < min || n > max) { warnings.push(`Invalid footer ${key}; use ${min}–${max}.`); return fallback; }
+      return n;
+    };
+    const color = key => {
+      if (!values[key]) return null;
+      const value = values[key].replace(/^#/, '');
+      if (/^[a-f0-9]{6}$/i.test(value)) return value;
+      if (colors[values[key].toLowerCase()]) return colors[values[key].toLowerCase()];
+      warnings.push(`Invalid footer ${key}; use a color name or #RRGGBB.`); return null;
+    };
+    for (const key of ['persist','hidden','overlay']) if (values[key] && !['true','false'].includes(values[key])) warnings.push(`Footer ${key} must be true or false.`);
+    if (values.align && !['left','center','right'].includes(values.align)) warnings.push('Footer align must be left, center, or right.');
+    return { height: number('height', .65, .25, 2), size: number('size', 16, 8, 48), padding: number('padding', .12, 0, .5), gap: number('gap', .25, 0, 1), color: color('color'), background: color('background'), persist: values.persist === 'true', hidden: values.hidden === 'true', overlay: values.overlay === 'true', align: ['left','center','right'].includes(values.align) ? values.align : 'left' };
+  }
   function mediaOptions(attributes) {
     const dimension = key => attributes.match(new RegExp(`(?:^|\\s)${key}=(\\d+(?:\\.\\d+)?(?:in|cm|mm|px|%))(?:\\s|$)`, 'i'))?.[1];
     return { mediaWidth: dimension('width'), mediaHeight: dimension('height'), mediaAlign: /(?:^|\s)\.float-right(?:\s|$)/i.test(attributes) ? 'right' : 'left' };
@@ -75,7 +99,7 @@
     const number = Number(match[1]), units = { in: 1, cm: 1 / 2.54, mm: 1 / 25.4, px: 1 / 96, '%': parentWidth / 100 };
     return number > 0 && Number.isFinite(number) ? number * units[match[2].toLowerCase()] : null;
   }
-  function blocksFromMarkdown(text, sourceLines = text.split('\n').map((_, index) => index)) {
+  function blocksFromMarkdown(text, sourceLines = text.split('\n').map((_, index) => index), preserveOrder = false) {
     const location = map => map ? { sourceStart: sourceLines[map[0]], sourceEnd: sourceLines[map[1] - 1] + 1 } : {};
     const tokens = markdown.parse(text, {}), blocks = [], lists = []; let nextListId = 0;
     for (let i = 0; i < tokens.length; i++) {
@@ -101,6 +125,24 @@
         const suffix = children[n + 1]; const attributes = suffix?.type === 'text' && suffix.content.match(/^\{([^}]*)\}/);
         if (attributes) { imageAttributes.set(child, attributes[1]); suffix.content = suffix.content.slice(attributes[0].length); }
       });
+      if (preserveOrder && images.length) {
+        let pending = [], formatting = [], mediaOccurrence = 0;
+        const flush = () => {
+          const runs = runsFromTokens(pending);
+          if (plain(runs).trim()) blocks.push({ type: 'text', runs, ...location(token.map) });
+          pending = [...formatting];
+        };
+        for (const child of token.children || []) {
+          if (child.type === 'image') {
+            flush();
+            blocks.push({ type: 'image', src: child.attrGet('src'), alt: child.content || 'Image', ...location(token.map), ...mediaOptions(imageAttributes.get(child) || ''), mediaOccurrence: mediaOccurrence++ });
+          } else {
+            pending.push(child);
+            if (/_(open|close)$/.test(child.type)) formatting.push(child);
+          }
+        }
+        flush(); continue;
+      }
       const textTokens = (token.children || []).filter(child => child.type !== 'image');
       const runs = runsFromTokens(textTokens);
       const heading = tokens[i - 1]?.type === 'heading_open' ? Number(tokens[i - 1].tag.slice(1)) : 0;
@@ -114,10 +156,10 @@
   }
   function elementBlocks(lines, warnings, sourceLines) {
     let index = 0;
-    function read(stops = []) {
+    function read(stops = [], footerContent = false) {
       const blocks = []; let pending = [], locations = [], fence = null;
       const append = line => { pending.push(line); locations.push(sourceLines[index]); };
-      const flush = () => { blocks.push(...blocksFromMarkdown(pending.join('\n'), locations)); pending = []; locations = []; };
+      const flush = () => { blocks.push(...blocksFromMarkdown(pending.join('\n'), locations, footerContent)); pending = []; locations = []; };
       while (index < lines.length) {
         const line = lines[index], code = line.match(/^ {0,3}(`{3,}|~{3,})/);
         if (code) { if (!fence) fence = code[1]; else if (code[1][0] === fence[0] && code[1].length >= fence.length) fence = null; append(line); index++; continue; }
@@ -137,6 +179,16 @@
           if (result.error) { warnings.push(result.error); blocks.push({ type: 'text', runs: [{ text: result.error }], sourceStart: sourceLines[index], sourceEnd: sourceLines[index] + 1 }); }
           else blocks.push({ type: 'image', qrSvg: result.svg, qrUrl: result.url, src: 'data:image/svg+xml,' + encodeURIComponent(result.svg), alt: 'QR code for ' + result.url, ...mediaOptions(qrLine[2] || ''), sourceStart: sourceLines[index], sourceEnd: sourceLines[index] + 1 });
           index++; continue;
+        }
+        const footer = line.match(/^:::footer(?:\s+(.*?))?\s*$/);
+        if (footer) {
+          flush(); const sourceStart = sourceLines[index], settings = footerOptions(footer[1], warnings);
+          index++; const result = read(['close'], true);
+          const sourceEnd = sourceLines[Math.min(index, sourceLines.length - 1)] + 1;
+          if (result.stop === 'close') index++; else warnings.push('Footer block is missing its closing ::: marker.');
+          const children = result.blocks.filter(block => ['text', 'image'].includes(block.type));
+          if (children.length !== result.blocks.length) warnings.push('Footer content supports paragraphs and images only.');
+          blocks.push({ type: 'footer', ...settings, blocks: children, sourceStart, sourceEnd }); continue;
         }
         const special = line.match(/^:::(background|text)(?:\s+(.*?))?\s*$/);
         if (special) {
@@ -213,7 +265,7 @@
       const slideWarnings = [];
       const raw = current.raw;
       let blocks = elementBlocks(raw, slideWarnings, current.rawSources);
-      const flowing = blocks.filter(block => !['background', 'positioned-text'].includes(block.type));
+      const flowing = blocks.filter(block => !['background', 'positioned-text', 'footer'].includes(block.type));
       const fit = flowing.length === 1 && flowing[0].type === 'fit';
       if (fit) blocks = blocks.flatMap(block => block === flowing[0] ? block.blocks : [block]);
       const headingIndex = blocks.findIndex(block => block.type === 'text' && block.heading === 1);
@@ -238,6 +290,14 @@
     finish(lines.length);
     if (notes) warnings.push('Presenter notes are missing their closing ::: marker.');
     if (!slides.length) slides.push({ markerLine: -1, startLine: prefixLines, endLine: lines.length, title: [], outlineTitle: [], blocks: [], notes: '', warnings: [] });
+    let persistentFooter = null;
+    for (const slide of slides) {
+      const footers = slide.blocks.filter(block => block.type === 'footer');
+      if (footers.length > 1) slide.warnings.push('Use one footer block per slide; the last one is used.');
+      const local = footers.at(-1);
+      if (local?.persist) persistentFooter = local.hidden ? null : local;
+      slide.footer = local || persistentFooter;
+    }
     return { enabled: true, settings: { theme, aspect }, slides, warnings };
   }
   function lineCount(text, width, fontSize) {
@@ -252,7 +312,8 @@
   function layoutScene(deck, index, scale = 1, imageDimensions = new Map()) {
     const slide = deck.slides[index], theme = themes[deck.settings.theme];
     const width = deck.settings.aspect === '4:3' ? 10 : 40 / 3, height = 7.5;
-    const elements = [], lists = [], warnings = [...slide.warnings], margin = .62, bottom = 6.96;
+    const footer = slide.footer && !slide.footer.hidden ? slide.footer : null;
+    const elements = [], lists = [], warnings = [...slide.warnings], margin = .62, bottom = footer && !footer.overlay ? Math.min(6.96, height - footer.height - .15) : 6.96;
     const textHeight = (runs, w, size) => Math.max(.25, lineCount(plain(runs), w, size) * size / 72 * 1.2 + .035);
     const addText = (runs, x, y, w, size, props = {}) => {
       const h = textHeight(runs, w, size); elements.push({ type: 'text', runs, x, y, w, h, fontSize: size, color: theme.ink, ...props }); return h;
@@ -274,8 +335,8 @@
     const specialBlocks = [];
     function collect(blocks) {
       for (const block of blocks) {
-        if (['background', 'positioned-text'].includes(block.type)) specialBlocks.push(block);
-        if (block.blocks) collect(block.blocks);
+        if (['background', 'positioned-text', 'footer'].includes(block.type)) specialBlocks.push(block);
+        if (block.blocks && block.type !== 'footer') collect(block.blocks);
         if (block.columns) block.columns.forEach(collect);
       }
     }
@@ -290,7 +351,7 @@
     const columnSizes = (block, w) => { const gap = .4, total = block.widths.reduce((a, b) => a + b, 0); return block.widths.map(value => Math.max(.15, w - gap * (block.columns.length - 1)) * value / total); };
     function estimate(blocks, w) {
       return blocks.reduce((total, block) => {
-        if (['background', 'positioned-text'].includes(block.type)) return total;
+        if (['background', 'positioned-text', 'footer'].includes(block.type)) return total;
         if (block.type === 'image') return total + mediaBox(block, w).h + .2;
         if (block.type === 'video') return total + Math.min(w, lengthInches(block.mediaWidth,w) || w) * 9 / 16 + .45;
         if (block.type === 'center' || block.type === 'fit') return total + estimate(block.blocks, w);
@@ -304,7 +365,7 @@
       for (let i = 0; i < blocks.length; i++) {
         const block = blocks[i], available = Math.max(.4, limit - y - estimate(blocks.slice(i + 1), w));
         if (!block.bullet) list = null;
-        if (['background', 'positioned-text'].includes(block.type)) continue;
+        if (['background', 'positioned-text', 'footer'].includes(block.type)) continue;
         if (block.type === 'columns') {
           const sizes = columnSizes(block, w), gap = i < blocks.length - 1 ? .2 : 0; let left = x;
           const top=y,cards=[];
@@ -340,7 +401,28 @@
       const h = addText(block.runs, x, y, w, block.size * scale, { ...block, type: 'text', x, y, w, h: textHeight(block.runs, w, block.size * scale), positioned: true, color: block.color, fontSize: block.size * scale });
       if (x + w > width + .01 || y + h > height + .01) warnings.push('Content extends beyond the slide. Move or resize the positioned text, reduce its size, or use :::fit.');
     }
-    if (!background) elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });
+    if (!background && !slide.footer) elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });
+    if (footer) {
+      const y = height - footer.height, padding = Math.min(footer.padding, footer.height / 4), children = footer.blocks;
+      if (footer.background) elements.push({ type: 'shape', x: 0, y, w: width, h: footer.height, color: footer.background, opacity: 100, footer: true });
+      const gap = children.length > 1 ? Math.min(footer.gap, (width - 2 * margin) / (children.length * 2)) : 0;
+      const cell = Math.max(.01, (width - 2 * margin - gap * Math.max(0, children.length - 1)) / Math.max(1, children.length));
+      const available = footer.height - 2 * padding;
+      for (const [n, block] of children.entries()) {
+        const x = margin + n * (cell + gap);
+        if (block.type === 'image') {
+          const dimensions = imageDimensions.get(block.src), ratio = block.qrSvg ? 1 : dimensions ? dimensions.width / dimensions.height : 1.5;
+          const w = Math.min(cell, available * ratio), h = w / ratio;
+          elements.push({ ...block, x: x + (cell - w) * ({ left: 0, center: .5, right: 1 }[footer.align]), y: y + (footer.height - h) / 2, w, h, footer: true });
+        } else {
+          let size = footer.size;
+          while (size > 8 && textHeight(block.runs, cell, size) > available) size--;
+          const h = textHeight(block.runs, cell, size);
+          if (h > available) warnings.push('Footer text does not fit. Increase its height or shorten the text.');
+          elements.push({ ...block, x, y: y + Math.max(padding, (footer.height - h) / 2), w: cell, h, fontSize: size, color: footer.color || theme.muted, align: footer.align, footer: true });
+        }
+      }
+    }
     return { width, height, theme, elements, lists, textScale: scale, warnings: [...new Set(warnings)], overflow: warnings.some(warning => warning.startsWith('Content extends beyond')) };
   }
   function scene(deck, index, imageDimensions) {
@@ -414,7 +496,7 @@
     if(action==='columns'){const smart=imageTextEdit(text,index);if(smart)return smart;}
     const deck = parse(text), slide = deck.slides[index];
     if (!deck.enabled || !slide || !['fit', 'columns'].includes(action)) return null;
-    const positioned = blocks => blocks.some(block => ['background', 'positioned-text'].includes(block.type) || (block.blocks && positioned(block.blocks)) || (block.columns && block.columns.some(positioned)));
+    const positioned = blocks => blocks.some(block => ['background', 'positioned-text', 'footer'].includes(block.type) || (block.blocks && positioned(block.blocks)) || (block.columns && block.columns.some(positioned)));
     if (action === 'columns' && positioned(slide.blocks)) return null;
     const lines = text.split('\n'), offset = line => lines.slice(0, line).reduce((sum, value) => sum + value.length + 1, 0);
     const start = Math.min(text.length, offset(slide.startLine)), end = Math.min(text.length, offset(slide.endLine));
@@ -522,6 +604,22 @@
     }
     return { start, end, text: opening + replacement.slice(line.length) };
   }
+  function footerEdit(text, element, values) {
+    const lines = text.split('\n'), line = lines[element.sourceStart];
+    if (!/^:::footer(?:\s|$)/.test(line || '')) return null;
+    let opening = line.replace(/\r$/, '');
+    for (const [key, value] of Object.entries(values)) {
+      if (!['height','size','color','background','padding','gap','persist','hidden','overlay','align'].includes(key) || /\s/.test(String(value))) return null;
+      const warnings = [];
+      if (value !== '') footerOptions(`${key}=${value}`, warnings);
+      if (warnings.length) return null;
+      const pattern = new RegExp(`(^|\\s)${key}=\\S+`);
+      opening = opening.replace(pattern, '');
+      if (value !== '') opening += ` ${key}=${value}`;
+    }
+    const start = lines.slice(0, element.sourceStart).reduce((sum, row) => sum + row.length + 1, 0);
+    return { start, end: start + line.length, text: opening + (line.endsWith('\r') ? '\r' : '') };
+  }
   function setting(text, key, value) {
     const meta = metadata(text); if (!meta.enabled || !['theme', 'aspect'].includes(key)) return text;
     const lines = meta.prefix.split(/\r?\n/); const index = lines.findIndex(line => new RegExp(`^${key}\\s*:`).test(line));
@@ -529,5 +627,5 @@
     return lines.join('\n') + text.slice(meta.prefix.length);
   }
   const starter = '---\ntype: slides\ntheme: classroom\naspect: 16:9\n---\n\n# New lesson\n\nA short introduction to today’s learning.\n\n---\n\n# Investigate\n\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::\n\n---\n\n# Reflect\n\nWhat changed your thinking today?\n';
-  return { metadata, parse, scene, reorderEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, setting, themes, starter, plain, blocksFromMarkdown };
+  return { metadata, parse, scene, reorderEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerEdit, setting, themes, starter, plain, blocksFromMarkdown };
 });

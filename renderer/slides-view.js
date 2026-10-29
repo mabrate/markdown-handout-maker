@@ -51,6 +51,7 @@
       source.setSelectionRange(offset, offset); options.edit(snippets[kind], 1);
     }
     const autoLayoutButton=button('Auto layout',()=>applyEdit(model.imageTextEdit(source.value,selected,imageDimensions))); autoLayoutButton.title='Arrange one image and its text in columns; preserve notes and choose widths to fit the content.';
+    button('Footer properties', () => showInspector(deck.slides[selected].footer));
     button('Present', present); button('Export PowerPoint…', options.pptx); button('Export PDF…', options.pdf);
     const navigation = document.createElement('div'); navigation.className = 'slide-navigation'; navigation.hidden = true;
     const previous = document.createElement('button'), next = document.createElement('button'), counter = document.createElement('span');
@@ -97,11 +98,13 @@
     const elementKey = element => ({ line: element.background ? element.blockStart : element.sourceStart, kind: element.background ? 'background' : element.type, occurrence: element.mediaOccurrence || 0 });
     function applyEdit(edit) { if (edit) { source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0); } }
     function showInspector(element) {
-      inspector.replaceChildren(); inspector.hidden = !element || element.footer || element.type==='shape' || !Number.isInteger(element.sourceStart);
+      if (element?.footer && deck.slides[selected].footer) element = deck.slides[selected].footer;
+
+      inspector.replaceChildren(); inspector.hidden = !element || (element.footer && !deck.slides[selected].footer) || element.type==='shape' || !Number.isInteger(element.sourceStart);
       if (inspector.hidden) {preview.querySelectorAll('.slide-positioned-host').forEach(host=>host.classList.remove('is-selected'));return;}
       selectedElement = elementKey(element);
       preview.querySelectorAll('.slide-positioned-host').forEach(host=>{const target=scenes[selected].elements[Number(host.dataset.slideElement)];const key=elementKey(target);host.classList.toggle('is-selected',key.line===selectedElement.line && key.kind===selectedElement.kind && key.occurrence===selectedElement.occurrence);});
-      const scene = scenes[selected], label = document.createElement('strong'); label.textContent = element.background ? 'Background' : element.qrSvg ? 'QR code' : element.type === 'image' ? 'Image' : element.type === 'table' ? 'Table' : 'Text'; inspector.append(label);
+      const scene = scenes[selected], label = document.createElement('strong'); label.textContent = element.type === 'footer' ? 'Footer' : element.background ? 'Background' : element.qrSvg ? 'QR code' : element.type === 'image' ? 'Image' : element.type === 'table' ? 'Table' : 'Text'; inspector.append(label);
       const field = (name, value, change, config = {}) => {
         const wrapper = document.createElement('label'); wrapper.textContent = name + ' ';
         const input = document.createElement(config.values ? 'select' : 'input'); input.setAttribute('aria-label', name);
@@ -110,7 +113,17 @@
         input.value = value; input.onchange = () => { if (input.checkValidity()) change(config.values || ['text', 'color'].includes(input.type) ? input.value : Number(input.value)); else input.reportValidity(); };
         input.addEventListener('click', event => event.stopPropagation()); wrapper.append(input); inspector.append(wrapper); return input;
       };
-      if (element.type==='video') { const hint=document.createElement('span');hint.textContent='Edit the video URL, filename, width, or start time in the highlighted Markdown. Click the player to play.';inspector.append(hint); } else if (element.background) {
+      if (element.type === 'footer') {
+        const update = (key, value) => applyEdit(model.footerEdit(source.value, element, { [key]: value }));
+        for (const [key,name,min,max,step] of [['height','Footer height (in)',.25,2,.05],['size','Footer text size (pt)',8,48,1],['padding','Footer padding (in)',0,.5,.01],['gap','Footer gap (in)',0,1,.05]]) field(name,element[key],value=>update(key,value),{min,max,step});
+        for (const [key,name] of [['color','Footer text color'],['background','Footer background']]) {
+          const input=field(name,element[key] ? '#'+element[key] : '',value=>{const edit=model.footerEdit(source.value,element,{[key]:value});input.setCustomValidity(edit?'':'Use a color name or #RRGGBB, or leave blank.');if(edit)applyEdit(edit);else input.reportValidity();},{type:'text'});
+          input.placeholder=key==='color'?'Theme color':'Transparent'; input.oninput=()=>input.setCustomValidity('');
+        }
+        field('Footer alignment',element.align,value=>update('align',value),{values:['left','center','right'].map(value=>[value,value])});
+        for (const [key,name] of [['persist','Continue on following slides'],['hidden','Hide footer'],['overlay','Overlay slide content']]) field(name,String(element[key]),value=>update(key,value),{values:[['false','No'],['true','Yes']]});
+        const hint=document.createElement('span');hint.textContent='Edit footer images and paragraphs in Markdown. Editing an inherited footer changes its original block.';inspector.append(hint);
+      } else if (element.type==='video') { const hint=document.createElement('span');hint.textContent='Edit the video URL, filename, width, or start time in the highlighted Markdown. Click the player to play.';inspector.append(hint); } else if (element.background) {
         const imagePath=field('Image path', element.src, value => {const edit=model.backgroundEdit(source.value,element,{imagePath:value});imagePath.setCustomValidity(edit?'':'Use a relative image filename from your lesson folder.');if(edit)applyEdit(edit);else imagePath.reportValidity();}, { type: 'text' });
         imagePath.oninput=()=>imagePath.setCustomValidity('');
         field('Crop position', element.position, value => applyEdit(model.backgroundEdit(source.value, element, { position: value })), { values: ['center','left','right','top','bottom','top-left','top-right','bottom-left','bottom-right'].map(value => [value,value]) });
@@ -136,7 +149,7 @@
     }
     function refreshInspector() {
       const element = selectedElement && scenes[selected].elements.find(element => { const key=elementKey(element); return key.line===selectedElement.line && key.kind===selectedElement.kind && key.occurrence===selectedElement.occurrence; });
-      showInspector(element);
+      showInspector(element || (selectedElement?.kind === 'footer' ? deck.slides[selected].footer : null));
     }
     function positionedControls(host, item, element, scene, canvas) {
       const tools = document.createElement('div'); tools.className = 'slide-text-tools';
@@ -231,7 +244,7 @@
         item.style.position = 'absolute'; item.style.left = `${element.x * 96}px`; item.style.top = `${element.y * 96}px`; item.style.width = `${element.w * 96}px`; item.style.height = `${element.h * 96}px`;
         if (element.fontSize) item.style.fontSize = `${element.fontSize * 96 / 72}px`;
         if (element.positioned) item.classList.add('slide-positioned-text');
-        if ((element.positioned || (element.type==='image' && !element.background)) && interactive) {
+        if ((element.positioned || (element.type==='image' && !element.background && !element.footer)) && interactive) {
           const host = document.createElement('div'); host.className = 'slide-positioned-host' + (element.type==='image'?' slide-media-host':''); host.setAttribute('role', 'group'); host.setAttribute('aria-label', element.type==='image'?'Slide image':'Positioned text'); host.dataset.slideElement=elementIndex;
           const key=elementKey(element);if(selectedElement && key.line===selectedElement.line && key.kind===selectedElement.kind)host.classList.add('is-selected');
           Object.assign(host.style, { position: 'absolute', left: item.style.left, top: item.style.top, width: item.style.width, height: item.style.height });
@@ -463,7 +476,8 @@
       const index = cursorSlide(); if (index !== selected) showCurrent(index);
       const line=source.value.slice(0,source.selectionStart).split('\n').length-1;
       const target=scenes[selected].elements.find(element=>!element.footer && line >= (element.background?element.blockStart:element.sourceStart) && line < (element.background?element.blockEnd:element.sourceEnd));
-      if(target)showInspector(target);else{selectedElement=null;inspector.hidden=true;}
+      const footer=deck.slides[selected].footer;
+      if(footer && line>=footer.sourceStart && line<footer.sourceEnd)showInspector(footer);else if(target)showInspector(target);else{selectedElement=null;inspector.hidden=true;}
     } }
     source.addEventListener('select', syncSelection); source.addEventListener('keyup', syncSelection); source.addEventListener('pointerup', syncSelection);
     new ResizeObserver(fit).observe(previewPanel); window.addEventListener('resize', fit);

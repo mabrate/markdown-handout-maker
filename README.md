@@ -387,3 +387,38 @@ Preview selection regression checks: `node tests/test-slide-preview-selection.cj
 uses a 28-slide deck to check persistent source highlights, numbered/next slide
 navigation, and delayed editor-selection events. Set `NATIVE_ELECTRON=1` to run
 the same checks in Electron; the browser version accepts `CHROME_PATH`.
+
+### Slide footer blocks
+
+Place a footer block anywhere within a slide. Each image or paragraph gets an
+equal-width cell across the footer, in source order; separate paragraphs with a
+blank line. Images preserve their proportions and text shrinks down to 8 pt
+when necessary. Overlong text produces a warning.
+
+```markdown
+:::footer height=0.8 size=16 color=white background=navy persist=true
+![School logo](images/logo.png)
+
+Science · Ecosystems
+
+Record evidence and explain your thinking.
+:::
+```
+
+Options: `height` (0.25–2 inches, default 0.65), `size` (8–48 pt, default 16),
+`color` and `background` (color name or #RRGGBB), `padding` (0–0.5 inches, default
+0.12), `gap` (0–1 inches, default 0.25), and `align=left|center|right` (applies to text
+and images within their cells; defaults to left). Source order is preserved even
+when an image and text share a paragraph. Default
+text color follows the theme and the background is transparent.
+
+`persist=true` carries the footer to later slides until replaced by another
+persistent footer. A footer without persistence applies only to its own slide,
+then the earlier persistent footer resumes. `:::footer hidden=true` with a
+closing `:::` hides it on one slide; add `persist=true` to stop it on later
+slides as well. `overlay=true` overlays artwork instead of reserving space
+above the footer. Manually positioned text remains at its specified position.
+
+Custom footers replace the automatic slide number. They appear in preview,
+presentation, PDF, and editable PowerPoint exports. Footer contents support
+ordinary Markdown paragraphs (including bold, italic, links) and images.
