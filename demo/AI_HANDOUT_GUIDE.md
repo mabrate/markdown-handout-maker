@@ -332,13 +332,16 @@ Record evidence and explain your thinking.
 
 Use relative image paths and descriptive alt text. Images retain their aspect
 ratio and fit inside their cells. `align` controls both text and image alignment
-within each cell. Text shrinks to a minimum of 8 pt when necessary; if it still
-does not fit, increase the footer height or shorten the text. Do not put tables,
-videos, columns, or other layout blocks inside a footer.
+within each cell. Text keeps its selected point size. The footer grows from its
+specified minimum height to fit wrapped text and reserves the extra space above
+it. If text cannot fit on the slide, shorten it or reduce its size. Bold, italic,
+inline code, and links work in footer paragraphs. Spaces before closing emphasis
+markers are accepted in footer labels, such as `**Objective: **Text`.
+Do not put tables, videos, columns, or other layout blocks inside a footer.
 
 | Option | Values and behavior | Default |
 | --- | --- | --- |
-| `height` | 0.25–2 inches; use a plain number, such as `height=0.8` | `0.65` |
+| `height` | Minimum height, 0.25–2 inches; grows to fit text. Use a plain number, such as `height=0.8` | `0.65` |
 | `size` | 8–48 points | `16` |
 | `color` | Supported color name or six-digit hex, such as `white` or `#1b242b` | Theme muted text color |
 | `background` | Supported color name or six-digit hex; omit for transparency | Transparent |

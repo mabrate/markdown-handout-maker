@@ -100,10 +100,10 @@ Write one observation and one question.
 :::
 :::
 
-:::footer height=0.55 size=14 color=white background=#175A80 persist=true
-Lesson topic
+:::footer color=white background=#175A80 persist=true padding=0.07 height=0.5 size=25
+**Objective: **Share our encryption systems.
 
-Name / Class
+**Close: **"One way I could improve my system is _____."
 :::
 
 :::notes
@@ -115,6 +115,7 @@ Keep these notes inside :::notes so they stay out of the projected slide and PDF
 To reuse a template, copy its content and notes between slide separators into your deck.
 Keep the YAML header only once, at the very beginning of the deck.
 :::
+
 
 ---
 
@@ -288,7 +289,7 @@ Scan the QR code or use the link below.
 **Task:** Find one detail that connects to today's question.
 
 :::column
-[qr:https://example.com]{width=2in}
+[qr:https://example.com]{width=3.15in}
 :::
 
 :::notes
@@ -354,7 +355,7 @@ Name a detail from the activity.
 :::
 :::
 
-:::footer height=0.55 size=14 color=white background=#175A80
+:::footer color=white background=#339911 size=19 height=0.65
 Exit ticket
 
 Name / Class / Date

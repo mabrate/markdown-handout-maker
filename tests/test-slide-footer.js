@@ -74,3 +74,65 @@ assert.equal(slides.footerEdit(source,footerBlock,{height:99}),null);
 assert.equal(slides.footerEdit(source,footerBlock,{color:'invalid'}),null);
 const cleared=slides.footerEdit(source,footerBlock,{background:''});
 assert(!cleared.text.includes('background='));
+
+const reportedFooter = `:::footer color=white background=#175A80 persist=true height=0.8 size=38
+**Objective: **Share our encryption systems.
+
+**Close: **"One way I could improve my system is _____."
+:::`;
+const reportedSource = `---\ntype: slides\n---\n# Lesson\n\n${reportedFooter}\n\n---\n# Next lesson\n`;
+const reportedDeck = slides.parse(reportedSource);
+for (const index of [0, 1]) {
+  const scene = slides.scene(reportedDeck, index);
+  const background = scene.elements.find(e => e.footer && e.type === 'shape');
+  const text = scene.elements.filter(e => e.footer && e.type === 'text');
+  assert(text[0].runs.some(r => r.text === 'Objective: ' && r.bold));
+  assert(text[1].runs.some(r => r.text === 'Close: ' && r.bold));
+  assert(text.every(e => e.fontSize === 38), 'Explicit footer sizes must not be silently reduced');
+  assert(background.h > .8, 'The footer grows to fit the selected text size');
+  assert(text.every(e => e.y >= background.y && e.y + e.h <= 7.5));
+  assert.deepEqual(scene.warnings, []);
+}
+for (const size of [8, 16, 28, 38, 48]) {
+  const editedSource = reportedSource.replace('size=38', `size=${size}`);
+  const text = slides.scene(slides.parse(editedSource), 0).elements.filter(e => e.footer && e.type === 'text');
+  assert(text.every(e => e.fontSize === size));
+}
+for (const [markup, property] of [['*italic *', 'italic'], ['_italic _', 'italic'], ['__bold __', 'bold'], ['**bold** and **more**', 'bold'], ['***both ***', 'bold']]) {
+  const input = reportedSource.replace(reportedFooter, `:::footer\n${markup}\n:::`);
+  const runs = slides.parse(input).slides[0].footer.blocks[0].runs;
+  assert(runs.some(r => r[property]));
+  assert(!slides.plain(runs).includes('*') && !slides.plain(runs).includes('_'));
+}
+const literalSource = reportedSource.replace(reportedFooter, ':::footer\n`**literal **` \\*escaped\\* [link](https://example.com)\n:::');
+const literalRuns = slides.parse(literalSource).slides[0].footer.blocks[0].runs;
+assert(literalRuns.some(r => r.text === '**literal **' && r.code && !r.bold));
+assert(literalRuns.some(r => r.text.includes('*escaped*') && !r.italic));
+assert(literalRuns.some(r => r.href === 'https://example.com'));
+assert.equal(slides.plain(slides.blocksFromMarkdown('**Objective: **Text')[0].runs), '**Objective: **Text', 'Relaxed emphasis is footer-specific');
+const fencedFooter = reportedSource.replace(reportedFooter, ':::footer\n```md\n**literal **\n```\n:::');
+assert.equal(slides.parse(fencedFooter).slides[0].footer.blocks[0].runs[0].text, '**literal **');
+const tooLong = reportedSource.replace('Share our encryption systems.', 'Long text '.repeat(500));
+const longScene = slides.scene(slides.parse(tooLong), 0);
+assert(longScene.warnings.some(w => w.includes('Footer text does not fit')));
+assert(longScene.elements.filter(e => e.footer && e.type === 'text').every(e => e.fontSize === 38));
+console.log('Footer emphasis, literal code and escapes, explicit sizes, expanding height, inheritance, and overflow passed');
+
+(async () => {
+  const { buildPresentation } = require('../electron/slidesExport');
+  const Zip = require('jszip');
+  const { buffer } = await buildPresentation(reportedSource);
+  const zip = await Zip.loadAsync(buffer);
+  for (const index of [1, 2]) {
+    const xml = await zip.file(`ppt/slides/slide${index}.xml`).async('string');
+    const runs = xml.match(/<a:r>[\s\S]*?<\/a:r>/g);
+    for (const label of ['Objective: ', 'Close: ']) {
+      assert(runs.some(run => run.includes(`<a:t>${label}</a:t>`) && /\bb="1"/.test(run)));
+    }
+    assert(!xml.includes('**'));
+    const footerShapes = (xml.match(/<p:sp>[\s\S]*?<\/p:sp>/g) || []).filter(shape => /<a:t>(Objective: |Close: )<\/a:t>/.test(shape));
+    assert.equal(footerShapes.length, 2);
+    assert(footerShapes.every(shape => /\bsz="3800"/.test(shape)));
+  }
+  console.log('PowerPoint footer bold formatting and 38 pt size passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

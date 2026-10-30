@@ -148,7 +148,7 @@
         }
         field('Footer alignment',element.align,value=>update('align',value),{values:['left','center','right'].map(value=>[value,value])});
         for (const [key,name] of [['persist','Continue on following slides'],['hidden','Hide footer'],['overlay','Overlay slide content']]) field(name,String(element[key]),value=>update(key,value),{values:[['false','No'],['true','Yes']]});
-        const hint=document.createElement('span');hint.textContent='Edit footer images and paragraphs in Markdown. Editing an inherited footer changes its original block.';inspector.append(hint);
+        const hint=document.createElement('span');hint.textContent='Edit footer images and paragraphs in Markdown. Height is a minimum; the footer grows to fit the text size. Editing an inherited footer changes its original block.';inspector.append(hint);
       } else if (element.type==='video') { const hint=document.createElement('span');hint.textContent='Edit the video URL, filename, width, or start time in the highlighted Markdown. Click the player to play.';inspector.append(hint); } else if (element.background) {
         const imagePath=field('Image path', element.src, value => {const edit=model.backgroundEdit(source.value,element,{imagePath:value});imagePath.setCustomValidity(edit?'':'Use a relative image filename from your lesson folder.');if(edit)applyEdit(edit);else imagePath.reportValidity();}, { type: 'text' });
         imagePath.oninput=()=>imagePath.setCustomValidity('');

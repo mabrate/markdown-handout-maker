@@ -5,6 +5,21 @@
 })(typeof window === 'object' ? window : globalThis, function (MarkdownIt, qr, video) {
   'use strict';
   const markdown = new MarkdownIt({ html: false, breaks: true });
+  const footerMarkdown = new MarkdownIt({ html: false, breaks: true });
+  // Footer labels often include a selected trailing space, as in **Objective: **.
+  // Keep Markdown's delimiter pairing, escapes, and code spans, but allow that
+  // space before a closing emphasis marker in footer paragraphs.
+  footerMarkdown.inline.ruler.before('emphasis', 'footer_emphasis', (state, silent) => {
+    const marker = state.src.charCodeAt(state.pos);
+    if (silent || ![42, 95].includes(marker) || !/[ \t]/.test(state.src[state.pos - 1] || '')) return false;
+    const scanned = state.scanDelims(state.pos, marker === 42);
+    for (let i = 0; i < scanned.length; i++) {
+      state.push('text', '', 0).content = String.fromCharCode(marker);
+      state.delimiters.push({ marker, length: scanned.length, token: state.tokens.length - 1, end: -1, open: scanned.can_open, close: true });
+    }
+    state.pos += scanned.length;
+    return true;
+  });
   const themes = {
     classroom: { name: 'Classroom', background: 'FFFDF7', ink: '172C3B', accent: '175A80', muted: '516776', font: 'Trebuchet MS' },
     light: { name: 'Light', background: 'FFFFFF', ink: '202936', accent: '2454A4', muted: '566476', font: 'Arial' },
@@ -139,7 +154,7 @@
   }
   function blocksFromMarkdown(text, sourceLines = text.split('\n').map((_, index) => index), preserveOrder = false, parsedTokens = null) {
     const location = map => map ? { sourceStart: sourceLines[map[0]], sourceEnd: sourceLines[map[1] - 1] + 1 } : {};
-    const tokens = parsedTokens || markdown.parse(text, {}), blocks = [], lists = []; let nextListId = 0;
+    const tokens = parsedTokens || (preserveOrder ? footerMarkdown : markdown).parse(text, {}), blocks = [], lists = []; let nextListId = 0;
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       if (token.type === 'bullet_list_open') lists.push({ ordered: false, id: lists[0]?.id ?? nextListId++ });
@@ -393,8 +408,16 @@
     const slide = deck.slides[index], theme = themes[deck.settings.theme];
     const width = deck.settings.aspect === '4:3' ? 10 : 40 / 3, height = 7.5;
     const footer = slide.footer && !slide.footer.hidden ? slide.footer : null;
-    const elements = [], lists = [], warnings = [...slide.warnings], margin = .62, bottom = footer && !footer.overlay ? Math.min(6.96, height - footer.height - .15) : 6.96;
+    const elements = [], lists = [], warnings = [...slide.warnings], margin = .62;
     const textHeight = (runs, w, size, lineHeight = 1.2) => Math.max(.25, lineCount(plain(runs), w, size) * size / 72 * lineHeight + .035);
+    const footerPadding = footer ? Math.min(footer.padding, footer.height / 4) : 0;
+    const footerGap = footer?.blocks.length > 1 ? Math.min(footer.gap, (width - 2 * margin) / (footer.blocks.length * 2)) : 0;
+    const footerCell = footer ? Math.max(.01, (width - 2 * margin - footerGap * Math.max(0, footer.blocks.length - 1)) / Math.max(1, footer.blocks.length)) : 0;
+    const footerTextHeight = footer ? Math.max(0, ...footer.blocks.filter(block => block.type === 'text').map(block => textHeight(block.runs, footerCell, footer.size))) : 0;
+    // Honor the chosen point size. Height is a minimum; reserve the expanded
+    // footer before laying out slide content rather than silently shrinking text.
+    const footerHeight = footer ? Math.min(height - margin, Math.max(footer.height, footerTextHeight + 2 * footerPadding)) : 0;
+    const bottom = footer && !footer.overlay ? Math.min(6.96, height - footerHeight - .15) : 6.96;
     const addText = (runs, x, y, w, size, props = {}) => {
       const h = textHeight(runs, w, size, props.lineHeight); elements.push({ type: 'text', runs, x, y, w, h, fontSize: size, color: theme.ink, ...props }); return h;
     };
@@ -530,23 +553,20 @@
     }
     if (!background && !slide.footer) elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });
     if (footer) {
-      const y = height - footer.height, padding = Math.min(footer.padding, footer.height / 4), children = footer.blocks;
-      if (footer.background) elements.push({ type: 'shape', x: 0, y, w: width, h: footer.height, color: footer.background, opacity: 100, footer: true });
-      const gap = children.length > 1 ? Math.min(footer.gap, (width - 2 * margin) / (children.length * 2)) : 0;
-      const cell = Math.max(.01, (width - 2 * margin - gap * Math.max(0, children.length - 1)) / Math.max(1, children.length));
-      const available = footer.height - 2 * padding;
+      const y = height - footerHeight, padding = footerPadding, children = footer.blocks;
+      if (footer.background) elements.push({ type: 'shape', x: 0, y, w: width, h: footerHeight, color: footer.background, opacity: 100, footer: true });
+      const gap = footerGap, cell = footerCell, available = footerHeight - 2 * padding;
       for (const [n, block] of children.entries()) {
         const x = margin + n * (cell + gap);
         if (block.type === 'image') {
           const dimensions = imageDimensions.get(block.src), ratio = block.qrSvg ? 1 : dimensions ? dimensions.width / dimensions.height : 1.5;
           const w = Math.min(cell, available * ratio), h = w / ratio;
-          elements.push({ ...block, x: x + (cell - w) * ({ left: 0, center: .5, right: 1 }[footer.align]), y: y + (footer.height - h) / 2, w, h, footer: true });
+          elements.push({ ...block, x: x + (cell - w) * ({ left: 0, center: .5, right: 1 }[footer.align]), y: y + (footerHeight - h) / 2, w, h, footer: true });
         } else {
-          let size = footer.size;
-          while (size > 8 && textHeight(block.runs, cell, size) > available) size--;
+          const size = footer.size;
           const h = textHeight(block.runs, cell, size);
-          if (h > available) warnings.push('Footer text does not fit. Increase its height or shorten the text.');
-          elements.push({ ...block, x, y: y + Math.max(padding, (footer.height - h) / 2), w: cell, h, fontSize: size, color: footer.color || theme.muted, align: footer.align, footer: true });
+          if (h > available) warnings.push('Footer text does not fit on the slide. Shorten the text or reduce its size.');
+          elements.push({ ...block, x, y: y + Math.max(padding, (footerHeight - h) / 2), w: cell, h, fontSize: size, color: footer.color || theme.muted, align: footer.align, footer: true });
         }
       }
     }
