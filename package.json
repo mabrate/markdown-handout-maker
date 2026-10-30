@@ -6,6 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
+    "setup:linux-sandbox": "node scripts/setup-linux-sandbox.cjs",
     "test": "node tests/test-qr-block.js && node tests/test-checklist-block.js && node tests/test-asset-import.js && node tests/test-document-files.js && node tests/test-recovery.js && node tests/test-file-browser.js && node tests/test-zip-files.js && node tests/test-handout-export.js && node tests/test-media-sizing.js && node tests/test-handout-settings.js && node tests/test-document-settings.js && node tests/test-google-drive.js && node tests/test-supporting-documents.js && node tests/test-slides.js && node tests/test-slide-footer.js && node tests/test-slide-layouts.js && node tests/test-slide-list-layout.js && node tests/test-slide-reorder.js && node tests/test-video-block.js && node tests/test-vector-lab.cjs",
     "package": "electron-builder --dir",
     "dist": "electron-builder",
@@ -36,7 +37,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^44.0.0",
+    "electron": "^44.10.0",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.28.2",
     "yaml": "^2.9.1"

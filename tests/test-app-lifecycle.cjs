@@ -1,5 +1,5 @@
 'use strict';
-// Optional native Electron smoke check; uses the same Playwright setup as UI checks.
+// Optional native Electron smoke check; requires a working OS sandbox, as npm start does.
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('fs/promises');
 const os = require('os');
@@ -12,7 +12,7 @@ const assert = require('assert/strict');
   try {
     application = await _electron.launch({
       executablePath: require('electron'),
-      args: [path.join(__dirname, '..'), '--no-sandbox', `--user-data-dir=${profile}`],
+      args: [path.join(__dirname, '..'), `--user-data-dir=${profile}`],
       env, timeout: 15000
     });
     electronProcess = application.process();

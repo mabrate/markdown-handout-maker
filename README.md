@@ -28,6 +28,30 @@ npm install
 npm start
 ```
 
+### Ubuntu sandbox startup error
+
+On Ubuntu 24.04 and later, AppArmor can block Electron's user namespaces. If
+`npm start` aborts with `The SUID sandbox helper binary was found, but is not
+configured correctly`, run this once from the checkout:
+
+```bash
+npm run setup:linux-sandbox
+npm start
+```
+
+The setup prints and validates an AppArmor profile, then uses `sudo` to install
+and load it. It allows user namespaces for only this checkout's Electron
+executable, preserving Chromium's sandbox and Ubuntu's system-wide restriction.
+The permission applies to any executable placed at that exact path, so keep the
+checkout under your control. Preview the rule with
+`npm run setup:linux-sandbox -- --print`. Re-run setup if you move the checkout;
+ordinary dependency updates at the same path keep working. This setup is for
+`npm start`, rather than installed AppImage or deb builds.
+
+For dependency warnings, run `npm audit`. This project requires Electron
+44.10.0 or later in the 44.x series to include the current security patches;
+use `npm install` after pulling dependency updates.
+
 In the app, choose **File → Open Folder…** to work with a folder of Markdown
 handouts, or **File → Open File…** for one handout. Use **File → Save** or
 Ctrl/Cmd+S to write changes back to the selected file. New handouts start with
