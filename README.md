@@ -42,6 +42,34 @@ files are included; web links remain online links. Assets must use relative path
 inside the open folder. Missing or inaccessible assets stop the export with the
 filename so you can fix the link before sharing.
 
+## Unsaved-file recovery
+
+The desktop app automatically keeps a local recovery copy of every unsaved tab,
+including new handouts and slide decks. A green status strip confirms that the
+drafts are protected; this does not save changes to the original Markdown files.
+You can close the app and choose **Restore files** at the next launch. Recovery
+also protects the latest draft after an unexpected app termination. The active
+draft, editor selection, and scroll positions are retained. Local images remain
+linked to their original files and need to stay available on disk.
+
+If an original file changed on disk or is no longer available, its draft opens
+as a separate unsaved `-recovered.md` copy. Save it to a location you choose.
+Successful saves and explicit **Discard** choices remove the corresponding
+recovery drafts. **Discard recovery** at startup removes all pending drafts;
+it does not change the original files. Canceling a save keeps the recovery copy.
+
+Recovery files live in the app's per-user data folder under
+`recovery/unsaved-work.json`. They stay on this computer and are written
+atomically, separately from your lesson folders. If recovery cannot be written,
+a persistent warning asks you to save; closing then offers **Keep editing** or
+**Close without recovery**. Starting another instance focuses the existing app
+so two processes cannot overwrite the same recovery record.
+
+When dragging an image into the Markdown editor, a blue caret marks where its
+code will be inserted, including with line wrapping enabled. Images already in
+the open folder are referenced directly rather than copied again. New slide
+images start with a `3in` width that can be adjusted in the preview.
+
 ## Preview navigation
 
 Click **Present** beside the preview page count to show the current handout

@@ -6,7 +6,7 @@
   'use strict';
   const markdown = new MarkdownIt({ html: false, breaks: true });
   const themes = {
-    classroom: { name: 'Classroom', background: 'FFFDF7', ink: '172C3B', accent: '175A80', muted: '516776', font: 'Arial' },
+    classroom: { name: 'Classroom', background: 'FFFDF7', ink: '172C3B', accent: '175A80', muted: '516776', font: 'Trebuchet MS' },
     light: { name: 'Light', background: 'FFFFFF', ink: '202936', accent: '2454A4', muted: '566476', font: 'Arial' },
     dark: { name: 'Dark', background: '20252D', ink: 'F5F5EF', accent: 'FFAF63', muted: 'BBC4CF', font: 'Arial' }
   };
@@ -35,6 +35,44 @@
   const plain = runs => runs.map(run => run.text).join('');
   const anchors = { center: [ .5, .5 ], left: [0, .5], right: [1, .5], top: [.5, 0], bottom: [.5, 1], 'top-left': [0, 0], 'top-right': [1, 0], 'bottom-left': [0, 1], 'bottom-right': [1, 1] };
   const colors = { white: 'FFFFFF', black: '000000', red: 'FF0000', green: '008000', blue: '0000FF', yellow: 'FFFF00', orange: 'FFA500', gray: '808080', grey: '808080', navy: '000080', teal: '008080', purple: '800080', pink: 'FFC0CB', brown: 'A52A2A', cyan: '00FFFF', magenta: 'FF00FF' };
+  function listOptions(raw, warnings) {
+    const values = {};
+    for (const part of (raw || '').split(/\s+/).filter(Boolean)) {
+      const match = part.match(/^([\w-]+)=(\S+)$/);
+      if (!match || !['columns', 'layout', 'widths', 'align', 'number-color', 'number-size', 'gap'].includes(match[1])) warnings.push(`Unknown list option “${part}”.`);
+      else values[match[1]] = match[2];
+    }
+    // Read previously saved layouts, but author new blocks with columns only.
+    const legacy = values.layout === 'vertical' ? 1 : /^[12]x[234]$/.test(values.layout || '') ? Number(values.layout.at(-1)) : null;
+    if (values.layout && legacy === null) warnings.push('Invalid list layout; use columns=1, 2, 3, or 4. Using one column.');
+    let columns = legacy || 1;
+    if (values.columns !== undefined) {
+      if (!/^[1-4]$/.test(values.columns)) warnings.push('Invalid list columns; use 1, 2, 3, or 4. Using one column.');
+      columns = /^[1-4]$/.test(values.columns) ? Number(values.columns) : 1;
+    }
+    if (values.gap && !['small', 'medium', 'large'].includes(values.gap)) warnings.push('Invalid list gap; use small, medium, or large. Using medium.');
+    let widths = null, customWidths = null;
+    if (values.widths !== undefined) {
+      const parts = values.widths.split(',');
+      const parsed = parts.map(value => lengthInches(/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value) ? value + 'in' : value, 0));
+      if (![1, columns].includes(parsed.length) || parsed.some(value => !Number.isFinite(value) || value <= 0 || value > 40)) warnings.push('Invalid list widths; use one absolute width for all columns or one per column, such as widths=2in or widths=2in,4in,2in (in, cm, mm, or px). Bare numbers mean inches. Using automatic equal widths.');
+      else { widths = parsed.length === 1 ? Array(columns).fill(parsed[0]) : parsed; customWidths = values.widths; }
+    }
+    const align = ['left', 'center', 'right'].includes(values.align) ? values.align : 'left';
+    if (values.align !== undefined && !['left', 'center', 'right'].includes(values.align)) warnings.push('Invalid list alignment; use left, center, or right for all columns. Using left.');
+    let numberColor = null, numberSize = null;
+    if (values['number-color']) {
+      const value = values['number-color'], hex = value.replace(/^#/, '');
+      numberColor = Object.hasOwn(colors, value.toLowerCase()) ? colors[value.toLowerCase()] : /^[a-f\d]{6}$/i.test(hex) ? hex.toUpperCase() : /^[a-f\d]{3}$/i.test(hex) ? [...hex].map(c => c + c).join('').toUpperCase() : null;
+      if (!numberColor) warnings.push('Invalid list number-color; use a basic color name or #RRGGBB. Using the theme accent.');
+    }
+    if (values['number-size'] && values['number-size'] !== 'auto') {
+      const value = values['number-size'];
+      if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value) || Number(value) < 8 || Number(value) > 144) warnings.push('Invalid list number-size; use auto or 8–144 points. Using auto.');
+      else numberSize = Number(value);
+    }
+    return { columnCount: columns, widths, customWidths, align, numberColor, numberSize, gap: ['small', 'medium', 'large'].includes(values.gap) ? values.gap : 'medium' };
+  }
   function blockOptions(type, raw, warnings) {
     const allowed = type === 'background' ? ['position', 'overlay', 'opacity'] : ['x', 'y', 'width', 'size', 'color', 'align', 'font'];
     const values = {};
@@ -61,9 +99,9 @@
     const color = (Object.hasOwn(colors, value.toLowerCase()) ? colors[value.toLowerCase()] : null) || (/^[\da-f]{6}$/i.test(hex) ? hex.toUpperCase() : /^[\da-f]{3}$/i.test(hex) ? [...hex].map(c => c + c).join('').toUpperCase() : null);
     if (!color) warnings.push('Invalid text color; use a color name or #RRGGBB. Using white.');
     if (values.align && !['left', 'center', 'right'].includes(values.align)) warnings.push('Invalid text alignment; using left.');
-    const fonts = { Arial: 'Arial', Calibri: 'Calibri', Georgia: 'Georgia', Verdana: 'Verdana', CourierNew: 'Courier New' };
+    const fonts = { Arial: 'Arial', TrebuchetMS: 'Trebuchet MS', Calibri: 'Calibri', Georgia: 'Georgia', Verdana: 'Verdana', CourierNew: 'Courier New' };
     if (values.font && !Object.hasOwn(fonts, values.font)) warnings.push('Unknown text font; using Arial.');
-    return { x: number('x', 10, 0, 100, true), y: number('y', 65, 0, 100, true), width: number('width', 80, 1, 100, true), size: number('size', 54, 8, 144), color: color || 'FFFFFF', align: ['left', 'center', 'right'].includes(values.align) ? values.align : 'left', font: Object.hasOwn(fonts, values.font) ? fonts[values.font] : 'Arial' };
+    return { x: number('x', 10, 0, 100, true), y: number('y', 65, 0, 100, true), width: number('width', 80, 1, 100, true), size: number('size', 54, 8, 144), color: color || 'FFFFFF', align: ['left', 'center', 'right'].includes(values.align) ? values.align : 'left', font: Object.hasOwn(fonts, values.font) ? fonts[values.font] : values.font ? 'Arial' : null };
   }
   function footerOptions(raw, warnings) {
     const values = {};
@@ -91,7 +129,7 @@
   }
   function mediaOptions(attributes) {
     const dimension = key => attributes.match(new RegExp(`(?:^|\\s)${key}=(\\d+(?:\\.\\d+)?(?:in|cm|mm|px|%))(?:\\s|$)`, 'i'))?.[1];
-    return { mediaWidth: dimension('width'), mediaHeight: dimension('height'), mediaAlign: /(?:^|\s)\.float-right(?:\s|$)/i.test(attributes) ? 'right' : 'left' };
+    return { mediaWidth: dimension('width'), mediaHeight: dimension('height'), mediaAlign: /(?:^|\s)\.float-right(?:\s|$)/i.test(attributes) ? 'right' : /(?:^|\s)\.float-left(?:\s|$)/i.test(attributes) ? 'left' : 'center' };
   }
   function lengthInches(value, parentWidth) {
     const match = String(value || '').match(/^(\d+(?:\.\d+)?)(in|cm|mm|px|%)$/i);
@@ -99,9 +137,9 @@
     const number = Number(match[1]), units = { in: 1, cm: 1 / 2.54, mm: 1 / 25.4, px: 1 / 96, '%': parentWidth / 100 };
     return number > 0 && Number.isFinite(number) ? number * units[match[2].toLowerCase()] : null;
   }
-  function blocksFromMarkdown(text, sourceLines = text.split('\n').map((_, index) => index), preserveOrder = false) {
+  function blocksFromMarkdown(text, sourceLines = text.split('\n').map((_, index) => index), preserveOrder = false, parsedTokens = null) {
     const location = map => map ? { sourceStart: sourceLines[map[0]], sourceEnd: sourceLines[map[1] - 1] + 1 } : {};
-    const tokens = markdown.parse(text, {}), blocks = [], lists = []; let nextListId = 0;
+    const tokens = parsedTokens || markdown.parse(text, {}), blocks = [], lists = []; let nextListId = 0;
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       if (token.type === 'bullet_list_open') lists.push({ ordered: false, id: lists[0]?.id ?? nextListId++ });
@@ -148,11 +186,30 @@
       const heading = tokens[i - 1]?.type === 'heading_open' ? Number(tokens[i - 1].tag.slice(1)) : 0;
       if (plain(runs).trim()) {
         const list = lists.at(-1);
-        blocks.push({ type: 'text', runs, heading, ...location(token.map), ...(list ? { bullet: list.ordered ? `${list.next++}.` : '•', depth: lists.length - 1, listId: list.id } : {}) });
+        blocks.push({ type: 'text', runs, heading, ...location(heading ? tokens[i - 1].map : token.map), ...(list ? { bullet: list.ordered ? `${list.next++}.` : '•', depth: lists.length - 1, listId: list.id } : {}) });
       }
       for (const [mediaOccurrence, image] of images.entries()) blocks.push({ type: 'image', src: image.attrGet('src'), alt: image.content || 'Image', ...location(token.map), ...mediaOptions(imageAttributes.get(image) || ''), mediaOccurrence });
     }
     return blocks;
+  }
+  function listItems(text, sourceLines, warnings) {
+    const tokens = markdown.parse(text, {}), roots = tokens.filter(token => token.level === 0 && token.nesting !== -1);
+    if (roots.length !== 1 || !['ordered_list_open', 'bullet_list_open'].includes(roots[0].type)) {
+      warnings.push('A list layout needs one Markdown ordered or unordered list. Showing its content without the layout.');
+      return null;
+    }
+    const ordered = roots[0].type === 'ordered_list_open', items = [];
+    let number = Number(roots[0].attrGet('start') || 1);
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      if (token.type !== 'list_item_open' || token.level !== 1) continue;
+      const start = i++;
+      while (i < tokens.length && !(tokens[i].type === 'list_item_close' && tokens[i].level === 1)) i++;
+      items.push({ marker: ordered ? String(number++) : '•', ordered,
+        blocks: blocksFromMarkdown(text, sourceLines, false, tokens.slice(start + 1, i)),
+        sourceStart: sourceLines[token.map[0]], sourceEnd: sourceLines[token.map[1] - 1] + 1 });
+    }
+    return items;
   }
   function elementBlocks(lines, warnings, sourceLines) {
     let index = 0;
@@ -214,6 +271,23 @@
           }
           continue;
         }
+        const list = line.match(/^:::list(?:\s+(.*))?\s*$/);
+        if (list) {
+          flush(); const sourceStart = sourceLines[index], settings = listOptions(list[1], warnings);
+          index++; const content = [], contentSources = []; let listFence = null;
+          while (index < lines.length) {
+            const row = lines[index], code = row.match(/^ {0,3}(`{3,}|~{3,})/);
+            if (!listFence && /^:::\s*$/.test(row)) break;
+            if (code) { if (!listFence) listFence = code[1]; else if (code[1][0] === listFence[0] && code[1].length >= listFence.length) listFence = null; }
+            content.push(row); contentSources.push(sourceLines[index++]);
+          }
+          const sourceEnd = sourceLines[Math.min(index, sourceLines.length - 1)] + 1;
+          if (index < lines.length) index++; else warnings.push('List layout is missing its closing ::: marker.');
+          const text = content.join('\n'), items = listItems(text, contentSources, warnings);
+          if (!items) blocks.push(...blocksFromMarkdown(text, contentSources));
+          else blocks.push({ type: 'list-layout', ...settings, items, sourceStart, sourceEnd });
+          continue;
+        }
         const grid = line.match(/^:::grid(?:\s+(.*))?\s*$/);
         const gridWidths = grid?.[1]?.match(/(?:^|\s)widths=(\S+)/)?.[1];
         const columns = (grid ? ':::columns' + (gridWidths ? ' widths=' + gridWidths : '') : line).match(/^:::columns(?:\s+widths=([^\s]+))?\s*$/);
@@ -238,7 +312,11 @@
         }
         if (/^:::(center|fit|checklist)\s*$/.test(line)) {
           const type = line.trim().slice(3);
-          flush(); index++; const result = read(['close']);
+          flush(); const sourceStart = sourceLines[index]; index++; const result = read(['close']);
+          const sourceEnd = sourceLines[Math.min(index, sourceLines.length - 1)] + 1;
+          if (type === 'center' && result.stop === 'close' && result.blocks.length === 1 && result.blocks[0].type === 'text' && result.blocks[0].heading) {
+            result.blocks[0].flowAlignment = { type: 'center', sourceStart, sourceEnd };
+          }
           if (result.stop === 'close') index++; else warnings.push(`${type === 'fit' ? 'Fit' : 'Centered content'} block is missing its closing ::: marker.`);
           if (type === 'checklist') { for (const block of result.blocks) { if (block.bullet) block.bullet = '☐';if(block.paragraphs)for(const paragraph of block.paragraphs)if(paragraph.bullet)paragraph.bullet='☐'; } blocks.push(...result.blocks); }
           else blocks.push({ type, blocks: result.blocks }); continue;
@@ -268,13 +346,15 @@
       const flowing = blocks.filter(block => !['background', 'positioned-text', 'footer'].includes(block.type));
       const fit = flowing.length === 1 && flowing[0].type === 'fit';
       if (fit) blocks = blocks.flatMap(block => block === flowing[0] ? block.blocks : [block]);
-      const headingIndex = blocks.findIndex(block => block.type === 'text' && block.heading === 1);
-      const titleBlock = headingIndex >= 0 ? blocks.splice(headingIndex, 1)[0] : null;
+      const headingIndex = blocks.findIndex(block => block.type === 'text' && block.heading === 1 || block.type === 'center' && block.blocks.length === 1 && block.blocks[0].type === 'text' && block.blocks[0].heading === 1);
+      const titleContainer = headingIndex >= 0 ? blocks.splice(headingIndex, 1)[0] : null;
+      const titleBlock = titleContainer?.type === 'center' ? titleContainer.blocks[0] : titleContainer;
       const title = titleBlock?.runs || [];
       if (/<\/?(?:table|div|style|script|iframe)\b/i.test(raw.join('\n'))) slideWarnings.push('HTML is shown as text. Use Markdown tables and ::: blocks.');
       const nestedHeading = blocks.flatMap(block => block.type === 'center' ? block.blocks : []).find(block => block.heading === 1);
       const positionedTitle = blocks.find(block => block.type === 'positioned-text');
-      slides.push({ fit, markerLine: current.markerLine, startLine: current.startLine, endLine, title, titleSource: titleBlock && { sourceStart: titleBlock.sourceStart, sourceEnd: titleBlock.sourceEnd }, outlineTitle: title.length ? title : nestedHeading?.runs || positionedTitle?.runs || [], blocks, notes: current.noteLines.join('\n').trim(), noteSource: current.noteSources.length ? { sourceStart: current.noteSources[0], sourceEnd: current.noteSources.at(-1) + 1 } : null, warnings: slideWarnings });
+      slides.push({ fit, markerLine: current.markerLine, startLine: current.startLine, endLine, title, titleAlign: titleContainer?.type === 'center' ? 'center' : 'left', titleAlignmentBlock: titleBlock?.flowAlignment,
+        titleSource: titleBlock && { sourceStart: titleBlock.sourceStart, sourceEnd: titleBlock.sourceEnd }, outlineTitle: title.length ? title : nestedHeading?.runs || positionedTitle?.runs || [], blocks, notes: current.noteLines.join('\n').trim(), noteSource: current.noteSources.length ? { sourceStart: current.noteSources[0], sourceEnd: current.noteSources.at(-1) + 1 } : null, warnings: slideWarnings });
     }
     for (let index = prefixLines; index < lines.length; index++) {
       const line = lines[index], code = line.match(/^ {0,3}(`{3,}|~{3,})/);
@@ -314,9 +394,9 @@
     const width = deck.settings.aspect === '4:3' ? 10 : 40 / 3, height = 7.5;
     const footer = slide.footer && !slide.footer.hidden ? slide.footer : null;
     const elements = [], lists = [], warnings = [...slide.warnings], margin = .62, bottom = footer && !footer.overlay ? Math.min(6.96, height - footer.height - .15) : 6.96;
-    const textHeight = (runs, w, size) => Math.max(.25, lineCount(plain(runs), w, size) * size / 72 * 1.2 + .035);
+    const textHeight = (runs, w, size, lineHeight = 1.2) => Math.max(.25, lineCount(plain(runs), w, size) * size / 72 * lineHeight + .035);
     const addText = (runs, x, y, w, size, props = {}) => {
-      const h = textHeight(runs, w, size); elements.push({ type: 'text', runs, x, y, w, h, fontSize: size, color: theme.ink, ...props }); return h;
+      const h = textHeight(runs, w, size, props.lineHeight); elements.push({ type: 'text', runs, x, y, w, h, fontSize: size, color: theme.ink, ...props }); return h;
     };
     const fontSize = block => (block.code ? 18 : block.heading === 1 ? 40 : block.heading ? 27 : 23) * scale;
     function mediaBox(block, parentWidth, available = 2.7) {
@@ -325,9 +405,9 @@
       if (!block.qrSvg && requestedHeight === null) {
         // Width is a maximum: preserve the image's aspect ratio and reserve room
         // for the text that follows, rather than pushing it off the slide.
-        const maxWidth=Math.min(parentWidth,Math.max(.2,available-.2)*ratio);
+        const maxWidth=Math.min(parentWidth,Math.max(.75,available-.2)*ratio);
         const w=Math.min(maxWidth,requestedWidth || parentWidth);
-        return {w,h:w/ratio,maxWidth};
+        return {w,h:w/ratio,maxWidth:parentWidth};
       }
       const w = Math.min(parentWidth, requestedWidth || (requestedHeight ? requestedHeight * ratio : 1.5));
       return { w, h: requestedHeight || w / ratio };
@@ -338,6 +418,7 @@
         if (['background', 'positioned-text', 'footer'].includes(block.type)) specialBlocks.push(block);
         if (block.blocks && block.type !== 'footer') collect(block.blocks);
         if (block.columns) block.columns.forEach(collect);
+        if (block.items) block.items.forEach(item => collect(item.blocks));
       }
     }
     collect(slide.blocks);
@@ -349,6 +430,36 @@
       if (background.overlay !== 'none' && background.opacity > 0) elements.push({ type: 'shape', x: 0, y: 0, w: width, h: height, color: background.overlay === 'dark' ? '000000' : 'FFFFFF', opacity: background.opacity });
     }
     const columnSizes = (block, w) => { const gap = .4, total = block.widths.reduce((a, b) => a + b, 0); return block.widths.map(value => Math.max(.15, w - gap * (block.columns.length - 1)) * value / total); };
+    function listGeometry(block, w) {
+      const columns = block.columnCount, ordered = !!block.items[0]?.ordered, stacked = columns > 1 && ordered;
+      const gap = { small: .2, medium: .4, large: .6 }[block.gap];
+      const availableWidth = Math.max(.2, w - gap * (columns - 1));
+      const sizes = block.widths || Array(columns).fill(availableWidth / columns);
+      const gridWidth = sizes.reduce((a, b) => a + b, 0) + gap * (columns - 1);
+      const groupOffset = Math.max(0, w - gridWidth) * { left: 0, center: .5, right: 1 }[block.align];
+      const positions = sizes.map((_, n) => groupOffset + sizes.slice(0, n).reduce((a, b) => a + b, 0) + n * gap);
+      const markerSize = ordered ? (block.numberSize || 46) * scale : 0;
+      const markerWidth = ordered ? Math.max(.18, ...block.items.map(item => item.marker.length * markerSize / 72 * .62 + .04)) : 0;
+      const markerHeight = ordered ? textHeight([{ text: block.items[0]?.marker || '1' }], markerWidth, markerSize, 1) : 0;
+      const indent = ordered && !stacked ? markerWidth + .14 : 0;
+      const textOffset = stacked ? markerHeight + .1 : 0;
+      const heights = [], cells = block.items.map((item, n) => {
+        const row = Math.floor(n / columns), column = n % columns, cellWidth = sizes[column], align = block.align;
+        let textWidth = Math.max(.2, cellWidth - indent);
+        if (ordered && !stacked && align !== 'left') {
+          // Align the number and its text as one group. Long content still
+          // uses the full available width; short items can sit centrally or right.
+          const naturalWidth = Math.max(.2, ...item.blocks.map(child => child.type !== 'text' ? textWidth :
+            Math.max(...plain(child.runs).split('\n').map(line => line.length)) * fontSize(child) * .53 / 72 + .08 + (child.bullet ? .4 + (child.depth || 0) * .22 : 0)));
+          textWidth = Math.min(textWidth, naturalWidth);
+        }
+        const offset = ordered && !stacked ? Math.max(0, cellWidth - indent - textWidth) * { left: 0, center: .5, right: 1 }[align] : 0;
+        heights[row] = Math.max(heights[row] || 0, markerHeight, textOffset + estimate(item.blocks, textWidth));
+        return { x: positions[column] + offset, textWidth, markerWidth: stacked ? cellWidth : markerWidth, align, cellWidth };
+      });
+      return { columns, gap, cells, markerSize, markerWidth, indent, textOffset, heights, tooWide: gridWidth > w + .01,
+        height: heights.reduce((sum, h) => sum + h, 0) + gap * Math.max(0, heights.length - 1) };
+    }
     function estimate(blocks, w) {
       return blocks.reduce((total, block) => {
         if (['background', 'positioned-text', 'footer'].includes(block.type)) return total;
@@ -356,6 +467,7 @@
         if (block.type === 'video') return total + Math.min(w, lengthInches(block.mediaWidth,w) || w) * 9 / 16 + .45;
         if (block.type === 'center' || block.type === 'fit') return total + estimate(block.blocks, w);
         if (block.type === 'columns') { const sizes = columnSizes(block, w); return total + Math.max(...block.columns.map((col, i) => estimate(col, sizes[i]))) + .2; }
+        if (block.type === 'list-layout') return total + listGeometry(block, w).height + .2;
         if (block.type === 'table') return total + block.rows.reduce((sum, row) => sum + Math.max(...row.map(cell => textHeight([{ text: cell }], w / Math.max(1, row.length) - .16, 19 * scale))) + .18, 0) + .22;
         return total + textHeight(block.runs, Math.max(.2, w - (block.bullet ? .4 : 0)), fontSize(block)) + .16;
       }, 0);
@@ -372,9 +484,24 @@
           if(block.cards){let cardLeft=x;for(const size of sizes){const card={type:'shape',x:cardLeft-.08,y:top-.08,w:size+.16,h:.16,color:theme.background,opacity:100,stroke:theme.muted,sourceStart:block.sourceStart,sourceEnd:block.sourceEnd};cards.push(card);elements.push(card);cardLeft+=size+.4;}}
           y = Math.max(y, ...block.columns.map((col, n) => { const end = stack(col, left, y, sizes[n], y + Math.max(.4, available - gap), align); left += sizes[n] + .4; return end; })) + gap;
           for(const card of cards)card.h=Math.max(.3,y-gap-top+.16);
+        } else if (block.type === 'list-layout') {
+          const geometry = listGeometry(block, w); let rowY = y;
+          if (geometry.tooWide) warnings.push('Content extends beyond the slide width. Reduce the list column widths or use fewer columns.');
+          for (const [n, item] of block.items.entries()) {
+            if (n && n % geometry.columns === 0) rowY += geometry.heights[Math.floor(n / geometry.columns) - 1] + geometry.gap;
+            const cell = geometry.cells[n], left = x + cell.x, start = elements.length;
+            if (Math.max(geometry.indent + .2, geometry.markerWidth) > cell.cellWidth) warnings.push('Content extends beyond a list column. Increase its width, reduce the number size, or use fewer columns.');
+            if (item.ordered) addText([{ text: item.marker }], left, rowY, cell.markerWidth, geometry.markerSize, {
+              bold: true, color: block.numberColor || theme.accent,
+              listMarker: true, lineHeight: 1, align: cell.align, sourceStart: item.sourceStart, sourceEnd: item.sourceEnd
+            });
+            stack(item.blocks, left + geometry.indent, rowY + geometry.textOffset, cell.textWidth, rowY + geometry.heights[Math.floor(n / geometry.columns)], cell.align);
+            for (let element = start; element < elements.length; element++) elements[element].listLayout = block;
+          }
+          y += geometry.height + .2;
         } else if (block.type === 'center' || block.type === 'fit') y = stack(block.blocks, x, y, w, y + available, block.type === 'center' ? 'center' : align);
         else if (block.type === 'video') { const boxWidth=Math.min(w,lengthInches(block.mediaWidth,w)||w,Math.max(2,(available-.25)*16/9)); const h=boxWidth*9/16+.25; elements.push({...block,x,y,w:boxWidth,h});y+=h+.2; }
-        else if (block.type === 'image') { const box = mediaBox(block, w, available); elements.push({ ...block, x: block.mediaAlign === 'right' ? x + w - box.w : x, y, maxWidth:w, ...box }); y += box.h + .2; }
+        else if (block.type === 'image') { const box = mediaBox(block, w, available); elements.push({ ...block, x: x + (w - box.w) * {left:0,center:.5,right:1}[block.mediaAlign || 'center'], y, maxWidth:w, ...box }); y += box.h + .2; }
         else if (block.type === 'table') { const h = estimate([block], w) - .22; elements.push({ ...block, x, y, w, h, fontSize: 19 * scale }); y += h + .22; }
         else {
           const size = fontSize(block), markerWidth = block.bullet ? Math.max(.28, block.bullet.length * .17) : 0;
@@ -382,7 +509,7 @@
           if (block.bullet && (!list || list.sourceId !== block.listId)) {
             list = { x, y, w, h: 0, items: [], sourceId: block.listId, id: lists.length }; lists.push(list);
           }
-          const props = { bold: !!block.heading, code: !!block.code, align, ...(block.bullet ? { listId: list.id } : {}) };
+          const props = { bold: !!block.heading, heading: block.heading, flowAlignment: block.flowAlignment, code: !!block.code, align, ...(block.bullet ? { listId: list.id } : {}) };
           props.sourceStart = block.sourceStart; props.sourceEnd = block.sourceEnd;
           if (block.bullet) addText([{ text: block.bullet }], x + (block.depth || 0) * .22, y, markerWidth, size, { listId: list.id, sourceStart: block.sourceStart, sourceEnd: block.sourceEnd });
           const h = addText(block.runs, x + indent, y, Math.max(.2, w - indent), size, props);
@@ -394,7 +521,7 @@
       return y;
     }
     let top = margin;
-    if (slide.title.length) top += addText(slide.title, margin, top, width - margin * 2, 34 * scale, { bold: true, color: theme.accent, ...slide.titleSource }) + .3;
+    if (slide.title.length) top += addText(slide.title, margin, top, width - margin * 2, 34 * scale, { bold: true, heading: 1, align: slide.titleAlign, flowAlignment: slide.titleAlignmentBlock, color: theme.accent, ...slide.titleSource }) + .3;
     stack(slide.blocks, margin, top, width - margin * 2);
     for (const block of specialBlocks.filter(block => block.type === 'positioned-text')) {
       const x = block.x / 100 * width, y = block.y / 100 * height, w = block.width / 100 * width;
@@ -457,7 +584,7 @@
     if(images.length!==1 || images[0].qrSvg || !slide.blocks.some(block=>block.type==='text'))return null;
     const image=images[0], lines=text.split(/\r?\n/), picture=lines.slice(image.sourceStart,image.sourceEnd).join('\n').trim();
     if(image.sourceEnd!==image.sourceStart+1 || !/^!\[[^\]]*\]\([^\n]+\)(?:\{[^}]*\})?$/.test(picture))return null;
-    const title=slide.titleSource?lines.slice(slide.titleSource.sourceStart,slide.titleSource.sourceEnd).join('\n'):'';
+    const title=slide.titleSource?lines.slice(slide.titleAlignmentBlock?.sourceStart ?? slide.titleSource.sourceStart,slide.titleAlignmentBlock?.sourceEnd ?? slide.titleSource.sourceEnd).join('\n'):'';
     const content=[],notes=[];let inNotes=false, fence=null;
     for(let line=slide.startLine;line<slide.endLine;line++){
       const value=lines[line];
@@ -465,7 +592,7 @@
       const code=value.match(/^ {0,3}(`{3,}|~{3,})/);
       if(code){if(!fence)fence=code[1];else if(code[1][0]===fence[0]&&code[1].length>=fence.length)fence=null;}
       if(!fence && !code && /^:::notes\s*$/.test(value)){inNotes=true;notes.push(value);continue;}
-      if(line===image.sourceStart || (slide.titleSource && line>=slide.titleSource.sourceStart && line<slide.titleSource.sourceEnd))continue;
+      if(line===image.sourceStart || (slide.titleSource && line>=(slide.titleAlignmentBlock?.sourceStart ?? slide.titleSource.sourceStart) && line<(slide.titleAlignmentBlock?.sourceEnd ?? slide.titleSource.sourceEnd)))continue;
       content.push(value);
     }
     if(inNotes)return null;
@@ -515,7 +642,7 @@
     if (action === 'fit') {
       if (slide.fit) return null;
     } else {
-      const containsColumns = blocks => blocks.some(block => block.type === 'columns' || (block.blocks && containsColumns(block.blocks)));
+      const containsColumns = blocks => blocks.some(block => ['columns', 'list-layout'].includes(block.type) || (block.blocks && containsColumns(block.blocks)));
       if (containsColumns(slide.blocks)) return null;
       // Only split at top-level Markdown blocks or direct list items. Keep fenced
       // code, tables, nested lists and ::: groups intact.
@@ -578,7 +705,7 @@
     return replacement === text.slice(start, end) ? null : { start, end, text: replacement };
   }
   function movableTextEdit(text, element, scene) {
-    if (element.type !== 'text' || element.footer || element.positioned || !Number.isInteger(element.sourceStart)) return null;
+    if (element.type !== 'text' || element.footer || element.positioned || element.listLayout || !Number.isInteger(element.sourceStart)) return null;
     if(element.listId !== undefined){const list=scene.lists[element.listId];element={...element,...list,sourceStart:Math.min(...list.items.map(item=>item.sourceStart)),sourceEnd:Math.max(...list.items.map(item=>item.sourceEnd)),fontSize:list.items[0].fontSize};}
     const lines = text.split('\n'), start = lines.slice(0, element.sourceStart).reduce((sum, line) => sum + line.length + 1, 0), end = Math.min(text.length, start + lines.slice(element.sourceStart, element.sourceEnd).join('\n').length);
     const percent = value => Math.round(value * 1000) / 10;
@@ -604,6 +731,70 @@
     }
     return { start, end, text: opening + replacement.slice(line.length) };
   }
+  function listLayoutEdit(text, block, values) {
+    const lines = text.split('\n'), line = lines[block.sourceStart];
+    if (!/^:::list(?:\s|$)/.test(line || '')) return null;
+    let opening = line.replace(/\r$/, '');
+    const changes = { ...values };
+    if (Object.hasOwn(changes, 'columns')) {
+      const count = changes.columns === '' ? 1 : Number(changes.columns);
+      if (!Number.isInteger(count) || count < 1 || count > 4) return null;
+      if (block.customWidths?.includes(',') && !Object.hasOwn(changes, 'widths')) changes.widths = Array.from({ length: count }, (_, n) => block.customWidths.split(',')[n] || '2in').join(',');
+    }
+    if (/(?:^|\s)layout=\S+/.test(opening)) {
+      opening = opening.replace(/\s+layout=\S+/g, '');
+      if (!/(?:^|\s)columns=/.test(opening)) opening += ` columns=${block.columnCount}`;
+    }
+    for (const [key, value] of Object.entries(changes)) {
+      if (!['columns', 'widths', 'align', 'number-color', 'number-size', 'gap'].includes(key) || /\s/.test(String(value))) return null;
+      const pattern = new RegExp(`(^|\\s)${key}=\\S+`, 'g');
+      if (value === '') opening = opening.replace(pattern, '');
+      else if (pattern.test(opening)) { pattern.lastIndex = 0; opening = opening.replace(pattern, (_, space) => `${space}${key}=${value}`); }
+      else opening += ` ${key}=${value}`;
+    }
+    const warnings = []; listOptions(opening.replace(/^:::list\s*/, ''), warnings);
+    if (warnings.length) return null;
+    const start = lines.slice(0, block.sourceStart).reduce((sum, row) => sum + row.length + 1, 0);
+    return { start, end: start + line.length, text: opening + (line.endsWith('\r') ? '\r' : '') };
+  }
+  function headingAlignmentEdit(text, element, align) {
+    if (element.type !== 'text' || !element.heading || element.positioned || element.footer || element.listLayout || element.listId !== undefined || !['left', 'center'].includes(align) || !Number.isInteger(element.sourceStart)) return null;
+    if ((element.align || 'left') === align) return null;
+    const lines = text.split('\n'), offset = line => Math.min(text.length, lines.slice(0, line).reduce((sum, row) => sum + row.length + 1, 0));
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    if (align === 'left') {
+      const wrapper = element.flowAlignment;
+      if (!wrapper || !/^:::center\s*$/.test(lines[wrapper.sourceStart] || '') || !/^:::\s*$/.test(lines[wrapper.sourceEnd - 1] || '')) return null;
+      return { start: offset(wrapper.sourceStart), end: offset(wrapper.sourceEnd), text: text.slice(offset(element.sourceStart), offset(element.sourceEnd)) };
+    }
+    const start = offset(element.sourceStart), end = offset(element.sourceEnd), heading = text.slice(start, end), trailing = heading.endsWith('\n');
+    return { start, end, text: ':::center' + eol + (trailing ? heading : heading + eol) + ':::' + (trailing ? eol : '') };
+  }
+  function listTypeEdit(text, block, ordered) {
+    if (typeof ordered !== 'boolean' || block.items[0]?.ordered === ordered) return null;
+    const lines = text.split('\n');
+    if (!/^:::list(?:\s|$)/.test(lines[block.sourceStart] || '') || !/^:::\s*$/.test(lines[block.sourceEnd - 1] || '')) return null;
+    const width = value => [...value].reduce((column, char) => column + (char === '\t' ? 4 - column % 4 : 1), 0);
+    const contentIndent = (prefix, spacing) => {
+      const end = width(prefix), gap = width(prefix + spacing) - end;
+      return end + (gap > 4 ? 1 : gap);
+    };
+    for (const [n, item] of block.items.entries()) {
+      const first = lines[item.sourceStart], cr = first.endsWith('\r') ? '\r' : '';
+      const match = first.replace(/\r$/, '').match(/^( {0,3})(\d{1,9}[.)]|[-+*])([ \t]+|$)(.*)$/);
+      if (!match) return null;
+      const marker = ordered ? `${n + 1}.` : '-', spacing = match[3] || ' ', oldIndent = contentIndent(match[1] + match[2], spacing), newIndent = contentIndent(match[1] + marker, spacing);
+      lines[item.sourceStart] = match[1] + marker + spacing + match[4] + cr;
+      for (let row = item.sourceStart + 1; row < item.sourceEnd; row++) {
+        const leading = lines[row]?.match(/^[ \t]*/)?.[0] || '';
+        if (!lines[row]?.trim() || width(leading) < oldIndent) continue;
+        lines[row] = ' '.repeat(newIndent + width(leading) - oldIndent) + lines[row].slice(leading.length);
+      }
+    }
+    const start = text.split('\n').slice(0, block.sourceStart).reduce((sum, row) => sum + row.length + 1, 0);
+    const end = Math.min(text.length, text.split('\n').slice(0, block.sourceEnd).reduce((sum, row) => sum + row.length + 1, 0));
+    return { start, end, text: lines.slice(block.sourceStart, block.sourceEnd).join('\n') + (end > start && text[end - 1] === '\n' ? '\n' : '') };
+  }
   function footerEdit(text, element, values) {
     const lines = text.split('\n'), line = lines[element.sourceStart];
     if (!/^:::footer(?:\s|$)/.test(line || '')) return null;
@@ -627,5 +818,5 @@
     return lines.join('\n') + text.slice(meta.prefix.length);
   }
   const starter = '---\ntype: slides\ntheme: classroom\naspect: 16:9\n---\n\n# New lesson\n\nA short introduction to today’s learning.\n\n---\n\n# Investigate\n\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::\n\n---\n\n# Reflect\n\nWhat changed your thinking today?\n';
-  return { metadata, parse, scene, reorderEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerEdit, setting, themes, starter, plain, blocksFromMarkdown };
+  return { metadata, parse, scene, reorderEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerEdit, listLayoutEdit, listTypeEdit, headingAlignmentEdit, setting, themes, starter, plain, blocksFromMarkdown };
 });

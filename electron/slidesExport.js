@@ -45,6 +45,7 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
       }
       if (block.blocks) await loadImages(block.blocks, index);
       if (block.columns) for (const column of block.columns) await loadImages(column, index);
+      if (block.items) for (const item of block.items) await loadImages(item.blocks, index);
     }
   }
   for (const [index, slide] of deck.slides.entries()) await loadImages(slide.blocks, index);
@@ -97,7 +98,7 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
             if(i<element.paragraphs.length-1)runs[runs.length-1].options.breakLine=true;
           }
         }
-        page.addText(runs, { ...position, fontFace: element.code ? 'Courier New' : element.font || theme.font, fontSize: element.fontSize, color: element.color, align: element.align || 'left', margin: 0, breakLine: false, valign: 'top', lineSpacingMultiple: 1.2, paraSpaceAfter: 0, fit: 'none' });
+        page.addText(runs, { ...position, fontFace: element.code ? 'Courier New' : element.font || theme.font, fontSize: element.fontSize, color: element.color, align: element.align || 'left', margin: 0, breakLine: false, valign: 'top', lineSpacingMultiple: element.lineHeight || 1.2, paraSpaceAfter: 0, fit: 'none' });
       } else if (element.type === 'image') {
         try {
           if (!images.has(element.src)) images.set(element.src, await imageData(element.src, root, documentPath));

@@ -5,6 +5,9 @@ const { renameDocumentFile, deleteDocumentFile } = require('./documentFiles');
 const drive = require('./googleDrive');
 const { createEntry, moveHandout, moveFolder, checkedPath } = require('./fileBrowser');
 const { extractArchive } = require('./zipFiles');
+const { RecoveryStore } = require('./recovery');
+let recoveryStore;
+const recovery = () => recoveryStore || (recoveryStore = new RecoveryStore(path.join(app.getPath('userData'), 'recovery')));
 let mainWindow; let currentRoot = null;
 let googleSession = null;
 let editorWrapLines = false;
@@ -95,7 +98,7 @@ async function refreshApplicationMenu() {
       { label: 'Toggle Handout Files Panel', click: () => sendMenuCommand('toggle-panel', 'file') },
       { label: 'Toggle Markdown Editor Panel', click: () => sendMenuCommand('toggle-panel', 'editor') },
       { type: 'separator' },
-      { label: 'Wrap Lines', type: 'checkbox', checked: editorWrapLines, click: menuItem => { editorWrapLines = menuItem.checked; sendMenuCommand('wrap-lines', editorWrapLines); } },
+      { label: 'Wrap Lines', accelerator: 'Ctrl+W', type: 'checkbox', checked: editorWrapLines, click: menuItem => { editorWrapLines = menuItem.checked; sendMenuCommand('wrap-lines', editorWrapLines); } },
       { label: 'Show Whitespace', type: 'checkbox', checked: editorShowWhitespace, click: menuItem => { editorShowWhitespace = menuItem.checked; sendMenuCommand('show-whitespace', editorShowWhitespace); } },
       { type: 'separator' }, { label: 'Page Layout', enabled: documentMode !== 'slides', submenu: layouts.map(([label, value]) => ({ label, click: () => sendMenuCommand('set-layout', value) })) },
       { label: 'Handout Theme', enabled: documentMode !== 'slides', submenu: [
@@ -106,10 +109,10 @@ async function refreshApplicationMenu() {
     ] },
     { label: 'Slides', enabled: documentMode === 'slides', submenu: [
       { label: 'Present', accelerator: 'F5', click: () => sendMenuCommand('present-slides') },
-      { label: 'Snippets', submenu: [['Columns', 'columns'], ['Background', 'background'], ['Text', 'text'], ['Notes', 'notes'], ['QR code', 'qr'], ['YouTube video', 'youtube'], ['Local video', 'video'], ['Table…', 'table'], ['Centered text', 'center'], ['Fit text', 'fit'], ['Checklist', 'checklist'], ['Card grid', 'grid']].map(([label, value]) => ({ label, click: () => sendMenuCommand('slide-snippet', value) })) },
+      { label: 'Snippets', submenu: [['Columns', 'columns'], ['Background', 'background'], ['Text', 'text'], ['Notes', 'notes'], ['QR code', 'qr'], ['YouTube video', 'youtube'], ['Local video', 'video'], ['Table…', 'table'], ['Centered text', 'center'], ['Fit text', 'fit'], ['List layout', 'list'], ['Checklist', 'checklist'], ['Card grid', 'grid']].map(([label, value]) => ({ label, click: () => sendMenuCommand('slide-snippet', value) })) },
       { label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }
     ] },
-    { role: 'windowMenu' },
+    { role: 'windowMenu', ...(process.platform === 'darwin' ? {} : { submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close', accelerator: 'Ctrl+Shift+W' }] }) },
     { role: 'help', submenu: [{ label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }, { label: 'AI Handout Syntax Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'AI_HANDOUT_GUIDE.md')) }, { label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
   ]));
 }
@@ -138,6 +141,12 @@ async function setPresentation(active) {
 function createWindow() {
   mainWindow = new BrowserWindow({ title:productName, icon:path.join(__dirname,'..','assets','markdown-handout-maker-icon.png'), width:1540, height:980, minWidth:1040, minHeight:680, resizable:true, minimizable:true, maximizable:true, webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false } });
   const contents = mainWindow.webContents;
+  contents.on('will-prevent-unload', event => {
+    const choice = dialog.showMessageBoxSync(mainWindow, { type: 'warning', title: 'Unsaved work',
+      message: 'Unsaved changes could not be protected by recovery.', detail: 'Keep editing to save your files, or close and lose changes that could not be backed up.',
+      buttons: ['Keep editing', 'Close without recovery'], defaultId: 0, cancelId: 0, noLink: true });
+    if (choice === 1) event.preventDefault();
+  });
   // File-based desktop renderers do not send a web Referer. Identify this app
   // for YouTube's embedded player, without changing other network requests.
   contents.session.webRequest.onBeforeSendHeaders({urls:['https://www.youtube-nocookie.com/embed/*','https://www.youtube.com/embed/*']},(details,callback)=>{
@@ -162,7 +171,44 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname,'..','renderer','index.html'));
 }
 app.setName(productName);
-app.whenReady().then(async () => { await refreshApplicationMenu(); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); }); app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  app.on('second-instance', () => { if (mainWindow && !mainWindow.isDestroyed()) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); } });
+  app.whenReady().then(async () => { await refreshApplicationMenu(); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });
+}
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+for (const [channel, action] of [['recovery:read', () => recovery().load()], ['recovery:write', snapshot => recovery().save(snapshot)]]) ipcMain.on(channel, (event, value) => {
+  try {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw Error('Invalid recovery request.');
+    event.returnValue = { ok: true, ...action(value) };
+  } catch (error) { event.returnValue = { ok: false, error: error.message }; }
+});
+ipcMain.handle('recovery:restore', async event => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) throw Error('Invalid recovery request.');
+  const snapshot = recovery().load().snapshot;
+  if (!snapshot) return null;
+  let restoredFolder = null;
+  for (const root of new Set([snapshot.root, ...snapshot.documents.map(document => document.root)].filter(Boolean))) {
+    try { restoredFolder = await openHandoutFolder(root); break; } catch {}
+  }
+  const assetCache = new Map(), documents = [];
+  for (const document of snapshot.documents) {
+    let disk = null, available = false;
+    if (document.path && currentRoot) {
+      try { const target = await checkedPath(currentRoot, document.path); disk = await fs.readFile(target, 'utf8'); available = true; } catch {}
+    }
+    const sameFile = available && (disk === document.savedContent || disk === document.content);
+    const file = sameFile ? { path: document.path, name: path.basename(document.path), type: 'file', markdown: true } : {
+      path: '__recovered_' + require('crypto').randomUUID(), name: document.path ? path.basename(document.name, path.extname(document.name)) + '-recovered.md' : document.name,
+      type: 'file', markdown: true, untitled: true, recoverySourcePath: document.path || document.sourcePath
+    };
+    const assetRoot = document.root || (document.path && path.dirname(document.path));
+    if (assetRoot && !assetCache.has(assetRoot)) assetCache.set(assetRoot, await assetsIn(assetRoot).catch(() => []));
+    documents.push({ ...document, file, assets: assetCache.get(assetRoot) || [], dirty: !sameFile || disk !== document.content,
+      savedContent: sameFile ? disk : null, recoveryNote: document.path && !sameFile ? `${document.name}: original changed or is unavailable; recovered as a separate copy.` : null });
+  }
+  return { documents, folder: restoredFolder, activePath: documents.find(document => document.id === snapshot.activeId)?.file.path || documents[0]?.file.path };
+});
 async function openHandoutFolder(folderPath) {
   const tree = await readTree(folderPath);
   const assets = await assetsIn(folderPath);
@@ -188,7 +234,16 @@ ipcMain.handle('files:open-dialog', async () => { const settings = await readSet
 ipcMain.handle('files:recent', async () => { const settings = await readSettings(); const valid=[]; for (const filePath of settings.recentFiles || []) { try { if (markdownExtension.test(filePath)) { await fs.access(filePath); valid.push({path:filePath,name:path.basename(filePath)}); } } catch {} } return valid; });
 ipcMain.handle('files:open-recent', async (_e, filePath) => { if (!markdownExtension.test(filePath)) throw Error('Only Markdown files can be opened.'); const content=await fs.readFile(filePath,'utf8'); if (!isInsideRoot(filePath)) currentRoot=path.dirname(filePath); const recentFiles=await addRecent(filePath); return {root:currentRoot,path:filePath,name:path.basename(filePath),content,assets:await assetsIn(currentRoot),recentFiles}; });
 ipcMain.handle('files:read', async (_e,p) => { if(!isInsideRoot(p)||!markdownExtension.test(p)) throw Error('File is outside selected folder.'); await addRecent(p); return fs.readFile(p,'utf8'); }); ipcMain.handle('files:save', async (_e,p,content) => { if(!markdownExtension.test(p)||(!isInsideRoot(p)&&path.dirname(p)!==currentRoot)) throw Error('File is outside selected folder.'); await fs.writeFile(p,content,'utf8'); return true; });
-ipcMain.handle('files:save-new', async (_event, content) => { const isSlides = require('../renderer/slides').metadata(content).enabled; const result = await dialog.showSaveDialog(mainWindow, { title: isSlides ? 'Save slide deck' : 'Save handout', defaultPath: currentRoot ? path.join(currentRoot, isSlides ? 'new-slides.md' : 'new-handout.md') : isSlides ? 'new-slides.md' : 'new-handout.md', filters: [{ name: 'Markdown', extensions: ['md'] }] }); if (result.canceled || !result.filePath) return null; const filePath = result.filePath; await fs.writeFile(filePath, content, 'utf8'); if (!isInsideRoot(filePath)) currentRoot = path.dirname(filePath); await addRecent(filePath); return { path: filePath, name: path.basename(filePath), assets: await assetsIn(currentRoot) }; });
+ipcMain.handle('files:save-new', async (_event, content, suggestedName) => {
+  const isSlides = require('../renderer/slides').metadata(content).enabled;
+  const name = typeof suggestedName === 'string' && !/[\\/\0]/.test(suggestedName) && markdownExtension.test(suggestedName) ? suggestedName : isSlides ? 'new-slides.md' : 'new-handout.md';
+  const result = await dialog.showSaveDialog(mainWindow, { title: isSlides ? 'Save slide deck' : 'Save handout', defaultPath: currentRoot ? path.join(currentRoot, name) : name, filters: [{ name: 'Markdown', extensions: ['md'] }] });
+  if (result.canceled || !result.filePath) return null;
+  const filePath = result.filePath; await fs.writeFile(filePath, content, 'utf8');
+  if (!isInsideRoot(filePath)) currentRoot = path.dirname(filePath);
+  await addRecent(filePath);
+  return { path: filePath, name: path.basename(filePath), assets: await assetsIn(currentRoot) };
+});
 ipcMain.handle('files:new', async () => { if(!currentRoot) return null; const result=await dialog.showSaveDialog(mainWindow,{title:'New handout',defaultPath:path.join(currentRoot,'new-handout.md'),filters:[{name:'Markdown',extensions:['md']}]}); if(result.canceled||!isInsideRoot(result.filePath)) return null; await fs.writeFile(result.filePath,require('../renderer/handout-starter'),'utf8'); return result.filePath; });
 ipcMain.handle('files:rename', async (_event, filePath, requestedName) => {
   if (typeof filePath !== 'string' || !markdownExtension.test(filePath) || !isInsideRoot(filePath)) throw new Error('The selected handout is outside the open folder.');

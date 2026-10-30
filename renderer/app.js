@@ -1148,7 +1148,75 @@ if (window.handoutDesktop) {
   let editorRedoHistory = [];
   let wrapLines = false;
   let showWhitespace = false;
+  let recoveryReady = false, recoveryWarning = '';
+  const recoveryStatus = document.createElement('div'); recoveryStatus.className = 'recovery-status'; recoveryStatus.hidden = true;
+  recoveryStatus.setAttribute('role', 'status'); tabBar.after(recoveryStatus);
   source.disabled = true;
+
+  function persistRecovery() {
+    if (!recoveryReady || !desktop.saveRecovery) return false;
+    saveActiveState();
+    const drafts = [...documents.values()].filter(state => state.dirty).map(state => ({
+      id: state.file.path, path: state.file.untitled ? null : state.file.path, sourcePath: state.file.recoverySourcePath || null,
+      name: state.file.name, root: state.root || null, content: state.content, savedContent: state.savedContent ?? null,
+      layout: state.layout, handoutTheme: state.handoutTheme, selectionStart: state.selectionStart, selectionEnd: state.selectionEnd,
+      scrollTop: state.scrollTop, scrollLeft: state.scrollLeft, previewScrollTop: state.previewScrollTop
+    }));
+    try {
+      const result = desktop.saveRecovery({ version: 1, root: folder?.path || null, activeId: activePath, documents: drafts });
+      if (!result.ok) throw Error(result.error);
+      recoveryStatus.classList.remove('recovery-error');
+      recoveryStatus.hidden = !drafts.length && !recoveryWarning;
+      recoveryStatus.textContent = [drafts.length ? 'Unsaved work protected locally. Save to update your Markdown files.' : '', recoveryWarning].filter(Boolean).join(' ');
+      return true;
+    } catch (error) {
+      recoveryStatus.hidden = false; recoveryStatus.classList.add('recovery-error');
+      recoveryStatus.textContent = `Recovery unavailable: ${error.message}. Save your files before closing.`;
+      return false;
+    }
+  }
+  async function initializeRecovery() {
+    if (!desktop.readRecovery || !desktop.saveRecovery) return;
+    let result;
+    try { result = desktop.readRecovery(); } catch (error) { result = { ok: false, error: error.message }; }
+    if (!result.ok) {
+      recoveryWarning = `Previous recovery could not be read: ${result.error}.`;
+      recoveryReady = true; persistRecovery(); return;
+    }
+    recoveryWarning = result.warning || '';
+    if (!result.snapshot?.documents?.length) { recoveryReady = true; persistRecovery(); return; }
+    const snapshot = result.snapshot, dialog = document.createElement('dialog'); dialog.className = 'unsaved-dialog recovery-dialog';
+    dialog.setAttribute('aria-label', 'Recover unsaved work');
+    const heading = document.createElement('h3'); heading.textContent = 'Recover unsaved work?';
+    const note = document.createElement('p'); note.textContent = `${snapshot.documents.length} document${snapshot.documents.length === 1 ? '' : 's'} protected on ${new Date(snapshot.savedAt).toLocaleString()}. Restore to continue editing. Discard recovery permanently removes these drafts; original files remain unchanged.`;
+    const list = document.createElement('ul');
+    for (const draft of snapshot.documents) { const item = document.createElement('li'); item.textContent = draft.name; item.title = draft.path || 'New unsaved document'; list.append(item); }
+    const error = document.createElement('p'); error.setAttribute('role', 'alert');
+    const restore = document.createElement('button'); restore.textContent = 'Restore files';
+    const discard = document.createElement('button'); discard.textContent = 'Discard recovery';
+    restore.onclick = async () => {
+      restore.disabled = discard.disabled = true; error.textContent = 'Restoring…';
+      try {
+        const restored = await desktop.restoreRecovery();
+        if (!restored?.documents?.length) throw Error('No recovery documents are available.');
+        selectedFile = null; activePath = null; documents.clear();
+        folder = restored.folder; folderName.textContent = folder?.name || 'No folder';
+        if (folder) restoreFolderExpansion(folder.path);
+        for (const state of restored.documents) documents.set(state.file.path, state);
+        recoveryWarning = [recoveryWarning, ...restored.documents.map(state => state.recoveryNote).filter(Boolean)].filter(Boolean).join(' ');
+        dialog.close(); dialog.remove();
+        recoveryReady = true; activateDocument(restored.activePath); drawTree(); persistRecovery();
+        statusText.textContent = `Recovered ${restored.documents.length} document${restored.documents.length === 1 ? '' : 's'}.`;
+      } catch (failure) { error.textContent = `Could not restore: ${failure.message}`; restore.disabled = discard.disabled = false; }
+    };
+    discard.onclick = () => {
+      const cleared = desktop.saveRecovery({ version: 1, root: null, activeId: null, documents: [] });
+      if (!cleared.ok) { error.textContent = `Could not discard recovery: ${cleared.error}`; return; }
+      recoveryReady = true; persistRecovery(); dialog.close(); dialog.remove(); source.focus();
+    };
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    dialog.append(heading, note, list, error, restore, discard); document.body.append(dialog); dialog.showModal(); restore.focus();
+  }
 
   function editorSnapshot() {
     return {
@@ -1270,8 +1338,7 @@ if (window.handoutDesktop) {
     // lines. Apply the measured scroll after focus/selection have settled.
     const reveal = () => {
       if (navigationId !== previewNavigationId) return;
-      const style = getComputedStyle(source);
-      const width = Math.max(1, source.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+      const { style, contentWidth: width } = editorTextMetrics();
       Object.assign(lineMeasure.style, {
         width: `${width}px`, font: style.font, letterSpacing: style.letterSpacing,
         whiteSpace: wrapLines ? 'pre-wrap' : 'pre', overflowWrap: style.overflowWrap,
@@ -1419,6 +1486,7 @@ if (window.handoutDesktop) {
       tab.append(label, close);
       tabBar.append(tab);
     }
+    persistRecovery();
   }
   function askUnsaved(name) {
     return new Promise(resolve => {
@@ -1442,7 +1510,7 @@ if (window.handoutDesktop) {
     if (choice === 'save') return saveCurrent();
     try {
       const content = selectedFile.untitled ? '' : await desktop.readFile(selectedFile.path);
-      const state = documents.get(selectedFile.path); if (state) { state.content = content; state.dirty = false; }
+      const state = documents.get(selectedFile.path); if (state) { state.content = content; state.savedContent = selectedFile.untitled ? null : content; state.dirty = false; }
       loadingDocument = true; setSourceContent(content); loadingDocument = false; markDirty(false); drawTabs(); render();
       return true;
     } catch (error) { statusText.textContent = `Could not discard changes: ${error.message}`; return false; }
@@ -1459,7 +1527,11 @@ if (window.handoutDesktop) {
           if (!await saveCurrent()) return;
           return closeDocument(selectedFile.path);
         }
-        try { await desktop.saveFile(filePath, documentState.content); }
+        try {
+          const content = documentState.content; await desktop.saveFile(filePath, content);
+          documentState.savedContent = content;
+          if (documentState.content !== content) { documentState.dirty = true; drawTabs(); return; }
+        }
         catch (error) { statusText.textContent = `Could not save: ${error.message}`; return; }
       }
     }
@@ -1501,7 +1573,8 @@ if (window.handoutDesktop) {
   function addDocument(file, content, assets) {
     const existing = documents.get(file.path);
     if (existing) { activateDocument(file.path); return; }
-    documents.set(file.path, { file, content, assets, layout: 'letter', handoutTheme: 'default', dirty: false, scrollTop: 0, scrollLeft: 0 });
+    documents.set(file.path, { file, content, assets, root: file.root || (!file.untitled && folder?.path) || (!file.untitled && parentOf(file.path)) || folder?.path || null,
+      savedContent: file.untitled ? null : content, layout: 'letter', handoutTheme: 'default', dirty: false, scrollTop: 0, scrollLeft: 0 });
     activateDocument(file.path);
   }
 
@@ -1525,18 +1598,20 @@ if (window.handoutDesktop) {
   }
   async function saveUntitledHandout() {
     const untitledKey = selectedFile.path;
-    const saved = await desktop.saveNewFile(source.value);
+    const content = source.value, originalFile = selectedFile;
+    const saved = await desktop.saveNewFile(content, selectedFile.name);
     if (!saved) return false;
     const documentState = documents.get(untitledKey);
     if (!documentState) return false;
     documents.delete(untitledKey);
     documentState.file = { type: 'file', name: saved.name, path: saved.path, markdown: true };
     documentState.assets = saved.assets || [];
-    documentState.content = source.value;
-    documentState.dirty = false;
+    documentState.savedContent = content;
+    documentState.root = parentOf(saved.path);
+    documentState.dirty = documentState.content !== content;
     documents.set(saved.path, documentState);
-    activePath = saved.path; selectedFile = documentState.file; dirty = false;
-    setAssets(documentState.assets); markDirty(false); drawTabs();
+    if (selectedFile === originalFile) { activePath = saved.path; selectedFile = documentState.file; dirty = documentState.dirty; setAssets(documentState.assets); markDirty(dirty); }
+    drawTabs();
     // Saving the first handout can establish (or change) the browsed folder.
     try {
       const refreshed = await desktop.refreshFolder();
@@ -1547,7 +1622,7 @@ if (window.handoutDesktop) {
       }
     } catch { /* The file is saved even if a temporary directory-read error occurs. */ }
     statusText.textContent = saved.name + ' saved';
-    return true;
+    return !documentState.dirty;
   }
 
   function highlightMarkdown(value) {
@@ -1571,15 +1646,31 @@ if (window.handoutDesktop) {
       .replace(/\t/g, '<span class="whitespace-tab">\t</span>')
       .replace(/\n/g, '<span class="whitespace-eol"></span>\n');
   }
-  function syncLineNumbers() {
+  function editorTextMetrics() {
+    const style = getComputedStyle(source), rect = source.getBoundingClientRect();
+    // A textarea reserves space for its scrollbars; the pre layers do not.
+    // Match its actual viewport, including fractional panel widths.
+    const width = Math.max(0, rect.width - (source.offsetWidth - source.clientWidth));
+    const height = Math.max(0, rect.height - (source.offsetHeight - source.clientHeight));
+    return { style, width, height, contentWidth: Math.max(1, width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) };
+  }
+  function syncOverlayGeometry({ style, width, height }) {
+    for (const overlay of [highlight, searchHighlight, selectionHighlight, whitespaceHighlight]) Object.assign(overlay.style, {
+      width: width + 'px', height: height + 'px', right: 'auto', bottom: 'auto', padding: style.padding,
+      font: style.font, letterSpacing: style.letterSpacing, wordSpacing: style.wordSpacing,
+      tabSize: style.tabSize, whiteSpace: style.whiteSpace, overflowWrap: style.overflowWrap
+    });
+    lineNumbers.style.lineHeight = style.lineHeight;
+  }
+  function syncLineNumbers(metrics = editorTextMetrics()) {
     const lines = source.value.split("\n");
     if (!wrapLines) {
       lineNumberContent.textContent = `${Array.from({ length: Math.max(1, lines.length) }, (_, index) => index + 1).join("\n")}\n`;
       return;
     }
-    const sourceStyle = getComputedStyle(source);
-    const contentWidth = Math.max(1, source.clientWidth - parseFloat(sourceStyle.paddingLeft) - parseFloat(sourceStyle.paddingRight));
-    lineMeasure.style.width = `${contentWidth}px`;
+    const { style: sourceStyle, contentWidth } = metrics;
+    Object.assign(lineMeasure.style, { width: contentWidth + 'px', font: sourceStyle.font, letterSpacing: sourceStyle.letterSpacing,
+      wordSpacing: sourceStyle.wordSpacing, tabSize: sourceStyle.tabSize, whiteSpace: 'pre-wrap', overflowWrap: sourceStyle.overflowWrap });
     lineMeasure.replaceChildren(...lines.map(line => {
       const row = document.createElement("div");
       row.textContent = line || "\u200b";
@@ -1594,9 +1685,10 @@ if (window.handoutDesktop) {
     }));
   }
   function syncHighlight() {
+    const metrics = editorTextMetrics(); syncOverlayGeometry(metrics);
     highlight.innerHTML = `${highlightMarkdown(source.value)}\n`;
     whitespaceHighlight.innerHTML = showWhitespace ? whitespaceHtml(source.value) : "";
-    syncLineNumbers();
+    syncLineNumbers(metrics);
     selectionHighlight.scrollTop = source.scrollTop; selectionHighlight.scrollLeft = source.scrollLeft;
     highlight.scrollTop = source.scrollTop;
     highlight.scrollLeft = source.scrollLeft;
@@ -1742,6 +1834,7 @@ if (window.handoutDesktop) {
     dirty = value;
     syncTreeSelection();
     if (selectedFile) statusText.textContent = `${selectedFile.name}${dirty ? " · unsaved" : ""}`;
+    persistRecovery();
   }
 
   function clearActive() { tree.querySelectorAll(".file-entry.active").forEach(node => node.classList.remove("active")); }
@@ -1754,7 +1847,7 @@ if (window.handoutDesktop) {
   async function insertTreeImage(node) {
     if (!selectedFile) throw new Error('Open a Markdown handout before inserting an image.');
     const relative = await desktop.imageReference(selectedFile.path, node.path);
-    replaceEditorSelection(`![${imageAltText(node.name)}](${encodedMarkdownPath(relative)})`);
+    replaceEditorSelection(`![${imageAltText(node.name)}](${encodedMarkdownPath(relative)})${isSlideDocument() ? '{width=3in}' : ''}`);
     statusText.textContent = `Inserted ${node.name}`;
   }
   function showImagePreview(node) {
@@ -2236,7 +2329,7 @@ if (window.handoutDesktop) {
     if (!file) return;
     discardBlankUntitledHandout();
     if (!await resolveUnsaved()) return;
-    const documentFile = { type: "file", name: file.name, path: file.path, markdown: true };
+    const documentFile = { type: "file", name: file.name, path: file.path, root: file.root || parentOf(file.path), markdown: true };
     addDocument(documentFile, file.content, file.assets || []);
     const refreshed = await desktop.refreshFolder();
     if (refreshed) { if (folder?.path !== refreshed.path) { saveFolderExpansion(); restoreFolderExpansion(refreshed.path); browserSelection = null; } folder = refreshed; folderName.textContent = refreshed.name; browserSearch.value = ''; drawTree(); syncTreeSelection(true); }
@@ -2249,7 +2342,14 @@ if (window.handoutDesktop) {
   async function saveCurrent() {
     if (!selectedFile) return false;
     if (selectedFile.untitled) return saveUntitledHandout();
-    try { await desktop.saveFile(selectedFile.path, source.value); dirty = false; const documentState = documents.get(selectedFile.path); if (documentState) { documentState.content = source.value; documentState.dirty = false; } markDirty(false); drawTabs(); return true; }
+    const file = selectedFile, content = source.value;
+    try {
+      await desktop.saveFile(file.path, content);
+      const state = documents.get(file.path);
+      if (state) { state.savedContent = content; state.dirty = state.content !== content; }
+      if (selectedFile === file) markDirty(source.value !== content);
+      drawTabs(); return !state?.dirty;
+    }
     catch (error) { statusText.textContent = `Could not save: ${error.message}`; return false; }
   }
   function setAssets(assets) {
@@ -2261,9 +2361,9 @@ if (window.handoutDesktop) {
     });
     // Resolve against the handout location so nested documents and moved handouts
     // still select the correct image when several folders use the same filename.
-    if (selectedFile && !selectedFile.untitled) {
+    if (selectedFile && (!selectedFile.untitled || selectedFile.recoverySourcePath)) {
       videoAssetMap.clear();
-      const documentUrl = new URL('file://' + selectedFile.path.split('/').map(encodeURIComponent).join('/'));
+      const documentUrl = new URL('file://' + (selectedFile.recoverySourcePath || selectedFile.path).split('/').map(encodeURIComponent).join('/'));
       assets.forEach(asset => {
         const target = new URL(asset.url);
         const from = documentUrl.pathname.split('/').slice(0, -1);
@@ -2303,7 +2403,7 @@ if (window.handoutDesktop) {
     assetMap.set(imported.relative.split('/').pop(), imported.url);
     addImageToFolderTree(imported);
     source.setSelectionRange(selectionStart, selectionEnd);
-    replaceEditorSelection(`![${imageAltText(file.name || 'image')}](${encodedMarkdownPath(imported.relative)})${trailingText}`);
+    replaceEditorSelection(`![${imageAltText(file.name || 'image')}](${encodedMarkdownPath(imported.relative)})${isSlideDocument() ? '{width=3in}' : ''}${trailingText}`);
     statusText.textContent = `${action} image as ${imported.relative}`;
     return imported;
   }
@@ -2329,18 +2429,44 @@ if (window.handoutDesktop) {
       statusText.textContent = `Could not paste image: ${error.message}`;
     });
   });
-  function editorOffsetFromPoint(clientX, clientY) {
-    const rect = source.getBoundingClientRect();
-    const style = getComputedStyle(source);
-    const lineHeight = parseFloat(style.lineHeight) || 22;
-    const canvas = editorOffsetFromPoint.canvas || (editorOffsetFromPoint.canvas = document.createElement('canvas'));
-    const context = canvas.getContext('2d');
-    context.font = style.font;
-    const characterWidth = context.measureText('0').width || 8;
-    const lines = source.value.split('\n');
-    const lineIndex = Math.max(0, Math.min(lines.length - 1, Math.floor((clientY - rect.top - parseFloat(style.paddingTop) + source.scrollTop) / lineHeight)));
-    const column = Math.max(0, Math.min(lines[lineIndex].length, Math.round((clientX - rect.left - parseFloat(style.paddingLeft) + source.scrollLeft) / characterWidth)));
-    return lines.slice(0, lineIndex).reduce((total, line) => total + line.length + 1, 0) + column;
+  const dropCaret = document.createElement('div'); dropCaret.className = 'editor-drop-caret'; dropCaret.hidden = true; dropCaret.setAttribute('aria-hidden', 'true'); document.body.append(dropCaret);
+  let dragPoint = null, dragFrame = null;
+  function editorDropPosition(clientX, clientY) {
+    const rect = source.getBoundingClientRect(), style = getComputedStyle(source), mirror = document.createElement('div');
+    Object.assign(mirror.style, { position: 'fixed', left: rect.left + 'px', top: rect.top + 'px', width: source.clientWidth + 'px', height: source.clientHeight + 'px',
+      font: style.font, padding: style.padding, boxSizing: 'border-box', whiteSpace: style.whiteSpace, overflowWrap: style.overflowWrap,
+      tabSize: style.tabSize, overflow: 'auto', scrollbarWidth: 'none', opacity: '0', zIndex: '2147483647', pointerEvents: 'auto' });
+    const text = document.createTextNode(source.value + '\u200b'); mirror.append(text); document.body.append(mirror);
+    mirror.scrollTop = source.scrollTop; mirror.scrollLeft = source.scrollLeft;
+    try {
+      const x = Math.max(rect.left + 1, Math.min(rect.left + source.clientWidth - 1, clientX));
+      const y = Math.max(rect.top + 1, Math.min(rect.top + source.clientHeight - 1, clientY));
+      const caret = document.caretPositionFromPoint?.(x, y), range = !caret && document.caretRangeFromPoint?.(x, y);
+      const node = caret?.offsetNode || range?.startContainer, nodeOffset = caret?.offset ?? range?.startOffset;
+      let offset = source.value.length;
+      if (node && mirror.contains(node)) { const prefix = document.createRange(); prefix.selectNodeContents(mirror); prefix.setEnd(node, nodeOffset); offset = Math.min(source.value.length, prefix.toString().length); }
+      // A collapsed Range on an empty line can have an empty rectangle. Measure
+      // a zero-width glyph instead, including at line breaks and the file end.
+      const marker = document.createElement('span'); marker.textContent = '\u200b';
+      mirror.replaceChildren(document.createTextNode(source.value.slice(0, offset)), marker, document.createTextNode(source.value.slice(offset)));
+      mirror.scrollTop = source.scrollTop; mirror.scrollLeft = source.scrollLeft;
+      const box = marker.getBoundingClientRect();
+      return { offset, left: box.left, top: box.top, height: parseFloat(style.lineHeight) || 22 };
+    } finally { mirror.remove(); }
+  }
+  function hideDropCaret() {
+    dragPoint = null; if (dragFrame) cancelAnimationFrame(dragFrame); dragFrame = null;
+    dropCaret.hidden = true; source.classList.remove('image-drag-target');
+  }
+  function showDropCaret(clientX, clientY) {
+    dragPoint = { clientX, clientY };
+    if (dragFrame) return;
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = null; if (!dragPoint) return;
+      const point = editorDropPosition(dragPoint.clientX, dragPoint.clientY), rect = source.getBoundingClientRect();
+      Object.assign(dropCaret.style, { left: point.left + 'px', top: point.top + 'px', height: point.height + 'px' });
+      dropCaret.hidden = point.top < rect.top || point.top + point.height > rect.bottom;
+    });
   }
   const draggedImageFiles = event => [...(event.dataTransfer?.files || [])].filter(file => file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name));
   const hasDraggedImage = event => draggedImageFiles(event).length || [...(event.dataTransfer?.items || [])].some(item => item.kind === 'file' && item.type.startsWith('image/'));
@@ -2349,26 +2475,36 @@ if (window.handoutDesktop) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
     source.classList.add('image-drag-target');
+    const rect = source.getBoundingClientRect(), lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 22;
+    if (event.clientY < rect.top + 24) source.scrollTop -= lineHeight;
+    else if (event.clientY > rect.bottom - 24) source.scrollTop += lineHeight;
+    showDropCaret(event.clientX, event.clientY);
   });
   source.addEventListener('dragleave', event => {
-    if (!source.contains(event.relatedTarget)) source.classList.remove('image-drag-target');
+    if (!source.contains(event.relatedTarget)) hideDropCaret();
   });
   source.addEventListener('drop', async event => {
     const files = draggedImageFiles(event);
     if (!files.length) return;
     event.preventDefault();
-    source.classList.remove('image-drag-target');
-    let insertionPoint = editorOffsetFromPoint(event.clientX, event.clientY);
+    let insertionPoint = editorDropPosition(event.clientX, event.clientY).offset;
+    hideDropCaret();
     try {
       for (let index = 0; index < files.length; index++) {
-        await importEditorImage(files[index], insertionPoint, insertionPoint, 'Dropped', index < files.length - 1 ? '\n' : '');
+        const existingPath = desktop.droppedFilePath?.(files[index]);
+        if (existingPath && [...assetMap.values()].some(url => { try { return decodeURIComponent(new URL(url).pathname) === existingPath.replace(/\\/g, '/'); } catch { return false; } })) {
+          const relative = await desktop.imageReference(selectedFile.path, existingPath);
+          source.setSelectionRange(insertionPoint, insertionPoint);
+          replaceEditorSelection(`![${imageAltText(files[index].name)}](${encodedMarkdownPath(relative)})${isSlideDocument() ? '{width=3in}' : ''}${index < files.length - 1 ? '\n' : ''}`);
+        } else await importEditorImage(files[index], insertionPoint, insertionPoint, 'Dropped', index < files.length - 1 ? '\n' : '');
         insertionPoint = source.selectionStart;
       }
     } catch (error) {
       statusText.textContent = `Could not drop image: ${error.message}`;
     }
   });
-  window.addEventListener('dragend', () => source.classList.remove('image-drag-target'));
+  source.addEventListener('scroll', () => { if (dragPoint) showDropCaret(dragPoint.clientX, dragPoint.clientY); });
+  window.addEventListener('dragend', hideDropCaret);
   async function chooseFolder(recentPath) {
     saveActiveState();
     for (const state of [...documents.values()]) {
@@ -2593,7 +2729,10 @@ if (window.handoutDesktop) {
     if (command === 'open-handout-guide') return showSyntaxGuide(payload);
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
-  window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
+  window.addEventListener("beforeunload", event => {
+    const unsaved = dirty || [...documents.values()].some(state => state.dirty);
+    if (unsaved && (!recoveryReady || !persistRecovery())) { event.preventDefault(); event.returnValue = ''; }
+  });
 if (desktop?.editInVectorLab) {
   const drawButton=document.createElement('button');drawButton.type='button';drawButton.textContent='Draw image…';drawButton.title='Create and insert artwork with Vector Lab';
   document.getElementById('document-settings-button').before(drawButton);
@@ -2638,4 +2777,5 @@ if (desktop?.editInVectorLab) {
   });
 }
 
+  void initializeRecovery();
 }

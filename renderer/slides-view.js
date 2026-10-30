@@ -44,6 +44,7 @@
         qr: '\n[qr:https://example.com]{width=1.5in}\n\n',
         center: '\n:::center\n## Centered text\n\nAdd your content here.\n:::\n\n',
         checklist: '\n:::checklist\n- First item\n- Second item\n:::\n\n',
+        list: '\n:::list columns=3\n1. **Observe** — Look closely at the example.\n2. **Ask** — Write a question.\n3. **Predict** — Explain what you expect.\n4. **Test** — Try your idea.\n5. **Record** — Capture your evidence.\n6. **Reflect** — Explain what changed.\n:::\n\n',
         grid: '\n:::grid columns=2 widths=1/2,1/2 cards\n:::cell\n## First card\n\nAdd your content here.\n:::cell\n## Second card\n\nAdd your content here.\n:::\n\n'
       };
       if (!snippets[kind]) return;
@@ -95,7 +96,7 @@
         node.dataset.sourceStart = location.sourceStart; node.dataset.sourceEnd = location.sourceEnd;
       }
     }
-    const elementKey = element => ({ line: element.background ? element.blockStart : element.sourceStart, kind: element.background ? 'background' : element.type, occurrence: element.mediaOccurrence || 0 });
+    const elementKey = element => ({ line: element.background ? element.blockStart : element.flowAlignment?.sourceStart ?? element.sourceStart, kind: element.background ? 'background' : element.type, occurrence: element.mediaOccurrence || 0 });
     function applyEdit(edit) { if (edit) { source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0); } }
     function showInspector(element) {
       if (element?.footer && deck.slides[selected].footer) element = deck.slides[selected].footer;
@@ -104,7 +105,7 @@
       if (inspector.hidden) {preview.querySelectorAll('.slide-positioned-host').forEach(host=>host.classList.remove('is-selected'));return;}
       selectedElement = elementKey(element);
       preview.querySelectorAll('.slide-positioned-host').forEach(host=>{const target=scenes[selected].elements[Number(host.dataset.slideElement)];const key=elementKey(target);host.classList.toggle('is-selected',key.line===selectedElement.line && key.kind===selectedElement.kind && key.occurrence===selectedElement.occurrence);});
-      const scene = scenes[selected], label = document.createElement('strong'); label.textContent = element.type === 'footer' ? 'Footer' : element.background ? 'Background' : element.qrSvg ? 'QR code' : element.type === 'image' ? 'Image' : element.type === 'table' ? 'Table' : 'Text'; inspector.append(label);
+      const scene = scenes[selected], label = document.createElement('strong'); label.textContent = element.listLayout ? 'List layout' : element.type === 'footer' ? 'Footer' : element.background ? 'Background' : element.qrSvg ? 'QR code' : element.type === 'image' ? 'Image' : element.type === 'table' ? 'Table' : 'Text'; inspector.append(label);
       const field = (name, value, change, config = {}) => {
         const wrapper = document.createElement('label'); wrapper.textContent = name + ' ';
         const input = document.createElement(config.values ? 'select' : 'input'); input.setAttribute('aria-label', name);
@@ -113,7 +114,32 @@
         input.value = value; input.onchange = () => { if (input.checkValidity()) change(config.values || ['text', 'color'].includes(input.type) ? input.value : Number(input.value)); else input.reportValidity(); };
         input.addEventListener('click', event => event.stopPropagation()); wrapper.append(input); inspector.append(wrapper); return input;
       };
-      if (element.type === 'footer') {
+      if (element.listLayout) {
+        const block = element.listLayout, update = (key, value) => applyEdit(model.listLayoutEdit(source.value, block, { [key]: value }));
+        field('List type', block.items[0]?.ordered ? 'ordered' : 'unordered', value => applyEdit(model.listTypeEdit(source.value, block, value === 'ordered')), { values: [['ordered', 'Ordered (numbers)'], ['unordered', 'Unordered']] });
+        field('List columns', String(block.columnCount), value => update('columns', value), { values: [['1', '1 (vertical list)'], ['2', '2'], ['3', '3'], ['4', '4']] });
+        const widths = field('Column widths', block.customWidths || '', value => {
+          const edit = model.listLayoutEdit(source.value, block, { widths: value });
+          widths.setCustomValidity(edit ? '' : `Enter one width for all columns, or ${block.columnCount} widths separated by commas, such as 2in or 5cm. Bare numbers mean inches. Leave blank for automatic equal widths.`);
+          if (edit) applyEdit(edit); else widths.reportValidity();
+        }, { type: 'text' });
+        widths.placeholder = 'Auto, 2in, or ' + Array(block.columnCount).fill('2in').join(',');
+        widths.oninput = () => widths.setCustomValidity('');
+        field('List alignment', block.align, value => update('align', value), { values: [['left', 'Left'], ['center', 'Center'], ['right', 'Right']] });
+        const color = field('Number color', block.numberColor ? '#' + block.numberColor : '', value => {
+          const edit = model.listLayoutEdit(source.value, block, { 'number-color': value });
+          color.setCustomValidity(edit ? '' : 'Use a basic color name or #RRGGBB, or leave blank for the theme accent.');
+          if (edit) applyEdit(edit); else color.reportValidity();
+        }, { type: 'text' });
+        color.placeholder = 'Theme accent'; color.oninput = () => color.setCustomValidity('');
+        const size = field('Number size (pt)', block.numberSize || '', value => {
+          const edit = model.listLayoutEdit(source.value, block, { 'number-size': value });
+          size.setCustomValidity(edit ? '' : 'Use auto or 8–144 points.');
+          if (edit) applyEdit(edit); else size.reportValidity();
+        }, { type: 'text' });
+        size.placeholder = 'Auto'; size.oninput = () => size.setCustomValidity('');
+        field('List gap', block.gap, value => update('gap', value), { values: ['small', 'medium', 'large'].map(value => [value, value]) });
+      } else if (element.type === 'footer') {
         const update = (key, value) => applyEdit(model.footerEdit(source.value, element, { [key]: value }));
         for (const [key,name,min,max,step] of [['height','Footer height (in)',.25,2,.05],['size','Footer text size (pt)',8,48,1],['padding','Footer padding (in)',0,.5,.01],['gap','Footer gap (in)',0,1,.05]]) field(name,element[key],value=>update(key,value),{min,max,step});
         for (const [key,name] of [['color','Footer text color'],['background','Footer background']]) {
@@ -134,16 +160,22 @@
         const update = (key, value) => applyEdit(model.positionEdit(source.value, element.sourceStart, { [key]:value }));
         field('Font size (pt)', Math.round(element.fontSize / scene.textScale), value => update('size',value), {min:8,max:144});
         field('Text color', '#' + element.color, value => update('color',value), {type:'color'});
-        field('Font', element.font === 'Courier New' ? 'CourierNew' : element.font || 'Arial', value => update('font',value), {values:[['Arial','Arial'],['Calibri','Calibri'],['Georgia','Georgia'],['Verdana','Verdana'],['CourierNew','Courier New']]});
+        const font = element.font || scene.theme.font;
+        field('Font', font === 'Courier New' ? 'CourierNew' : font === 'Trebuchet MS' ? 'TrebuchetMS' : font, value => update('font',value), {values:[['Arial','Arial'],['TrebuchetMS','Trebuchet MS'],['Calibri','Calibri'],['Georgia','Georgia'],['Verdana','Verdana'],['CourierNew','Courier New']]});
         field('Text alignment', element.align, value => update('align',value), {values:[['left','Left'],['center','Center'],['right','Right']]});
         for (const [key,name,value] of [['x','Left (%)',element.x / scene.width * 100],['y','Top (%)',element.y / scene.height * 100],['width','Text width (%)',element.w / scene.width * 100]]) field(name,Math.round(value * 10) / 10,value=>update(key,value),{min:key==='width'?1:0,max:100,step:.1});
       } else if (element.type === 'image') {
         field('Image width (in)',Math.round(element.w * 100) / 100,value=>applyEdit(model.mediaEdit(source.value,element,value)),{min:Math.min(element.qrSvg ? .75 : .5,element.maxWidth),max:element.maxWidth,step:.01});
         const hint = document.createElement('span'); hint.textContent = 'Drag the resize handle to keep proportions.'; inspector.append(hint);
       } else if (element.type === 'text') {
+        if (element.heading && element.listId === undefined) {
+          const alignment = field('Heading alignment', element.align || 'left', value => applyEdit(model.headingAlignmentEdit(source.value, element, value)), { values: [['left', 'Left'], ['center', 'Center']] });
+          alignment.disabled = element.align === 'center' && !element.flowAlignment;
+          if (alignment.disabled) alignment.title = 'This heading is inside a larger centered group. Edit its surrounding block in Markdown.';
+        }
         const convert = document.createElement('button'); convert.textContent = 'Position freely'; convert.disabled = !model.movableTextEdit(source.value,element,scene);
         convert.onclick = () => applyEdit(model.movableTextEdit(source.value,element,scene)); inspector.append(convert);
-        const hint = document.createElement('span'); hint.textContent = convert.disabled ? 'Edit this element in Markdown. Lists keep native PowerPoint bullets.' : 'Make this text movable to change its position, size, color, and font.'; inspector.append(hint);
+        const hint = document.createElement('span'); hint.textContent = element.heading ? 'Heading alignment keeps space above the content. Position freely places text over the slide.' : convert.disabled ? 'Edit this element in Markdown. Lists keep native PowerPoint bullets.' : 'Make this text movable to change its position, size, color, and font.'; inspector.append(hint);
       } else { const hint=document.createElement('span'); hint.textContent='Edit table cells in the highlighted Markdown; tables stay editable in PowerPoint.'; inspector.append(hint); }
       requestAnimationFrame(fit);
     }
@@ -206,7 +238,7 @@
     function canvas(scene, interactive = false, thumbnail = false) {
       const node = document.createElement('article'); node.className = 'slide-canvas';
       node.style.width = `${scene.width * 96}px`; node.style.height = `${scene.height * 96}px`;
-      node.style.backgroundColor = '#' + scene.theme.background; node.style.color = '#' + scene.theme.ink; node.style.fontFamily = scene.theme.font;
+      node.style.backgroundColor = '#' + scene.theme.background; node.style.color = '#' + scene.theme.ink; node.style.fontFamily = scene.theme.font + ', Arial, sans-serif';
       const appendRuns=(parent,runs,element)=>{for(const run of runs){
         const span=document.createElement(run.href && !thumbnail?'a':'span');span.textContent=run.text;mapSource(span,run);
         if(run.href){if(!thumbnail)span.href=run.href;span.title='Ctrl-click (⌘-click on Mac) to open in your browser';span.style.color='#'+(element.positioned?element.color:scene.theme.accent);}
@@ -237,13 +269,15 @@
             }
           }else appendRuns(item,element.runs,element);
           item.style.textAlign = element.align || 'left'; item.style.color = '#' + element.color; if (element.bold) item.style.fontWeight = 'bold';
-          if (element.font) item.style.fontFamily=element.font;
+          if (element.lineHeight) item.style.lineHeight = String(element.lineHeight);
+          if (element.font) item.style.fontFamily=element.font === 'Trebuchet MS' ? '"Trebuchet MS", Arial, sans-serif' : element.font;
         }
         mapSource(item, element);
         item.dataset.slideElement=elementIndex;
         item.style.position = 'absolute'; item.style.left = `${element.x * 96}px`; item.style.top = `${element.y * 96}px`; item.style.width = `${element.w * 96}px`; item.style.height = `${element.h * 96}px`;
         if (element.fontSize) item.style.fontSize = `${element.fontSize * 96 / 72}px`;
         if (element.positioned) item.classList.add('slide-positioned-text');
+        if (element.listMarker) item.classList.add('slide-list-marker');
         if ((element.positioned || (element.type==='image' && !element.background && !element.footer)) && interactive) {
           const host = document.createElement('div'); host.className = 'slide-positioned-host' + (element.type==='image'?' slide-media-host':''); host.setAttribute('role', 'group'); host.setAttribute('aria-label', element.type==='image'?'Slide image':'Positioned text'); host.dataset.slideElement=elementIndex;
           const key=elementKey(element);if(selectedElement && key.line===selectedElement.line && key.kind===selectedElement.kind)host.classList.add('is-selected');
@@ -461,7 +495,7 @@
             const entry=dimensionCache.get(url);if(entry.value)imageDimensions.set(block.src,entry.value);else loading.push(entry.promise.then(value=>({src:block.src,value})));
           }
         }
-        if(block.blocks)collect(block.blocks);if(block.columns)block.columns.forEach(collect);
+        if(block.blocks)collect(block.blocks);if(block.columns)block.columns.forEach(collect);if(block.items)block.items.forEach(item=>collect(item.blocks));
       }};deck.slides.forEach(slide=>collect(slide.blocks));
       scenes = deck.slides.map((_, index) => model.scene(deck, index,imageDimensions));
       imageReady=Promise.all(loading).then(results=>{if(deck!==parsed)return;let changed=false;for(const result of results)if(result?.value){imageDimensions.set(result.src,result.value);changed=true;}if(changed){scenes=deck.slides.map((_,index)=>model.scene(deck,index,imageDimensions));refreshThumbnails();const focused=preview.contains(document.activeElement);showCurrent(selected);if(focused)preview.focus({preventScroll:true});}});
@@ -476,7 +510,7 @@
     function syncSelection(event) { if(event && document.activeElement!==source)return; if (mode && deck) {
       const index = cursorSlide(); if (index !== selected) showCurrent(index);
       const line=source.value.slice(0,source.selectionStart).split('\n').length-1;
-      const target=scenes[selected].elements.find(element=>!element.footer && line >= (element.background?element.blockStart:element.sourceStart) && line < (element.background?element.blockEnd:element.sourceEnd));
+      const target=scenes[selected].elements.find(element=>!element.footer && line >= (element.background?element.blockStart:element.sourceStart) && line < (element.background?element.blockEnd:element.sourceEnd)) || scenes[selected].elements.find(element=>element.listLayout && line>=element.listLayout.sourceStart && line<element.listLayout.sourceEnd || element.flowAlignment && line>=element.flowAlignment.sourceStart && line<element.flowAlignment.sourceEnd);
       const footer=deck.slides[selected].footer;
       if(footer && line>=footer.sourceStart && line<footer.sourceEnd)showInspector(footer);else if(target)showInspector(target);else{selectedElement=null;inspector.hidden=true;}
     } }

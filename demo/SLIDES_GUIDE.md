@@ -79,6 +79,13 @@ Each slide can have a `#` title followed by ordinary Markdown content. Text, ima
 
 Theme and aspect controls update the YAML. Ordinary Markdown files without `type: slides` remain handouts.
 
+The **Classroom** theme uses **Trebuchet MS** for headings, body text, and list
+numbers. **Light** and **Dark** use Arial. Positioned text inherits the theme's
+font unless its `font=` property overrides it. Install Trebuchet MS on the
+computer running the app to use it in preview and PDF; otherwise the system
+substitutes another font. Editable PowerPoint exports request the same font,
+which must also be available on the computer opening the presentation.
+
 **Settings…** beside the Markdown heading (also **File → Document settings…**)
 edits the deck's theme and aspect ratio and includes an optional **Lesson info**
 section. Activity fields such as audience, learning goals, and duration are
@@ -125,7 +132,147 @@ A short explanation.
 
 The **Columns** button inserts an editable example at the cursor. No layout selector is needed.
 
+## List layouts
+
+Use **Slides → Snippets → List layout** to insert an editable six-item example.
+Wrap one ordinary Markdown list in `:::list` to arrange its items as text blocks:
+
+```markdown
+# Investigate
+
+:::list columns=3 number-color=#2563eb
+1. **Observe** — Look closely at the example.
+2. **Ask** — Write a question.
+3. **Predict** — Explain what you expect.
+4. **Test** — Try your idea.
+5. **Record** — Capture your evidence.
+6. **Reflect** — Explain what changed.
+:::
+```
+
+Set only the **number of columns**. Items fill left to right, then continue on
+the next row automatically. Columns have equal widths by default, and each row accommodates
+its tallest item. For example, six items with `columns=3` make two rows; seven
+items make three rows, with one item in the last row. Shorten the list or split
+the slide if the content overflows.
+
+| Property | Values | Default |
+| --- | --- | --- |
+| `columns` | `1` (vertical list), `2`, `3`, `4` | `1` |
+| `widths` | One absolute width for every column, such as `2in`, or one per column, such as `2in,4in,2in` (`in`, `cm`, `mm`, `px`; bare numbers mean inches) | Automatic equal widths |
+| `align` | `left`, `center`, `right`, applied to every column | `left` |
+| `number-color` | A basic color name such as `orange`, `teal`, or `purple`, or hex such as `#2563eb` or `#F80` | Current theme's accent |
+| `number-size` | `auto` or a font size in points, 8–144 | `auto` (twice the ordinary body text size) |
+| `gap` | `small`, `medium`, `large` | `medium` |
+
+Ordered lists display large colored numbers. With `columns=1`, each number sits
+beside its item, aligned to the top. With two or more columns, each number sits
+above its item's text. The number follows the text's left, center, or right
+alignment. Numbering follows Markdown rules, including
+a starting number other than 1. Unordered items have no bullet or number;
+spacing and the grid layout separate them. They use the full column width with
+no marker indentation. `number-color` and `number-size` apply only to ordered lists.
+Wrapped lines and additional paragraphs align with the item text. Bold, italic,
+links, and nested lists are supported; only top-level items create grid cells.
+
+Set absolute column widths and align all the text and numbers together:
+
+```markdown
+:::list columns=3 widths=2in,4in,2in align=center
+1. A short first item.
+2. A longer explanation in the wider middle column.
+3. A short final item.
+:::
+```
+
+Widths are physical sizes: `2in,4in,2in` makes columns two, four, and two inches
+wide. A single value is shared: `columns=3 widths=2in` gives three two-inch
+columns, and that width is retained if you change the column count. Supply one
+shared width or one per column, or clear the field to divide the available
+space equally. Explicit widths are preserved; widths and gaps that exceed the
+slide produce a warning. A narrower group follows `align` within the available
+space. Set `align=center` to center the entire grid on the slide as well as the
+text and numbers in every column. Inside another column, the grid centers in
+that containing column. For ordered vertical lists,
+alignment moves the number and text together as a group, with
+the marker still beside the text and aligned at the top.
+
+Use `columns=1` (or omit it) for a regular vertical list:
+
+```markdown
+:::list columns=1 number-color=orange number-size=48 gap=large
+1. Gather your materials.
+2. Build your first model.
+3. Test and improve it.
+:::
+```
+
+Use the **List type** setting to switch between **Ordered (numbers)** and
+**Unordered**. It rewrites only the top-level Markdown markers and
+adjusts continuation indentation to keep multi-paragraph items and nested lists
+together. Switching to ordered starts numbering at 1. You can also edit the
+markers directly: `1.`, `2.`, and so on for ordered lists, or `-` for unordered.
+For multiple paragraphs in one item, indent continuation paragraphs beneath the
+item text:
+
+```markdown
+:::list columns=2
+1. **Observe carefully.**
+
+   Record one detail and explain why it matters.
+
+2. **Compare your findings.**
+
+   Share evidence with a partner.
+:::
+```
+
+Click an item or its number in the preview to highlight its source and show
+**List type**, **List columns**, **Column widths**, **List alignment**,
+**Number color**, **Number size (pt)**, and **List gap** settings.
+Leave the color or size field blank to restore its default. Changes update the
+Markdown and support Undo. List layouts also work inside columns and `:::fit`;
+automatic fitting scales both numbers and text. Preview, presenting, and PDF use
+the same layout. PowerPoint keeps the large numbers and item text as separate
+editable objects so their sizes and colors are preserved. Nested lists retain
+native PowerPoint bullets or numbering.
+
+Images without an explicit float are centered within their containing column,
+regardless of the text alignment. Use `.float-left` or `.float-right` on an image
+to override that placement. New images inserted or dropped into a slide start
+with `width=3in`, constrained by the column width and available height. Images
+keep a visible size when a slide is crowded and show an overflow warning rather
+than shrinking into a tiny thumbnail.
+
+Blocks saved with the earlier `layout=` syntax still open. Editing their list
+settings replaces it with `columns=`.
+
 ## Centered content
+
+To center a headline above a list grid, click the heading in the preview and
+choose **Heading alignment → Center**. This keeps the heading in the normal
+layout and reserves its space, so the grid stays below it. Choose **Left** to
+undo the alignment without moving the heading. Both changes update Markdown
+and support Undo/Redo.
+
+The editor uses `:::center` around the heading only. Close it before the list:
+
+```markdown
+:::center
+# Investigate
+:::
+
+:::list columns=3 widths=2in align=center
+1. Observe the example.
+2. Record evidence.
+3. Explain your idea.
+:::
+```
+
+The headline keeps its theme font, size, and color. Headings centered this way
+retain their space in preview, presentation, PDF, and editable PowerPoint.
+**Position freely** creates an overlay and releases its former space in the
+flowing layout; use **Heading alignment** when content should stay below it.
 
 Use `:::center` to center a group horizontally:
 
@@ -195,7 +342,7 @@ Click a slide title, paragraph, bullet, image, table row, or code block in the p
 
 **Append slide** adds the selected template at the end of the deck, regardless of which slide you are editing.
 
-Use **Slides → Snippets** to insert Columns, Background, Text, Notes, QR code, Table, Centered text, Checklist, or Card grid. **Fit text** wraps the current slide in an automatic fitting block. The syntax guide is under **Slides → Slide Syntax Guide**. These insertion and help buttons are kept out of the preview toolbar.
+Use **Slides → Snippets** to insert Columns, Background, Text, Notes, QR code, Table, Centered text, List layout, Checklist, or Card grid. **Fit text** wraps the current slide in an automatic fitting block. The syntax guide is under **Slides → Slide Syntax Guide**. These insertion and help buttons are kept out of the preview toolbar.
 
 ## Image backgrounds and positioned text
 
@@ -232,7 +379,7 @@ Text options:
 | `size` | Font size in points, 8–144 | `54` |
 | `color` | A basic color name such as `white`, `black`, `yellow`, or a hex color such as `#FFFFFF` | `white` |
 | `align` | `left`, `center`, `right` | `left` |
-| `font` | `Arial`, `Calibri`, `Georgia`, `Verdana`, `CourierNew` | `Arial` |
+| `font` | `Arial`, `TrebuchetMS`, `Calibri`, `Georgia`, `Verdana`, `CourierNew` | Current theme's font |
 
 Text blocks support paragraphs, headings, lists, checklists, line breaks, bold, italic, code, and links. Headings inside a text block stay in that box and use its specified size. Lists remain native PowerPoint bullet or numbering paragraphs in a single text box. Put images, tables, and other layout blocks outside text blocks. Multiple text blocks can be positioned independently, with or without a background. Fonts must be available on the presentation computer; another font may be substituted there.
 
@@ -315,7 +462,7 @@ There are no visible navigation menus or buttons during presentation. Presenter 
 ## Save and export
 
 - **Save** saves the editable Markdown source.
-- **Export PowerPoint…** exports the entire deck, including editable objects and speaker notes. Each list becomes one editable text box with native bullets or numbering, including nested items. Lists in separate columns remain separate text boxes. PowerPoint edits do not sync back into Markdown.
+- **Export PowerPoint…** exports the entire deck, including editable objects and speaker notes. Ordinary lists become editable text boxes with native bullets or numbering, including nested items. Lists in separate columns remain separate text boxes. `:::list` layouts export their large numbers and item text as separate editable objects. PowerPoint edits do not sync back into Markdown.
 - **Export PDF…** and printing include every slide, one per page at the deck's aspect ratio, even though the preview displays only the current slide.
 - The guide's **Copy entire guide** and **Save as…** actions let you share these instructions with an AI agent.
 
