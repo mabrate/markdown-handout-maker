@@ -69,7 +69,7 @@ Checklist**. A regular unordered list remains a regular bulleted list.
 Wrap several paragraphs around a left- or right-floating image:
 
 :::wrap
-![Descriptive alternative text](image-file.png){.float-right width=2in}
+![Descriptive alternative text](images/image-file.png){.float-right width=2in}
 
 The first paragraph begins beside the image.
 

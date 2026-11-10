@@ -6,6 +6,8 @@ const { imageSize } = require('image-size');
 const slides = require('../renderer/slides');
 const { checkedPath } = require('./fileBrowser');
 const { imageExtension } = require('./assetImport');
+const { compatiblePresentation } = require('./pptxCompatibility');
+const internalLinks = require('../renderer/internal-links');
 async function imageData(src, root, documentPath) {
   let bytes;
   if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) bytes = Buffer.from(src.split(',')[1], 'base64');
@@ -34,6 +36,13 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
   pptx.defineLayout({ name: 'CLASSROOM', width: deck.settings.aspect === '4:3' ? 10 : 40 / 3, height: 7.5 }); pptx.layout = 'CLASSROOM';
   pptx.author = 'The Markdown Handout Maker'; pptx.subject = 'Classroom slide deck'; pptx.title = slides.plain(deck.slides[0].outlineTitle || deck.slides[0].title) || 'Lesson slides'; pptx.lang = 'en-US';
   const theme = slides.themes[deck.settings.theme]; pptx.theme = { headFontFace: theme.font, bodyFontFace: theme.font, lang: 'en-US' };
+  const linkTargets = internalLinks.targets(text, deck);
+  function linkOptions(href) {
+    if (!href) return {};
+    if (!href.startsWith('#')) return { hyperlink: { url: href } };
+    const target = internalLinks.resolve(href, linkTargets);
+    return target ? { hyperlink: { slide: target.slideIndex + 1 } } : {};
+  }
   const images = new Map(), imageDimensions = new Map();
   async function loadImages(blocks, index) {
     for (const block of blocks) {
@@ -66,7 +75,7 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
             for (const [lineIndex, text] of run.text.split('\n').entries()) runs.push({ text, options: {
               bullet, indentLevel: Math.min(8, item.depth), align: item.align, fontSize: item.fontSize,
               bold: !!(run.bold || item.bold), italic: !!run.italic,
-              ...(run.code ? { fontFace: 'Courier New' } : {}), ...(run.href ? { hyperlink: { url: run.href } } : {}),
+              ...(run.code ? { fontFace: 'Courier New' } : {}), ...linkOptions(run.href),
               ...(lineIndex ? { softBreakBefore: true } : {}),
               paraSpaceAfter: itemIndex < list.items.length - 1 ? (.16 + .035) * 72 : 0
             } });
@@ -89,12 +98,12 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
           }catch(error){throw Error(`Slide ${index+1}, video “${element.value}”: ${error.message}`);}
         }
       } else if (element.type === 'text') {
-        let runs = element.runs.map(run => ({ text: run.text, options: { bold: !!(run.bold || element.bold), italic: !!run.italic, ...(run.code ? { fontFace: 'Courier New' } : {}), ...(run.href ? { hyperlink: { url: run.href }, ...(element.positioned ? { color: element.color } : {}) } : {}) } }));
+        let runs = element.runs.map(run => ({ text: run.text, options: { bold: !!(run.bold || element.bold), italic: !!run.italic, ...(run.code ? { fontFace: 'Courier New' } : {}), ...linkOptions(run.href), ...(run.href && element.positioned ? { color: element.color } : {}) } }));
         if(element.positioned && element.paragraphs?.some(paragraph=>paragraph.bullet)){
           runs=[];
           for(const [i,paragraph] of element.paragraphs.entries()){
             const bullet=paragraph.bullet ? {indent:element.fontSize,...(/^\d+\.$/.test(paragraph.bullet)?{type:'number',numberStartAt:Number.parseInt(paragraph.bullet,10)}:{characterCode:paragraph.bullet.codePointAt(0).toString(16).padStart(4,'0')})}:false;
-            for(const run of paragraph.runs)for(const [lineIndex,text] of run.text.split('\n').entries())runs.push({text,options:{bullet,indentLevel:Math.min(8,paragraph.depth||0),align:element.align,fontSize:element.fontSize,bold:!!run.bold,italic:!!run.italic,...(run.code?{fontFace:'Courier New'}:{}),...(run.href?{hyperlink:{url:run.href},color:element.color}:{}),...(lineIndex?{softBreakBefore:true}:{}),paraSpaceBefore:i>0 && !(paragraph.bullet && element.paragraphs[i-1].bullet)?element.fontSize*1.2:0}});
+            for(const run of paragraph.runs)for(const [lineIndex,text] of run.text.split('\n').entries())runs.push({text,options:{bullet,indentLevel:Math.min(8,paragraph.depth||0),align:element.align,fontSize:element.fontSize,bold:!!run.bold,italic:!!run.italic,...(run.code?{fontFace:'Courier New'}:{}),...linkOptions(run.href),...(run.href?{color:element.color}:{}),...(lineIndex?{softBreakBefore:true}:{}),paraSpaceBefore:i>0 && !(paragraph.bullet && element.paragraphs[i-1].bullet)?element.fontSize*1.2:0}});
             if(i<element.paragraphs.length-1)runs[runs.length-1].options.breakLine=true;
           }
         }
@@ -121,7 +130,7 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
       } else if (element.type === 'shape') {
         page.addShape(pptx.ShapeType.rect, { ...position, fill: { color: element.color, transparency: 100 - element.opacity }, line: { color: element.stroke || element.color, transparency: element.stroke ? 0 : 100, width:.7 } });
       } else if (element.type === 'table') {
-        page.addTable(element.rows.map((row, rowIndex) => row.map((text,columnIndex) => ({ text:element.cellRuns?element.cellRuns[rowIndex][columnIndex].map(run=>({text:run.text,options:{bold:rowIndex===0||!!run.bold,italic:!!run.italic,...(run.code?{fontFace:'Courier New'}:{}),...(run.href?{hyperlink:{url:run.href}}:{})}})):text, options: { bold: rowIndex === 0,align:element.alignments?.[columnIndex]||'left' } }))), {
+        page.addTable(element.rows.map((row, rowIndex) => row.map((text,columnIndex) => ({ text:element.cellRuns?element.cellRuns[rowIndex][columnIndex].map(run=>({text:run.text,options:{bold:rowIndex===0||!!run.bold,italic:!!run.italic,...(run.code?{fontFace:'Courier New'}:{}),...linkOptions(run.href)}})):text, options: { bold: rowIndex === 0,align:element.alignments?.[columnIndex]||'left' } }))), {
           ...position, fontFace: theme.font, fontSize: element.fontSize, color: theme.ink, fill: theme.background,
           border: { type: 'solid', pt: .7, color: theme.muted }, margin: [.06, .08, .06, .08],
           colW: Array(Math.max(1, ...element.rows.map(row => row.length))).fill(element.w / Math.max(1, ...element.rows.map(row => row.length))),
@@ -130,6 +139,6 @@ async function buildPresentation(text, { root = null, documentPath = null } = {}
       }
     }
   }
-  return { buffer: await pptx.write({ outputType: 'nodebuffer' }), deck };
+  return { buffer: await compatiblePresentation(await pptx.write({ outputType: 'nodebuffer' })), deck };
 }
 module.exports = { buildPresentation, imageData };

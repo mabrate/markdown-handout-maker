@@ -136,6 +136,8 @@ body {
 .image-rename-dialog > label { display: flex; flex-direction: column; gap: 7px; padding: 20px 18px 8px; color: #314651; font-size: 13px; font-weight: 700; }
 .image-rename-dialog input { width: 100%; min-height: 42px; border: 1px solid #91a3ab; border-radius: 7px; padding: 9px 11px; color: var(--ink); background: #fff; font: 14px/1.4 inherit; }
 .image-rename-dialog input:focus { border-color: var(--accent); outline: 3px solid #8fcbd255; }
+.internal-link-dialog select { width: 100%; min-height: 42px; font: inherit; }
+.internal-link-dialog > p { margin: 12px 18px 20px; font-size: 13px; color: #52636c; }
 .image-rename-error { min-height: 1.4em; margin: 0; padding: 0 18px 14px; color: #8a1c1c; font-size: 12px; }
 .button.dirty::after { content: "•"; margin-left: 5px; color: #d9f2f3; font-size: 16px; line-height: 10px; }
 .panel-heading, .preview-heading {

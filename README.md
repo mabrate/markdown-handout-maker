@@ -312,6 +312,19 @@ described above to check automatic refresh and expansion persistence.
   Tab-separated clipboard data also becomes a table. Plain-text paste remains
   available through the system's paste-as-plain-text command. Complex document
   layouts, merged cells, and spreadsheet formulas are not reproduced by paste.
+- Pasted images are saved in an `images/` folder beside the Markdown file, with
+  unique filenames and matching relative Markdown paths. Existing images are
+  left where they are. The preview also looks images up by filename, which can
+  make an old path appear to work after moving a file; use its actual relative
+  path (for example `images/photo.png`) so PowerPoint and ZIP exports find it.
+
+Use **Link…** beside the Markdown editor's Settings button to insert a link to a
+heading or slide in the current document. For example, `[Practice](#practice)`
+jumps to `## Practice`. Click internal links normally in preview or presentation.
+Headings use lowercase words separated by hyphens; repeated headings gain `-2`,
+`-3`, and so on. Unique heading links follow slide reordering; renaming a heading
+changes its address. Slides also accept `[Next task](#slide-3)`, which always
+means the third slide. PowerPoint exports preserve links as native slide jumps.
 
 Native drag-and-drop depends on the receiving application's upload area; verify
 it with your browser and Canvas installation on the target operating system.
@@ -384,8 +397,9 @@ editing and menus.
 
 **Export PowerPoint…** exports editable text, tables, images, and speaker notes.
 PNG, JPEG, GIF, and SVG are supported; convert WebP to PNG first. Images must be
-local to the lesson folder; export does not download website images. PowerPoint
-changes do not sync back into Markdown. **Export PDF…** and printing include the
+local to the lesson folder; export does not download website images. Exports
+retain SVG artwork and QR codes with real PNG fallbacks for compatibility.
+PowerPoint changes do not sync back into Markdown. **Export PDF…** and printing include the
 entire deck, one slide per page. Notes, editor controls, and warnings stay out of
 the projected slides and PDFs. Review warnings before sharing.
 
@@ -396,7 +410,8 @@ opens the [guide](demo/SLIDES_GUIDE.md), including Copy and Save as actions for 
 agent. Keep image files beside the deck or in a nearby image folder when sharing.
 
 `npm test` includes slide parsing, layout blocks, editable PowerPoint objects,
-notes, and image-path checks. Optional checks use the Playwright setup above:
+notes, image-path checks, package references, and QR fallback image checks.
+Optional checks use the Playwright setup above:
 
 ```bash
 node tests/test-slides-browser.cjs
@@ -406,6 +421,14 @@ node tests/test-slides-electron.cjs
 The native check requires Poppler's `pdfinfo` and `pdftotext` to verify complete
 PDF export and notes exclusion. Check the PowerPoint file on the target computer
 before teaching, since fonts and line wrapping can differ.
+
+Right-click a slide thumbnail or its preview background/text and choose
+**Duplicate slide** to insert a copy immediately after it. Notes, layout, and
+media references are copied; Undo/Redo treats duplication as one edit.
+
+`node tests/test-internal-links-browser.cjs` checks the link picker, preview and
+presentation navigation, duplication Undo/Redo, and clipboard image import.
+Set `NATIVE_ELECTRON=1` to run the same check in Electron with real image files.
 
 ## Embedded videos
 

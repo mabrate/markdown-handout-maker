@@ -12,3 +12,17 @@ const windows=source.replace(/\n/g,'\r\n'),windowsMove=move(windows,1,0);assert.
 const empty=header+'# A\n---\n\n---\n# B';assert.equal(slides.parse(move(empty,1,0)).slides.length,3,'Empty slides stay present');
 for(const pair of [[0,0],[-1,0],[0,3],[.5,1]])assert.equal(slides.reorderEdit(source,...pair),null);assert.equal(slides.reorderEdit('# Handout',0,1),null);assert.equal(slides.reorderEdit(header+'# A\n---\n# B\n:::notes\nUnclosed',0,1),null);
 console.log('Slide reordering preserves YAML, full content, private notes, fenced separators, media paths, empty slides and CRLF');
+for (let index = 0; index < 3; index++) {
+  const edit = slides.duplicateEdit(source, index), duplicated = source.slice(0, edit.start) + edit.text + source.slice(edit.end), parsed = slides.parse(duplicated);
+  assert.equal(parsed.slides.length, 4);
+  assert.equal(edit.index, index + 1);
+  assert.equal(slides.plain(parsed.slides[index].title), slides.plain(parsed.slides[index + 1].title));
+  assert.equal(parsed.slides[index].notes, parsed.slides[index + 1].notes);
+  assert(duplicated.startsWith(header));
+}
+const duplicateWindows = slides.duplicateEdit(windows, 2); assert.equal(duplicateWindows.text.replace(/\r\n/g, '').includes('\n'), false);
+const duplicateEmpty = slides.duplicateEdit(empty, 1); assert.equal(slides.parse(empty.slice(0, duplicateEmpty.start) + duplicateEmpty.text).slides.length, 4);
+for (const index of [-1, .5, 3]) assert.equal(slides.duplicateEdit(source, index), null);
+assert.equal(slides.duplicateEdit('# Handout', 0), null);
+assert.equal(slides.duplicateEdit(header + '# A\n:::notes\nUnclosed', 0), null);
+console.log('Slide duplication preserves notes, metadata, layout, empty slides and CRLF');

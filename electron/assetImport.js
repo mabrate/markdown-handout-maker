@@ -21,7 +21,11 @@ function timestamp(date = new Date()) {
 }
 
 async function normalAssetFolder(documentPath) {
-  return path.dirname(documentPath);
+  const folder = path.join(path.dirname(documentPath), 'images');
+  try { await fs.mkdir(folder); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const stat = await fs.lstat(folder);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Use a real images folder beside the Markdown file, not a file or symbolic link.');
+  return folder;
 }
 
 async function importImageAsset(documentPath, imageBytes, options = {}) {

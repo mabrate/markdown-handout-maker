@@ -65,7 +65,7 @@
     previewPanel.insertBefore(toolbar, previewPanel.firstChild); toolbar.after(navigation, outline, summary);
     const inspector = document.createElement('div'); inspector.className = 'slide-inspector'; inspector.hidden = true; inspector.setAttribute('aria-label', 'Selected slide element'); summary.after(inspector);
     let selectedElement = null, imageDimensions = new Map(), imageReady = Promise.resolve(); const dimensionCache = new Map();
-    let deck, scenes = [], selected = 0, presentation, stage, presentationIndex = 0, mode = false, imageResolver, lastText, suppressPresentationJump = false;
+    let deck, scenes = [], linkTargets = [], selected = 0, presentation, stage, presentationIndex = 0, mode = false, imageResolver, lastText, suppressPresentationJump = false;
     const commit = text => { const caret = source.selectionStart; source.setSelectionRange(0, source.value.length); options.edit(text); source.setSelectionRange(Math.min(caret, text.length), Math.min(caret, text.length)); };
     themeSelect.onchange = () => commit(model.setting(source.value, 'theme', themeSelect.value));
     aspectSelect.onchange = () => commit(model.setting(source.value, 'aspect', aspectSelect.value));
@@ -241,7 +241,7 @@
       node.style.backgroundColor = '#' + scene.theme.background; node.style.color = '#' + scene.theme.ink; node.style.fontFamily = scene.theme.font + ', Arial, sans-serif';
       const appendRuns=(parent,runs,element)=>{for(const run of runs){
         const span=document.createElement(run.href && !thumbnail?'a':'span');span.textContent=run.text;mapSource(span,run);
-        if(run.href){if(!thumbnail)span.href=run.href;span.title='Ctrl-click (⌘-click on Mac) to open in your browser';span.style.color='#'+(element.positioned?element.color:scene.theme.accent);}
+        if(run.href){if(!thumbnail)span.href=run.href;span.title=run.href.startsWith('#')?'Jump within this document':'Ctrl-click (⌘-click on Mac) to open in your browser';span.style.color='#'+(element.positioned?element.color:scene.theme.accent);}
         if(run.bold)span.style.fontWeight='bold';if(run.italic)span.style.fontStyle='italic';if(run.code)span.style.fontFamily='Courier New';parent.append(span);
       }};
       for (const [elementIndex, element] of scene.elements.entries()) {
@@ -321,6 +321,25 @@
       if(keyboard)outline.querySelector(`button[data-slide-index="${edit.index}"]`)?.focus({preventScroll:true});
       reorderStatus.textContent=`Moved ${title} to slide ${edit.index+1} of ${deck.slides.length}.`;
     }
+    let closeSlideMenu = () => {};
+    function slideMenu(index, event) {
+      event.preventDefault(); event.stopPropagation(); closeSlideMenu();
+      document.querySelector('.image-context-menu')?.remove();
+      const original = source.value, menu = document.createElement('div'); menu.className = 'image-context-menu'; menu.setAttribute('role', 'menu');
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Duplicate slide'; button.setAttribute('role', 'menuitem'); menu.append(button);
+      const outside = e => { if (!menu.contains(e.target)) closeSlideMenu(); };
+      const escape = e => { if (e.key === 'Escape') { e.preventDefault(); closeSlideMenu(); event.target.focus({ preventScroll: true }); } };
+      closeSlideMenu = () => { menu.remove(); window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
+      button.onclick = () => {
+        closeSlideMenu(); if (source.value !== original) return;
+        const edit = model.duplicateEdit(source.value, index); if (!edit) return;
+        source.focus({ preventScroll: true }); source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0); selectedElement = null;
+        if (options.refresh) options.refresh(); else render(source.value, imageResolver);
+        jump(edit.index, false); reorderStatus.textContent = `Duplicated slide ${index + 1} as slide ${edit.index + 1}.`;
+      };
+      document.body.append(menu); menu.style.left = `${Math.max(0, Math.min(event.clientX, innerWidth - menu.offsetWidth - 8))}px`; menu.style.top = `${Math.max(0, Math.min(event.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+      window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape); button.focus();
+    }
     function dragTarget(event) {
       const items=outline.querySelectorAll('button[data-slide-index]');
       for(const [index,item] of [...items].entries()){const box=item.getBoundingClientRect();if(event.clientX<box.left+box.width/2)return index;}
@@ -368,6 +387,7 @@
         const title=`${index+1}. ${model.plain(slide.outlineTitle||slide.title)||'Untitled slide'}`;item.setAttribute('aria-label',title);item.title=title+' — Drag to reorder; Alt+Shift+Left/Right moves a focused thumbnail.';
         label.className='slide-thumbnail-label';label.textContent=title;item.append(thumbnail(index),label);
         item.onclick=()=>{if(!draggedSlide)jump(index,false);};
+        item.addEventListener('contextmenu', event => slideMenu(index, event));
         item.addEventListener('dragstart',event=>{draggedSlide={index,source:source.value};event.dataTransfer.setData('application/x-handout-slide',String(index));event.dataTransfer.effectAllowed='move';outline.classList.add('is-dragging');});
         outline.append(item);
       }
@@ -378,6 +398,15 @@
       const item = document.createElement('section'); item.className = 'slide-card'; item.dataset.slideIndex = index;
       const frame = document.createElement('div'); frame.className = 'slide-frame'; frame.style.setProperty('--slide-width', `${scene.width}in`); frame.style.setProperty('--slide-height', `${scene.height}in`);
       frame.style.width = `${scene.width * 96}px`; frame.style.height = `${scene.height * 96}px`; frame.append(canvas(scene, !forExport)); item.append(frame);
+      if (forExport) {
+        item.id = `slide-${index + 1}`;
+        for (const target of linkTargets.filter(target => target.slideIndex === index && target.id !== item.id)) {
+          const anchor = item.querySelector(`[data-source-start="${target.sourceStart}"]`);
+          if (anchor) anchor.id = target.id;
+        }
+      } else item.addEventListener('contextmenu', event => {
+        if (!event.target.closest('img,.video-player')) slideMenu(index, event);
+      });
       if (!forExport) frame.onclick = event => {
         // Mapped elements use the same source selection/reveal handler as handouts.
         if (event.target.closest('[data-source-start][data-source-end]')) return;
@@ -459,7 +488,7 @@
         else if (event.key === 'End') { event.preventDefault(); presentationIndex = scenes.length - 1; draw(); }
         else if (event.key === 'Escape') { event.preventDefault(); stopPresentation(); }
       });
-      presentation.addEventListener('click', event => { if(event.target.closest('.video-player')){window.HandoutVideo.activate(event);return;} const link = event.target.closest('a'); if (link) { event.preventDefault(); if (event.ctrlKey || event.metaKey) window.handoutDesktop?.openWebLink(link.href); } else advance(event.shiftKey ? -1 : 1); });
+      presentation.addEventListener('click', event => { if(event.target.closest('.video-player')){window.HandoutVideo.activate(event);return;} const link = event.target.closest('a'); if (link) { event.preventDefault(); const href = link.getAttribute('href'); if (href.startsWith('#')) { const target = window.HandoutLinks.resolve(href, linkTargets); if (target) { presentationIndex = target.slideIndex; draw(); } } else if (event.ctrlKey || event.metaKey) window.handoutDesktop?.openWebLink(link.href); } else advance(event.shiftKey ? -1 : 1); });
       presentation.addEventListener('contextmenu', event => { if(event.target.closest('.video-player'))return;event.preventDefault(); advance(-1); });
       const onFullscreen = () => { if (enteredFullscreen && !document.fullscreenElement) stopPresentation(); else fitStage(); };
       document.addEventListener('fullscreenchange', onFullscreen);
@@ -484,6 +513,7 @@
       if (heading) heading.textContent = mode ? 'Slide preview' : 'Print preview';
       if (!mode) { stopDrag();inspector.hidden=true;selectedElement=null;if (presentation) stopPresentation(); return false; }
       deck = parsed; imageResolver = resolveImage; imageDimensions=new Map();
+      linkTargets = window.HandoutLinks.targets(text, deck);
       const loading=[];
       const collect=blocks=>{for(const block of blocks){
         if(block.type==='image' && !block.qrSvg){
@@ -530,7 +560,7 @@
       try { await imageReady;if(deck!==exportingDeck)return;scenes.forEach((_, index) => printDeck.append(card(index, true))); document.body.append(printDeck);await ready(printDeck); if (allowExport(printDeck)) return await action(); }
       finally { printDeck.remove(); exporting = false; }
     }
-    return { render, fit, present, insertSnippet, ready, allowExport, withAllSlides, get deck() { return deck; }, get selected() { return selected; }, leaveDocument: () => { stopDrag();selectedElement=null;inspector.hidden=true;if (presentation) { suppressPresentationJump = true; stopPresentation(); } }, stopPresentation };
+    return { render, fit, present, insertSnippet, ready, allowExport, withAllSlides, jump, get deck() { return deck; }, get selected() { return selected; }, leaveDocument: () => { closeSlideMenu();stopDrag();selectedElement=null;inspector.hidden=true;if (presentation) { suppressPresentationJump = true; stopPresentation(); } }, stopPresentation };
   }
   window.SlideStudio = { mount };
 })();

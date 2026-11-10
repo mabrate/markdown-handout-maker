@@ -25,6 +25,9 @@ const slideStudio = window.SlideStudio.mount({ source, preview, previewPanel, pa
   edit: replaceEditorSelection, pptx: exportSlidesPowerPoint, pdf: exportHandout, video: videoAssetUrl, refresh: render,
   guide: () => document.dispatchEvent(new Event('slides:guide'))
 });
+const internalLinks = window.HandoutLinks.mount({ source, preview, previewPanel, slideStudio,
+  edit: replaceEditorSelection, refresh: render, status: statusText
+});
 const handoutInspector = window.HandoutSettings.mount({source, preview, previewPanel, edit: replaceEditorSelection, isSlides: isSlideDocument});
 const handoutPresenter = window.HandoutPresentation.mount({ source, preview, previewPanel, prepare: render,
   hideTools() { handoutInspector.hide(); document.querySelector('.media-resize-outline')?.remove(); }
@@ -369,7 +372,7 @@ function inlineMarkdown(text) {
     const src = localAsset || servedAsset;
     return `<img src="${escapeHtml(src)}" alt="${alt}"${title ? ` title="${title}"` : ""} class="${classes}" data-image-path="${escapeHtml(path)}"${width ? ` style="width:${width[1]}"` : ""}>`;
   });
-  safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  safe = safe.replace(/\[([^\]]+)\]\(((?:https?:\/\/|#)[^)\s]+)\)/g, '<a href="$2">$1</a>');
   safe = safe.replace(/\*\*([^*]+)\*\*/g, (_, value) => `@@STRONG${strong.push(`<strong>${value}</strong>`) - 1}@@`);
   safe = safe.replace(/(?<!_)__([^_\n]+)__(?!_)/g, (_, value) => `@@STRONG${strong.push(`<strong>${value}</strong>`) - 1}@@`);
   safe = safe.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
@@ -978,6 +981,7 @@ function render() {
   const prefixLength = source.value.length - visibleSource.length;
   const sourceOffset = (source.value.slice(0, prefixLength).match(/\n/g) || []).length;
   paginate(parseBlocks(visibleSource, { questionNumber: 1 }, sourceOffset));
+  internalLinks.assignAnchors();
   handoutInspector.refresh();
   statusText.textContent = "Preview updated";
   requestAnimationFrame(() => {

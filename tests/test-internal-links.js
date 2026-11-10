@@ -1,0 +1,34 @@
+'use strict';
+const assert = require('assert/strict');
+const Zip = require('jszip');
+const links = require('../renderer/internal-links');
+const slides = require('../renderer/slides');
+const { buildPresentation } = require('../electron/slidesExport');
+
+(async () => {
+  const text = '---\ntitle: Lesson\n---\n# **Practice** & review!\n\n## Practice\n\n## Practice\n\n# Café 日本語\n\n```md\n# Example only\n```\n\n<!--\n# Hidden\n-->\n\n:::notes\n# Private\n:::\n\nSetext heading\n====\n';
+  const targets = links.targets(text);
+  assert.deepEqual(targets.map(target => target.id), ['practice-review', 'practice', 'practice-2', 'café-日本語', 'setext-heading']);
+  assert.equal(targets[0].sourceStart, 3);
+  assert.equal(links.resolve('#caf%C3%A9-%E6%97%A5%E6%9C%AC%E8%AA%9E', targets).title, 'Café 日本語');
+  for (const href of ['https://example.com/#practice', '#missing', '#%broken']) assert.equal(links.resolve(href, targets), null);
+  assert.equal(links.markup('See [this]\\here', 'practice'), '[See \\[this\\]\\\\here](#practice)');
+  const source = '---\ntype: slides\n---\n# Start\n\n[Practice](#practice) and [last slide](#slide-3).\n\n:::notes\n# Private heading\n:::\n\n---\n# Practice\n\n- [Back](#start)\n\n| Link |\n| --- |\n| [Start](#start) |\n\n:::text x=10% y=60% width=80% size=24\n[Continue](#slide-3)\n:::\n\n---\n:::text x=10% y=10% width=80% size=32\nFinal task\n:::\n';
+  const deck = slides.parse(source), destinations = links.targets(source, deck);
+  assert.deepEqual(destinations.map(target => target.id), ['start', 'practice', 'slide-3']);
+  assert.equal(links.resolve('#practice', destinations).slideIndex, 1);
+  assert.equal(links.resolve('#slide-1', destinations).slideIndex, 0);
+  assert.equal(links.resolve('#slide-99', destinations), null);
+  assert(slides.scene(deck, 0).elements.some(element => element.runs?.some(run => run.href === '#practice')));
+  const zip = await Zip.loadAsync((await buildPresentation(source)).buffer);
+  const first = await zip.file('ppt/slides/slide1.xml').async('string');
+  assert.match(first, /action="ppaction:\/\/hlinksldjump"/);
+  const rels = await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');
+  assert.match(rels, /Target="slide2.xml"/); assert.match(rels, /Target="slide3.xml"/);
+  assert(!rels.includes('TargetMode="External"'), 'Internal links must be slide relationships');
+  const second = await zip.file('ppt/slides/slide2.xml').async('string');
+  assert.equal((second.match(/hlinksldjump/g) || []).length, 3, 'Lists, tables and positioned text retain internal links');
+  const edit = slides.reorderEdit(source, 1, 2), reordered = source.slice(0, edit.start) + edit.text + source.slice(edit.end);
+  assert.equal(links.resolve('#practice', links.targets(reordered, slides.parse(reordered))).slideIndex, 2, 'Heading links follow reordering');
+  console.log('Internal headings, duplicate and Unicode anchors, notes privacy, slide aliases, reordering and PowerPoint jumps passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -41,7 +41,7 @@
       else if (token.type === 'strong_close') bold = false;
       else if (token.type === 'em_open') italic = true;
       else if (token.type === 'em_close') italic = false;
-      else if (token.type === 'link_open') { const url = token.attrGet('href'); href = /^(https?:|mailto:)/i.test(url || '') ? url : undefined; }
+      else if (token.type === 'link_open') { const url = token.attrGet('href'); href = /^(https?:|mailto:|#)/i.test(url || '') ? url : undefined; }
       else if (token.type === 'link_close') href = undefined;
       else if (['text', 'code_inline', 'softbreak', 'hardbreak', 'image'].includes(token.type)) runs.push({ text: /break$/.test(token.type) ? '\n' : token.content, bold, italic, ...(href ? { href } : {}), ...(token.type === 'code_inline' ? { code: true } : {}) });
     }
@@ -595,6 +595,17 @@
     if(parse(text.slice(0,start)+body).slides.length<count)body='---'+eol+body;
     return {start,end:text.length,text:body,index:to};
   }
+  function duplicateEdit(text, index) {
+    const deck = parse(text);
+    if (!deck.enabled || !Number.isInteger(index) || !deck.slides[index] || deck.warnings.some(warning => warning.includes('missing their closing'))) return null;
+    const rows = text.split('\n'), offset = line => Math.min(text.length, rows.slice(0, line).reduce((sum, row) => sum + row.length + 1, 0));
+    const start = offset(deck.slides[0].startLine), eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const chunks = deck.slides.map(slide => text.slice(offset(slide.startLine), offset(slide.endLine)));
+    chunks.splice(index + 1, 0, chunks[index]);
+    let body = chunks.map((chunk, i) => i < chunks.length - 1 && !chunk.endsWith('\n') ? chunk + eol : chunk).join('---' + eol);
+    if (parse(text.slice(0, start) + body).slides.length < chunks.length) body = '---' + eol + body;
+    return { start, end: text.length, text: body, index: index + 1 };
+  }
   // An explicit source edit, never an invisible layout change. Only uncomplicated
   // one-image slides qualify; manual columns, backgrounds and overlays stay intact.
   function imageTextEdit(text, index, imageDimensions = new Map()) {
@@ -838,5 +849,5 @@
     return lines.join('\n') + text.slice(meta.prefix.length);
   }
   const starter = '---\ntype: slides\ntheme: classroom\naspect: 16:9\n---\n\n# New lesson\n\nA short introduction to today’s learning.\n\n---\n\n# Investigate\n\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::\n\n---\n\n# Reflect\n\nWhat changed your thinking today?\n';
-  return { metadata, parse, scene, reorderEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerEdit, listLayoutEdit, listTypeEdit, headingAlignmentEdit, setting, themes, starter, plain, blocksFromMarkdown };
+  return { metadata, parse, scene, reorderEdit, duplicateEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerEdit, listLayoutEdit, listTypeEdit, headingAlignmentEdit, setting, themes, starter, plain, blocksFromMarkdown };
 });

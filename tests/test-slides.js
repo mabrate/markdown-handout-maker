@@ -121,7 +121,7 @@ const { buildPresentation } = require('../electron/slidesExport');
     assert.equal(sharedScene.lists[0].items[0].bullet,'☐');
     const resize=model.mediaEdit(shared,sharedMedia[0],3.25);const resized=shared.slice(0,resize.start)+resize.text+shared.slice(resize.end);assert.match(resized,/\{\.float-right width=3.25in\}/);assert.match(resized,/width=38.1mm/);
     const sharedZip=await Zip.loadAsync((await buildPresentation(shared,{root})).buffer), sharedXml=await sharedZip.file('ppt/slides/slide1.xml').async('string');
-    assert.equal((sharedXml.match(/<p:pic>/g)||[]).length,2);assert.match(sharedXml,/<a:tbl>/);assert.match(sharedXml,/buChar char="&#x2610;"/);
+    assert.equal((sharedXml.match(/<p:pic>/g)||[]).length,2);assert.match(sharedXml,/<a:tbl>/);assert.match(sharedXml,/buChar char="(?:&#x2610;|☐)"/);
     assert.ok(Object.keys(sharedZip.files).some(name=>/^ppt\/media\/.*\.svg$/.test(name)),'QR is an embedded vector image');
     assert.match(sharedXml,/<a:ext cx="1371600" cy="1371600"/);
     const listElement=sharedScene.elements.find(element=>element.listId===0), makeMovable=model.movableTextEdit(shared,listElement,sharedScene);assert.ok(makeMovable);

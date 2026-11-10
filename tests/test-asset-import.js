@@ -19,11 +19,11 @@ const { imageExtension, importImageAsset, renameImageAsset, safeImageName } = re
     assert.strictEqual(imageExtension(Buffer.from('not an image')), '');
 
     const first = await importImageAsset(documentPath, png, { date });
-    assert.strictEqual(first.relative, 'image-2026-09-12-101523.png');
+    assert.strictEqual(first.relative, 'images/image-2026-09-12-101523.png');
     assert.strictEqual(first.path, path.join(root, first.relative));
     assert.deepStrictEqual(await fs.readFile(path.join(root, first.relative)), png);
     const second = await importImageAsset(documentPath, png, { date });
-    assert.strictEqual(second.relative, 'image-2026-09-12-101523-2.png');
+    assert.strictEqual(second.relative, 'images/image-2026-09-12-101523-2.png');
 
     assert.strictEqual(safeImageName(first.path, 'pond diagram'), 'pond diagram.png');
     assert.throws(() => safeImageName(first.path, '../outside.png'), /without folders/);
@@ -33,8 +33,12 @@ const { imageExtension, importImageAsset, renameImageAsset, safeImageName } = re
     assert.strictEqual(renamed.name, 'pond diagram.png');
     assert.deepStrictEqual(await fs.readFile(renamed.path), png);
     await assert.rejects(() => renameImageAsset(second.path, renamed.name), /already exists/);
-
-
+    const nested = path.join(root, 'unit'); await fs.mkdir(nested);
+    const nestedImage = await importImageAsset(path.join(nested, 'lesson.md'), png, { date });
+    assert.strictEqual(nestedImage.path, path.join(nested, 'images', 'image-2026-09-12-101523.png'));
+    await fs.rm(path.join(nested, 'images'), { recursive: true });
+    await fs.symlink(path.join(root, 'images'), path.join(nested, 'images'));
+    await assert.rejects(() => importImageAsset(path.join(nested, 'lesson.md'), png), /real images folder/);
     await assert.rejects(() => importImageAsset(documentPath, Buffer.from('bad')), /not supported/);
   } finally {
     await fs.rm(root, { recursive: true, force: true });

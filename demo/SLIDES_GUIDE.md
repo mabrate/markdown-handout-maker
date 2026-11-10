@@ -397,6 +397,19 @@ Every change updates the Markdown, saves with the document, supports Undo, and c
 
 ## Shared handout elements
 
+Use **Link…** beside the Markdown editor's Settings button to choose a heading or
+slide in this document. `[Practice](#practice)` jumps to the slide containing
+`# Practice` or `## Practice`; click the link in preview or during presentation.
+The jump remains a native slide link in PowerPoint export. Reordering slides
+preserves links to unique headings. Renaming a heading changes its address;
+repeated headings use `-2`, `-3`, and so on. `[Review](#slide-3)` instead targets
+the third slide by position, including slides without a heading.
+
+Right-click a thumbnail or slide preview background/text and choose **Duplicate
+slide**. The copy follows the original and includes its notes and layout. The
+image files are shared, and Undo removes the whole duplicate in one step.
+Pasted images are saved into `images/` beside the deck's Markdown file.
+
 Slides accept the same Markdown images, QR codes, lists, emphasis, links, and Markdown tables used in handouts. For example:
 
 ```md
