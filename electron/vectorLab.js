@@ -47,6 +47,12 @@ function register({ ipcMain, BrowserWindow, dialog, mainWindow, root, checkedPat
     return { version: 1, name: session.creating ? 'New drawing.svg' : path.basename(session.target), creating: session.creating, mime: session.mime, base64: session.bytes.toString('base64') };
   });
   ipcMain.on('vector-lab:dirty', (event, dirty) => { try { validSession(event).dirty = dirty === true; } catch {} });
+  ipcMain.handle('vector-lab:close', event => {
+    const session = validSession(event);
+    if (session.saving) return false;
+    session.window.close();
+    return true;
+  });
   ipcMain.handle('vector-lab:save', async (event, data) => {
     const session = validSession(event);
     if (session.saving) throw Error('A save is already in progress.');

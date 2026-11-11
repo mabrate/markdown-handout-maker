@@ -4,6 +4,10 @@
 .slide-toolbar label { font-size:12px; color:#364c59; }
 .slide-toolbar select, .slide-toolbar button { padding:5px 7px; font:inherit; font-size:12px; }
 .slide-toolbar button { cursor:pointer; }
+.slide-presentation-actions { display:flex; align-items:center; margin-left:auto; padding-left:16px; border-left:1px solid #b9c8cf; }
+.slide-toolbar .slide-present { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:8px; border:1px solid #175a80; border-radius:7px; background:#175a80; color:white; }
+.slide-toolbar .slide-present:hover { background:#104764; }
+.slide-toolbar .slide-present:focus-visible { outline:3px solid #258cba; outline-offset:3px; }
 .slide-inspector { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:10px 14px; background:#eef6fa; border-bottom:1px solid #b5cbd7; font-size:12px; }
 .slide-inspector[hidden] { display:none; }
 .slide-inspector label { display:flex; align-items:center; gap:4px; }

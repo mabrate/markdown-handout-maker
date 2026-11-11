@@ -47,10 +47,16 @@
     return list.find(target => target.id === id) || (/^slide-[1-9]\d*$/.test(id) ? list.find(target => target.slideIndex === Number(id.slice(6)) - 1) : null) || null;
   }
   function markup(label, id) { return `[${String(label).replace(/[\\\[\]]/g, '\\$&').replace(/[\r\n]+/g, ' ')}](#${encodeURIComponent(id)})`; }
+  function webMarkup(label, address) {
+    let url;
+    try { url = new URL(address.trim()); } catch { throw Error('Enter a full web address starting with https:// or http://.'); }
+    if (!['https:', 'http:'].includes(url.protocol)) throw Error('Use an https:// or http:// web address.');
+    return `[${String(label).replace(/[\\\[\]]/g, '\\$&').replace(/[\r\n]+/g, ' ')}](${url.href.replace(/[()]/g, character => character === '(' ? '%28' : '%29')})`;
+  }
 
   function mount({ source, preview, previewPanel, slideStudio, edit, refresh, status }) {
     const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'document-settings-trigger'; trigger.textContent = 'Link…'; trigger.setAttribute('aria-label', 'Insert internal link'); trigger.title = 'Link to a heading or slide in this document';
-    document.querySelector('#document-settings-button').before(trigger);
+    if (!window.handoutDesktop) document.querySelector('#document-settings-button').before(trigger);
     const currentDeck = () => window.HandoutSlides.metadata(source.value).enabled ? window.HandoutSlides.parse(source.value) : null;
     const list = () => targets(source.value, currentDeck());
     function assignAnchors() {
@@ -77,6 +83,24 @@
       form.onsubmit = event => { event.preventDefault(); if (source.value !== original) { close(); status.textContent = 'The document changed. Choose the link destination again.'; return; } const text = markup(input.value, select.value); close(); source.setSelectionRange(start, end); edit(text, 0); refresh(); };
       overlay.append(form); document.body.append(overlay); window.addEventListener('keydown', escape); select.focus();
     };
+    function openWeb() {
+      if (source.disabled) return;
+      const start = source.selectionStart, end = source.selectionEnd, original = source.value;
+      const overlay = document.createElement('div'); overlay.className = 'app-dialog-overlay';
+      const form = document.createElement('form'); form.className = 'image-rename-dialog'; form.setAttribute('role', 'dialog'); form.setAttribute('aria-modal', 'true'); form.setAttribute('aria-label', 'Insert link');
+      form.innerHTML = '<header><strong>Insert link</strong></header><label>Link text<input name="label" aria-label="Link text" required></label><label>Web address<input name="address" aria-label="Web address" placeholder="https://example.com" required></label><p class="image-rename-error" role="alert"></p><footer><button type="button" class="button secondary">Cancel</button><button type="submit" class="button primary">Insert link</button></footer>';
+      form.elements.label.value = original.slice(start, end);
+      const close = () => { overlay.remove(); window.removeEventListener('keydown', escape); source.focus({ preventScroll: true }); };
+      const escape = event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); } };
+      form.querySelector('button[type="button"]').onclick = close;
+      form.onsubmit = event => {
+        event.preventDefault();
+        if (source.disabled || source.value !== original) { close(); status.textContent = 'The document changed. Open Insert again.'; return; }
+        try { const text = webMarkup(form.elements.label.value, form.elements.address.value); close(); source.setSelectionRange(start, end); edit(text); refresh(); }
+        catch (error) { form.querySelector('[role="alert"]').textContent = error.message; }
+      };
+      overlay.append(form); document.body.append(overlay); window.addEventListener('keydown', escape); form.elements.label.focus();
+    }
     preview.addEventListener('click', event => {
       const link = event.target.closest('a[href^="#"]'); if (!link) return;
       event.preventDefault(); event.stopImmediatePropagation();
@@ -86,7 +110,7 @@
       const node = [...preview.querySelectorAll('[id]')].find(node => node.id === target.id);
       if (node) { previewPanel.scrollTop += node.getBoundingClientRect().top - previewPanel.getBoundingClientRect().top - document.querySelector('.preview-heading').offsetHeight - 8; node.tabIndex = -1; node.focus({ preventScroll: true }); }
     }, true);
-    return { assignAnchors };
+    return { assignAnchors, open: () => trigger.onclick(), openWeb };
   }
-  return { slug, targets, resolve, markup, mount };
+  return { slug, targets, resolve, markup, webMarkup, mount };
 });

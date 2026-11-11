@@ -30,6 +30,7 @@ const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwM
       await page.goto(pathToFileURL(path.resolve(__dirname, '../renderer/index.html')).href); await page.evaluate(() => window.menu({ command: 'open-folder' }));
     }
     page.setDefaultTimeout(12000); const errors = []; page.on('pageerror', error => errors.push(error.message));
+    const insertInternalLink = async () => application ? application.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('insert-internal-link').click()) : page.evaluate(() => window.menu({ command: 'insert-content', payload: 'internal-link' }));
     const source = page.locator('#source'), cards = page.locator('#preview .slide-card'), thumbnails = page.locator('.slide-outline button[data-slide-index]');
     await page.getByRole('button', { name: 'deck.md', exact: true }).click(); await cards.waitFor();
     await page.locator('#preview a[href="#practice"]').click(); assert.equal(await cards.getAttribute('data-slide-index'), '1');
@@ -48,16 +49,16 @@ const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwM
     await page.keyboard.press('Control+z'); await page.waitForFunction(original => document.querySelector('#source').value === original, deck);
     await thumbnails.first().click();
     await source.evaluate(node => { const start = node.value.indexOf('Choose a task.'); node.setSelectionRange(start, start + 'Choose a task.'.length); });
-    await page.getByRole('button', { name: 'Insert internal link', exact: true }).click();
+    await insertInternalLink();
     await page.getByLabel('Link destination', { exact: true }).selectOption('practice'); await page.getByRole('button', { name: 'Cancel', exact: true }).click(); assert.equal(await source.inputValue(), deck);
-    await page.getByRole('button', { name: 'Insert internal link', exact: true }).click(); await page.getByLabel('Link destination', { exact: true }).selectOption('practice'); await page.getByLabel('Link text', { exact: true }).fill('Go practice'); await page.getByRole('button', { name: 'Insert link', exact: true }).click();
+    await insertInternalLink(); await page.getByLabel('Link destination', { exact: true }).selectOption('practice'); await page.getByLabel('Link text', { exact: true }).fill('Go practice'); await page.getByRole('button', { name: 'Insert link', exact: true }).click();
     assert((await source.inputValue()).includes('[Go practice](#practice)')); await page.keyboard.press('Control+z'); await page.waitForFunction(original => document.querySelector('#source').value === original, deck);
     await page.getByRole('button', { name: 'handout.md', exact: true }).click();
     await page.locator('.unsaved-dialog').getByRole('button', { name: 'Discard', exact: true }).click();
     await page.locator('#preview h2#practice').waitFor();
     await page.locator('#preview a[href="#practice"]').click(); assert.equal(await page.locator('#preview h2#practice').evaluate(node => node === document.activeElement), true);
     assert(await page.locator('.preview-panel').evaluate(node => node.scrollTop > 0));
-    await page.getByRole('button', { name: 'Insert internal link', exact: true }).click(); assert.deepEqual(await page.getByLabel('Link destination', { exact: true }).locator('option').allTextContents(), ['Handout', 'Practice']); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await insertInternalLink(); assert.deepEqual(await page.getByLabel('Link destination', { exact: true }).locator('option').allTextContents(), ['Handout', 'Practice']); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: 'Present', exact: true }).click(); const handoutPresentation = page.locator('.handout-presentation'); await handoutPresentation.locator('a[href="#practice"]').click(); assert(await handoutPresentation.locator('.handout-presentation-viewport').evaluate(node => node.scrollTop > 0));
     await handoutPresentation.locator('a[href="#handout"]').click();
     await page.waitForFunction(() => { const viewport = document.querySelector('.handout-presentation-viewport'), heading = viewport.querySelector('[data-presentation-anchor="handout"]'); return Math.abs(heading.getBoundingClientRect().top - viewport.getBoundingClientRect().top) < 5; });

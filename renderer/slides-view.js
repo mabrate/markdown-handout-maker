@@ -12,8 +12,6 @@
       for (const [value, title] of values) { const item = document.createElement('option'); item.value = value; item.textContent = title; input.append(item); }
       field.append(input); toolbar.append(field); return input;
     }
-    const themeSelect = select('Slide theme', Object.entries(model.themes).map(([value, theme]) => [value, theme.name]), 'Theme');
-    const aspectSelect = select('Slide aspect ratio', [['16:9', '16:9'], ['4:3', '4:3']], 'Aspect');
     const templateSelect = select('New slide', [['content', 'Blank content'], ['bell-ringer', 'Bell-ringer'], ['image-text', 'Fullscreen image with text'], ['title', 'Title slide'], ['image-columns', 'Two columns: text + image']], 'Template');
     const templates = {
       'image-columns': '# Slide topic\n\n:::columns widths=3/5,2/5\n:::column\n## Key idea\n\n- Make one clear point.\n- Add a short supporting detail.\n- Ask students what they notice.\n\n:::column\n![Describe the image](image.jpg)\n:::',
@@ -22,15 +20,25 @@
       title: ':::text x=8% y=25% width=84% size=72 color=$ink align=center\n**Presentation title**\n:::\n\n:::text x=12% y=52% width=76% size=32 color=$ink align=center\nSubtitle or a short description\n:::',
       'bell-ringer': "# Class Topic or Goal\n\n**Bell Ringer:** What is the most interesting organism you've observed in the garden\n\n**Agenda:**\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::"
     };
-    const template = () => templates[templateSelect.value].replace(/\$ink/g, '#' + model.themes[themeSelect.value].ink);
+    const template = () => templates[templateSelect.value].replace(/\$ink/g, '#' + model.themes[deck?.settings.theme || 'classroom'].ink);
     function button(label, action) { const item = document.createElement('button'); item.type = 'button'; item.textContent = label; item.onclick = action; toolbar.append(item); return item; }
     const lineOffset = line => source.value.split('\n').slice(0, line).reduce((sum, text) => sum + text.length + 1, 0);
-    button('Add slide', () => { const offset = lineOffset(deck.slides[selected].endLine); source.setSelectionRange(offset, offset); options.edit('\n---\n\n' + template() + '\n\n'); });
+    function prepareInsertion() {
+      if (!mode) return;
+      const offset = lineOffset(deck.slides[selected].endLine);
+      source.setSelectionRange(offset, offset);
+    }
+    function insertContent(text) {
+      if (!mode) return;
+      prepareInsertion(); options.edit('\n' + text, 1);
+    }
+    button('Insert slide', () => { const offset = lineOffset(deck.slides[selected].endLine); source.setSelectionRange(offset, offset); options.edit('\n---\n\n' + template() + '\n\n'); });
     button('Append slide', () => { const offset = source.value.length; source.setSelectionRange(offset, offset); options.edit('\n---\n\n' + template() + '\n\n'); });
     function insertSnippet(kind) {
       if (!mode) return;
       if(kind==='table'){const offset=lineOffset(deck.slides[selected].endLine);source.setSelectionRange(offset,offset);return;}
-      if(kind==='fit'){applyEdit(model.overflowEdit(source.value,selected,'fit'));return;}
+      if(kind==='fit'){fitContent();return;}
+      if(kind==='footer'){openFooter();return;}
       if (kind === 'notes' && deck.slides[selected].notes) {
         const note = deck.slides[selected].noteSource; source.focus(); source.setSelectionRange(lineOffset(note.sourceStart), lineOffset(note.sourceEnd)); return;
       }
@@ -51,9 +59,12 @@
       const offset = lineOffset(kind === 'background' ? deck.slides[selected].startLine : deck.slides[selected].endLine);
       source.setSelectionRange(offset, offset); options.edit(snippets[kind], 1);
     }
-    const autoLayoutButton=button('Auto layout',()=>applyEdit(model.imageTextEdit(source.value,selected,imageDimensions))); autoLayoutButton.title='Arrange one image and its text in columns; preserve notes and choose widths to fit the content.';
-    button('Footer properties', () => showInspector(deck.slides[selected].footer));
-    button('Present', present); button('Export PowerPoint…', options.pptx); button('Export PDF…', options.pdf);
+    const fitContentButton=button('Fit content',fitContent);fitContentButton.title='Fit content to the selected slide. Undo restores the previous layout.';
+    const footerButton=button('Footer',openFooter);
+    const presentationActions=document.createElement('div');presentationActions.className='slide-presentation-actions';presentationActions.setAttribute('role','group');presentationActions.setAttribute('aria-label','Presentation');
+    const presentButton=button('',present);presentButton.className='slide-present';presentButton.setAttribute('aria-label','Present');presentButton.title='Present slides (F5)';
+    presentButton.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 16v5M8 21h8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m10 6 5 3.5-5 3.5z" fill="currentColor"/></svg>';
+    presentationActions.append(presentButton);toolbar.append(presentationActions);
     const navigation = document.createElement('div'); navigation.className = 'slide-navigation'; navigation.hidden = true;
     const previous = document.createElement('button'), next = document.createElement('button'), counter = document.createElement('span');
     previous.textContent = 'Previous slide'; next.textContent = 'Next slide'; counter.setAttribute('aria-live', 'polite');
@@ -66,9 +77,6 @@
     const inspector = document.createElement('div'); inspector.className = 'slide-inspector'; inspector.hidden = true; inspector.setAttribute('aria-label', 'Selected slide element'); summary.after(inspector);
     let selectedElement = null, imageDimensions = new Map(), imageReady = Promise.resolve(); const dimensionCache = new Map();
     let deck, scenes = [], linkTargets = [], selected = 0, presentation, stage, presentationIndex = 0, mode = false, imageResolver, lastText, suppressPresentationJump = false;
-    const commit = text => { const caret = source.selectionStart; source.setSelectionRange(0, source.value.length); options.edit(text); source.setSelectionRange(Math.min(caret, text.length), Math.min(caret, text.length)); };
-    themeSelect.onchange = () => commit(model.setting(source.value, 'theme', themeSelect.value));
-    aspectSelect.onchange = () => commit(model.setting(source.value, 'aspect', aspectSelect.value));
     function cursorSlide() {
       const line = source.value.slice(0, source.selectionStart).split('\n').length - 1;
       const index = deck.slides.findIndex(slide => line >= (slide.markerLine >= 0 ? slide.markerLine : slide.startLine) && line < slide.endLine);
@@ -98,6 +106,28 @@
     }
     const elementKey = element => ({ line: element.background ? element.blockStart : element.flowAlignment?.sourceStart ?? element.sourceStart, kind: element.background ? 'background' : element.type, occurrence: element.mediaOccurrence || 0 });
     function applyEdit(edit) { if (edit) { source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0); } }
+    function fitContent() {
+      if(source.value!==lastText)options.refresh();
+      if (!mode) return;
+      const edit=model.overflowEdit(source.value,selected,'fit');
+      if(edit){applyEdit(edit);options.refresh();}
+    }
+    function openFooter() {
+      if(source.value!==lastText)options.refresh();
+      if (!mode) return;
+      let created=false;
+      if(!deck.slides[selected].footer){
+        const edit=model.footerInsertionEdit(source.value,selected);
+        if(!edit)return;
+        applyEdit(edit);options.refresh();created=true;
+      }
+      const footer=deck.slides[selected].footer;
+      if(created){
+        source.setSelectionRange(lineOffset(footer.sourceStart+1),lineOffset(footer.sourceEnd-1)-1);
+        source.dispatchEvent(new CustomEvent('editor:reveal-lines',{detail:{startLine:footer.sourceStart+1,endLine:footer.sourceEnd-1,focusEditor:true}}));
+      }
+      showInspector(footer);
+    }
     function showInspector(element) {
       if (element?.footer && deck.slides[selected].footer) element = deck.slides[selected].footer;
 
@@ -322,23 +352,31 @@
       reorderStatus.textContent=`Moved ${title} to slide ${edit.index+1} of ${deck.slides.length}.`;
     }
     let closeSlideMenu = () => {};
+    function columnsEdit(index) { return model.imageTextEdit(source.value,index,imageDimensions) || model.overflowEdit(source.value,index,'columns'); }
     function slideMenu(index, event) {
       event.preventDefault(); event.stopPropagation(); closeSlideMenu();
+      if(source.value!==lastText)options.refresh();
+      if(!mode || !deck.slides[index])return;
       document.querySelector('.image-context-menu')?.remove();
       const original = source.value, menu = document.createElement('div'); menu.className = 'image-context-menu'; menu.setAttribute('role', 'menu');
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Duplicate slide'; button.setAttribute('role', 'menuitem'); menu.append(button);
       const outside = e => { if (!menu.contains(e.target)) closeSlideMenu(); };
-      const escape = e => { if (e.key === 'Escape') { e.preventDefault(); closeSlideMenu(); event.target.focus({ preventScroll: true }); } };
+      const escape = e => { if (e.key === 'Escape') { e.preventDefault(); closeSlideMenu(); (event.target.closest('button') || preview).focus({ preventScroll: true }); } };
       closeSlideMenu = () => { menu.remove(); window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
-      button.onclick = () => {
-        closeSlideMenu(); if (source.value !== original) return;
-        const edit = model.duplicateEdit(source.value, index); if (!edit) return;
-        source.focus({ preventScroll: true }); source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0); selectedElement = null;
-        if (options.refresh) options.refresh(); else render(source.value, imageResolver);
-        jump(edit.index, false); reorderStatus.textContent = `Duplicated slide ${index + 1} as slide ${edit.index + 1}.`;
-      };
+      function action(label, edit, message) {
+        const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('role','menuitem');button.disabled=!edit;
+        button.onclick=()=>{
+          closeSlideMenu();if(source.value!==original || !edit)return;
+          source.focus({preventScroll:true});source.setSelectionRange(edit.start,edit.end);options.edit(edit.text,0);selectedElement=null;
+          if(options.refresh)options.refresh();else render(source.value,imageResolver);
+          jump(edit.index ?? index,false);reorderStatus.textContent=message;
+        };
+        menu.append(button);
+      }
+      const columns=columnsEdit(index);if(columns)action('Create columns',columns,`Created columns on slide ${index+1}.`);
+      action('Duplicate slide',model.duplicateEdit(source.value,index),`Duplicated slide ${index+1} as slide ${index+2}.`);
+      action('Delete slide',model.deleteEdit(source.value,index),`Deleted slide ${index+1}. Undo restores it.`);
       document.body.append(menu); menu.style.left = `${Math.max(0, Math.min(event.clientX, innerWidth - menu.offsetWidth - 8))}px`; menu.style.top = `${Math.max(0, Math.min(event.clientY, innerHeight - menu.offsetHeight - 8))}px`;
-      window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape); button.focus();
+      window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape); menu.querySelector('button:not(:disabled)')?.focus();
     }
     function dragTarget(event) {
       const items=outline.querySelectorAll('button[data-slide-index]');
@@ -422,11 +460,11 @@
       const actions = document.createElement('div'); actions.className = 'slide-overflow-actions';
       for (const [action, label] of [['fit', 'Shrink text to fit'], ['columns', 'Create columns']]) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
-        button.disabled = !model.overflowEdit(source.value, index, action);
+        button.disabled = !(action==='columns' ? columnsEdit(index) : model.overflowEdit(source.value, index, action));
         if (button.disabled) button.title = action === 'fit' ? 'Automatic text fitting is already enabled, or a block needs fixing.' : scenes[index].elements.some(element => element.background || element.positioned) ? 'This slide uses a background or manually positioned text. Edit its blocks or use text fitting.' : 'Needs at least two paragraphs or list items, with no existing columns or incomplete blocks.';
         button.onclick = event => {
           event.stopPropagation();
-          const edit = (action==='columns' && model.imageTextEdit(source.value,index,imageDimensions)) || model.overflowEdit(source.value, index, action); if (!edit) return;
+          const edit = action==='columns' ? columnsEdit(index) : model.overflowEdit(source.value,index,action); if (!edit) return;
           source.setSelectionRange(edit.start, edit.end); options.edit(edit.text, 0);
         };
         actions.append(button);
@@ -446,7 +484,9 @@
       pageCount.textContent = `Slide ${index + 1} of ${scenes.length} · ${deck.settings.aspect}`;
       outline.querySelectorAll('button').forEach((button, n) => button.setAttribute('aria-current', n === index ? 'true' : 'false'));
       outline.querySelector('[aria-current=true]')?.scrollIntoView({block:'nearest',inline:'nearest'});
-      autoLayoutButton.disabled=!model.imageTextEdit(source.value,selected,imageDimensions);
+      fitContentButton.disabled=!model.overflowEdit(source.value,selected,'fit');
+      footerButton.disabled=!deck.slides[selected].footer && !model.footerInsertionEdit(source.value,selected);
+      footerButton.title=deck.slides[selected].footer?'Edit the current footer settings':'Create a footer for this slide';
       refreshInspector();
       previewPanel.scrollTop = 0;
       requestAnimationFrame(() => { fit(); checkOverflow(preview); });
@@ -530,7 +570,6 @@
       scenes = deck.slides.map((_, index) => model.scene(deck, index,imageDimensions));
       imageReady=Promise.all(loading).then(results=>{if(deck!==parsed)return;let changed=false;for(const result of results)if(result?.value){imageDimensions.set(result.src,result.value);changed=true;}if(changed){scenes=deck.slides.map((_,index)=>model.scene(deck,index,imageDimensions));refreshThumbnails();const focused=preview.contains(document.activeElement);showCurrent(selected);if(focused)preview.focus({preventScroll:true});}});
       imageReady.then(() => { if(presentation && deck===parsed) { window.HandoutVideo.stop(stage); stage.replaceChildren(canvas(scenes[presentationIndex])); fitStage(); } });
-      themeSelect.value = deck.settings.theme; aspectSelect.value = deck.settings.aspect;
       buildOutline();
       if (deck.warnings.length) { summary.hidden = false; summary.textContent = deck.warnings.join(' '); }
       let style = document.querySelector('#dynamic-page-size'); if (!style) { style = document.createElement('style'); style.id = 'dynamic-page-size'; document.head.append(style); }
@@ -545,6 +584,7 @@
       if(footer && line>=footer.sourceStart && line<footer.sourceEnd)showInspector(footer);else if(target)showInspector(target);else{selectedElement=null;inspector.hidden=true;}
     } }
     source.addEventListener('select', syncSelection); source.addEventListener('keyup', syncSelection); source.addEventListener('pointerup', syncSelection);
+    window.addEventListener('keydown',event=>{if(mode && event.key==='F5'){event.preventDefault();present();}});
     new ResizeObserver(fit).observe(previewPanel); window.addEventListener('resize', fit);
     async function ready(parent = preview) { await document.fonts.ready; await Promise.all([...parent.querySelectorAll('img')].map(image => image.decode().catch(() => {}))); }
     function allowExport(parent = preview) {
@@ -560,7 +600,7 @@
       try { await imageReady;if(deck!==exportingDeck)return;scenes.forEach((_, index) => printDeck.append(card(index, true))); document.body.append(printDeck);await ready(printDeck); if (allowExport(printDeck)) return await action(); }
       finally { printDeck.remove(); exporting = false; }
     }
-    return { render, fit, present, insertSnippet, ready, allowExport, withAllSlides, jump, get deck() { return deck; }, get selected() { return selected; }, leaveDocument: () => { closeSlideMenu();stopDrag();selectedElement=null;inspector.hidden=true;if (presentation) { suppressPresentationJump = true; stopPresentation(); } }, stopPresentation };
+    return { render, fit, present, prepareInsertion, insertContent, insertSnippet, ready, allowExport, withAllSlides, jump, get deck() { return deck; }, get selected() { return selected; }, leaveDocument: () => { closeSlideMenu();stopDrag();selectedElement=null;inspector.hidden=true;if (presentation) { suppressPresentationJump = true; stopPresentation(); } }, stopPresentation };
   }
   window.SlideStudio = { mount };
 })();

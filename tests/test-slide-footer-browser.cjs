@@ -72,7 +72,7 @@ type: slides
     const presentation = page.locator('.slide-presentation'); await presentation.waitFor();
     await verify(presentation.locator('.slide-text').filter({ hasText: /^Objective:/ }), 38);
     await page.keyboard.press('Escape'); await presentation.waitFor({ state: 'detached' });
-    await page.getByRole('button', { name: 'Export PDF…', exact: true }).click();
+    await page.evaluate(()=>window.menu({command:'export-pdf'}));
     await page.waitForFunction(() => window.pdfExports.length === 1);
     const exported = await page.evaluate(() => window.pdfExports[0]);
     assert.equal(exported.length, 2);

@@ -331,7 +331,30 @@ described above to check automatic refresh and expansion persistence.
   make an old path appear to work after moving a file; use its actual relative
   path (for example `images/photo.png`) so PowerPoint and ZIP exports find it.
 
-Use **Link…** beside the Markdown editor's Settings button to insert a link to a
+The **Insert** menu replaces the old Snippets menus and the editor's drawing/link
+buttons. Shared commands stay in the same place when you switch between handouts
+and slide decks. Unsupported entries and their groups are grayed out:
+
+- Images, drawings, links, QR codes, videos, headings, checklists, Markdown tables,
+  rubrics, columns, and card grids work in both formats.
+- **Handout Elements**, image/text wrapping, page breaks, and custom style blocks
+  are available in handouts. **Slide Elements** adds backgrounds, positioned text,
+  presenter notes, centered text, slide list layouts, and footers.
+- **Image…** and **Drawing…** become available after saving the document. Images
+  already in the open folder are referenced in place; outside images are copied
+  into the existing `images/` import folder. Cancel keeps the document unchanged.
+- **Link…** (Cmd/Ctrl+K) inserts a web link. **Link to Heading…** / **Link to Slide…**
+  inserts an internal link. **File → New Example Handout** creates a separate
+  example document. **Fit content** is available in the slide preview toolbar.
+
+Shared commands use the same editable Markdown in either format. Columns and
+cards use `:::grid` / `:::cell`; both renderers also accept `:::columns` /
+`:::column`. Slides restrict the table and columns builders to Markdown because
+HTML layout is specific to handouts. In slides, content blocks go into the
+selected slide; image and link commands use the editor's selection. Insertions
+support Undo and unsaved-work recovery.
+
+Use **Insert → Link to Heading…** (or **Link to Slide…** for slides) to insert a link to a
 heading or slide in the current document. For example, `[Practice](#practice)`
 jumps to `## Practice`. Click internal links normally in preview or presentation.
 Headings use lowercase words separated by hyphens; repeated headings gain `-2`,
@@ -390,7 +413,7 @@ text to reveal Move and Width handles; dragging updates the Markdown. Both block
 work in presenting, PDF, and editable PowerPoint export. Click a background or text
 block, or put the editor cursor inside it, to open contextual settings for image
 cropping, overlays, text size, color, fonts, alignment, and position. Use
-**Slides → Snippets** for Columns, Background, Text, Notes, QR code, and Table.
+**Insert** for shared content, or **Insert → Slide Elements** for backgrounds, positioned text, and presenter notes.
 See the slide guide for the full syntax and examples.
 
 Only the current slide is shown in the preview. Move the editor cursor to another
@@ -401,18 +424,28 @@ include Blank content, Bell-ringer, Fullscreen image with text, and Title slide,
 all ordinary editable Markdown. QR codes and image widths use the handout syntax;
 resize them proportionally in the preview. Markdown tables remain native editable
 PowerPoint tables, and checklists and grid/cell blocks are also supported.
-Themes are Classroom, Light, and Dark, with 16:9 or 4:3 aspect ratios.
+Choose the slide theme and aspect ratio in **Settings… → Document** (also
+available through **File → Document settings…**). Themes are Classroom, Light,
+and Dark, with 16:9 or 4:3 aspect ratios. Apply updates the document and preview;
+Cancel leaves them unchanged. New slide templates use the applied theme.
 
-**Present** displays only the slide, hiding app menus and navigation controls.
+The preview toolbar uses **Insert slide** to add the selected template after the
+current slide; **Append slide** adds it at the end. Right-click a slide thumbnail
+or its preview background/text for **Create columns** (when applicable),
+**Duplicate slide**, or **Delete slide**. Deleting a slide removes its content
+and notes in one undoable edit. Deleting the final slide leaves a blank slide.
+
+The separate **Present** icon (screen with a play symbol) displays only the slide, hiding app menus and navigation controls.
 Click/tap, arrow keys, Space, and Page Up/Down navigate; Home/End jump to the first
 or last slide. Shift-click or right-click goes back. Escape exits and restores
 editing and menus.
 
-**Export PowerPoint…** exports editable text, tables, images, and speaker notes.
+Slide export buttons are kept out of the preview toolbar. Use
+**File → Export PowerPoint…** to export editable text, tables, images, and speaker notes.
 PNG, JPEG, GIF, and SVG are supported; convert WebP to PNG first. Images must be
 local to the lesson folder; export does not download website images. Exports
 retain SVG artwork and QR codes with real PNG fallbacks for compatibility.
-PowerPoint changes do not sync back into Markdown. **Export PDF…** and printing include the
+PowerPoint changes do not sync back into Markdown. **File → Export PDF…** and printing include the
 entire deck, one slide per page. Notes, editor controls, and warnings stay out of
 the projected slides and PDFs. Review warnings before sharing.
 
@@ -447,7 +480,7 @@ Set `NATIVE_ELECTRON=1` to run the same check in Electron with real image files.
 
 Handouts and slides accept `[youtube:URL]` and `[video:media/clip.mp4]` on their
 own lines, optionally followed by `{width=5in}`. YouTube also accepts `start=30`
-in seconds. Use the corresponding Snippets menu entries, or preview a local
+in seconds. Use the corresponding Insert menu entries, or preview a local
 video in the file browser and choose **Insert video**. YouTube loads on click;
 local videos play offline from the open lesson folder. MP4 is recommended;
 other recognized video formats depend on platform/codec support.
@@ -466,8 +499,8 @@ browser YouTube test uses a mock frame. YouTube's app identity header follows
 
 Slide preview clicks keep keyboard focus in the preview while highlighting the
 matching Markdown. Previous/Next and outline clicks also support arrow navigation.
-The **Two columns: text + image** template and **Auto layout** help arrange
-one-image slides; Auto layout writes editable columns and preserves teacher notes.
+The **Two columns: text + image** template helps arrange one-image slides.
+Right-click the slide and choose **Create columns** to write editable columns while preserving teacher notes.
 Flowing images preserve their proportions and fit the available column height as
 well as width. The slide guide includes layout rules for AI-generated decks.
 
@@ -478,7 +511,18 @@ the same checks in Electron; the browser version accepts `CHROME_PATH`.
 
 ### Slide footer blocks
 
-Place a footer block anywhere within a slide. Each image or paragraph gets an
+Click **Footer** in the slide preview toolbar, or choose **Insert → Slide
+Elements → Footer**. If the slide has no footer, this creates a starter footer
+and opens its settings. The starter text is selected in Markdown so you can
+replace it. The new footer applies only to that slide; enable **Continue on
+following slides** to reuse it. If a footer already exists or is inherited, the
+button opens its settings without creating another. Hidden footers remain hidden
+until you change **Hide footer**. Creation and edits support Undo.
+
+The slide preview toolbar also contains **Fit content** and a separate **Present** icon; F5
+starts presentation. Slide syntax help is under **Help → Slide Syntax Guide**.
+
+You can also place a footer block anywhere within a slide. Each image or paragraph gets an
 equal-width cell across the footer, in source order; separate paragraphs with a
 blank line. Images preserve their proportions. Text keeps the selected point
 size, and the footer grows from its specified minimum height when needed.
@@ -531,9 +575,14 @@ to keep a separate editable copy. GIF and WebP are not yet offered.
 The bundled editor is a snapshot, updated separately from the live website.
 Source and rebuild instructions are in `vendor/vector-lab/README.handout.md`.
 
-Choose **Draw image…** beside Document Settings to open a blank Vector Lab
+Choose **Insert → Drawing…** to open a blank Vector Lab
 canvas. **Insert into document** saves an SVG inside the lesson folder and
 inserts its Markdown image reference into the originating open document.
+Choose **Cancel** beside Insert to close without adding a drawing. If you made
+changes, choose **Discard changes** to close or **Keep editing** to stay. The
+button becomes **Close** after a successful save; closing keeps changes already
+saved and only discards edits made since then. This works without the operating
+system's window-close controls, including on Ubuntu.
 
 When editing a JPG, choose **Replace with editable PNG** in **Save image format**
 to save an editable PNG and replace matching image references across all open

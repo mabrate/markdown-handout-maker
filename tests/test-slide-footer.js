@@ -75,6 +75,22 @@ assert.equal(slides.footerEdit(source,footerBlock,{color:'invalid'}),null);
 const cleared=slides.footerEdit(source,footerBlock,{background:''});
 assert(!cleared.text.includes('background='));
 
+const noFooter='---\ntype: slides\n---\n# First\n\nContent\n\n:::notes\nPrivate notes\n:::\n\n---\n# Second\n';
+for(const original of [noFooter,noFooter.replace(/\n/g,'\r\n')]){
+ const insertion=slides.footerInsertionEdit(original,0);assert(insertion);
+ const created=original.slice(0,insertion.start)+insertion.text+original.slice(insertion.end),parsed=slides.parse(created);
+ assert.equal(parsed.slides.length,2);assert.equal(parsed.slides[0].footer.blocks[0].runs[0].text,'Footer text');
+ assert.equal(parsed.slides[0].footer.persist,false);assert.equal(parsed.slides[1].footer,null);
+ assert.equal(parsed.slides[0].notes,'Private notes');assert(created.endsWith(original.slice(original.lastIndexOf('\n---'))));
+ assert.equal(slides.footerInsertionEdit(created,0),null,'A second footer is not inserted');
+ if(original.includes('\r\n'))assert(!insertion.text.replace(/\r\n/g,'').includes('\n'),'Footer insertion preserves CRLF');
+}
+assert.equal(slides.footerInsertionEdit(source,1),null,'Inherited footer is edited without duplication');
+assert.equal(slides.footerInsertionEdit(source,2),null,'A hidden local footer is not replaced');
+assert.equal(slides.footerInsertionEdit('# Handout',0),null);
+assert.equal(slides.footerInsertionEdit(noFooter,99),null);
+assert.equal(slides.footerInsertionEdit('---\ntype: slides\n---\n# Draft\n\n:::notes\nNot closed',0),null);
+
 const reportedFooter = `:::footer color=white background=#175A80 persist=true height=0.8 size=38
 **Objective: **Share our encryption systems.
 

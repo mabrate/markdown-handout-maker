@@ -26,3 +26,18 @@ for (const index of [-1, .5, 3]) assert.equal(slides.duplicateEdit(source, index
 assert.equal(slides.duplicateEdit('# Handout', 0), null);
 assert.equal(slides.duplicateEdit(header + '# A\n:::notes\nUnclosed', 0), null);
 console.log('Slide duplication preserves notes, metadata, layout, empty slides and CRLF');
+for (let index=0;index<3;index++) {
+ const edit=slides.deleteEdit(source,index);assert(edit);const result=source.slice(0,edit.start)+edit.text+source.slice(edit.end),parsed=slides.parse(result);
+ assert(result.startsWith(header));assert.equal(parsed.slides.length,2);
+ assert.deepEqual(parsed.slides.map(slide=>slides.plain(slide.title)),['First','Second','Third'].filter((_,i)=>i!==index));
+ assert.equal(edit.index,Math.min(index,1));
+ for(const [i,chunk] of [first,second,third].entries())assert.equal(result.includes(chunk),i!==index,'Whole slide content, notes and media stay together');
+}
+const deleteWindows=slides.deleteEdit(windows,1);assert(!deleteWindows.text.replace(/\r\n/g,'').includes('\n'));
+const leadingEmpty=header+'# A\n---\n\n---\n# B',deleteFirst=slides.deleteEdit(leadingEmpty,0);
+assert.equal(slides.parse(leadingEmpty.slice(0,deleteFirst.start)+deleteFirst.text).slides.length,2,'Deleting the first slide preserves an empty next slide');
+const only=header+'# Only\n\n:::notes\nPrivate only\n:::\n',deleteOnly=slides.deleteEdit(only,0),blank=only.slice(0,deleteOnly.start)+deleteOnly.text;
+assert.equal(blank,header);assert.equal(slides.parse(blank).slides.length,1);assert.equal(slides.parse(blank).slides[0].notes,'');assert.equal(slides.deleteEdit(blank,0),null);
+for(const index of [-1,.5,3])assert.equal(slides.deleteEdit(source,index),null);
+assert.equal(slides.deleteEdit('# Handout',0),null);assert.equal(slides.deleteEdit(header+'# A\n:::notes\nUnclosed',0),null);
+console.log('Slide deletion preserves YAML, remaining slides, notes, media, empty slides and CRLF; deleting the last slide leaves a blank canvas');

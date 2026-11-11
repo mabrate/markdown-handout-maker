@@ -72,7 +72,7 @@ const initial = '---\ntype: slides\n---\n# Investigate\n\n';
     await presentation.waitFor(); assert.equal(await presentation.locator('.slide-list-marker').count(), 3);
     assert.equal(await presentation.locator('input,select,nav,footer').count(), 0);
     await page.keyboard.press('Escape'); await presentation.waitFor({ state: 'detached' });
-    await page.getByRole('button', { name: 'Export PDF…', exact: true }).click();
+    await page.evaluate(()=>window.menu({command:'export-pdf'}));
     await page.waitForFunction(() => window.actions.some(action => action.kind === 'pdf'));
     assert.deepEqual(await page.evaluate(() => window.actions.find(action => action.kind === 'pdf')), { kind: 'pdf', markers: 3, warnings: 0, alignments: Array(3).fill('left'), colors: Array(3).fill('rgb(255, 165, 0)') });
 
@@ -129,7 +129,7 @@ const initial = '---\ntype: slides\n---\n# Investigate\n\n';
     await presentation.waitFor();
     assert.deepEqual(await presentation.locator('.slide-list-marker').evaluateAll(nodes => nodes.map(node => node.style.textAlign)), Array(3).fill('center'));
     await page.keyboard.press('Escape'); await presentation.waitFor({ state: 'detached' });
-    await page.getByRole('button', { name: 'Export PDF…', exact: true }).click();
+    await page.evaluate(()=>window.menu({command:'export-pdf'}));
     await page.waitForFunction(() => window.actions.filter(action => action.kind === 'pdf').length === 2);
     assert.deepEqual(await page.evaluate(() => window.actions.filter(action => action.kind === 'pdf').at(-1).alignments), Array(3).fill('center'));
     const headlineSource = initial + ':::list columns=3 widths=2in align=center\n1. Observe the example.\n2. Record evidence.\n3. Explain your idea.\n:::\n';

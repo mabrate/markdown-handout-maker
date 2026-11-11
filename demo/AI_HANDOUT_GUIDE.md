@@ -385,7 +385,11 @@ Footer blocks appear in preview, presentation, PDF, and PowerPoint exports.
 Manually positioned text is not moved to avoid footers. Check for overlap,
 especially with `overlay=true`. The footer properties editor is available by
 clicking footer content, placing the source cursor inside its block, or choosing
-**Footer properties**. Editing an inherited footer updates its original block.
+**Footer** in the slide preview toolbar. If no footer exists, this button or
+**Insert → Slide Elements → Footer** creates a starter footer on the current
+slide and opens its settings. New footers apply only to their own slide unless
+**Continue on following slides** is enabled. Editing an inherited footer updates
+its original block. Creation and edits support Undo.
 
 ## Final quality check for AI
 
@@ -454,7 +458,7 @@ Use a standalone line for a YouTube video or a local video file:
 [video:media/garden-tour.mp4]{width=5in}
 ```
 
-- Insert these from **Snippets → YouTube Video** or **Local Video**. Replace the example URL or filename.
+- Insert these from **Insert → YouTube Video** or **Local Video**. Replace the example URL or filename.
 - YouTube supports watch/share/Shorts/embed URLs and bare video IDs. Click **Load YouTube video**, then use its player. An internet connection and a video that permits embedding are required. The app uses YouTube's privacy-enhanced player and does not load it until clicked.
 - `start` is an optional YouTube start time in whole seconds (0–86400). A URL's `t` or `start` value is used when the explicit setting is absent.
 - `width` accepts `in`, `cm`, `mm`, `px`, or `%`. Leave it out for the available column width. Videos use a 16:9 player area.

@@ -3,5 +3,6 @@ contextBridge.exposeInMainWorld('handoutVectorLab', {
   version: 1,
   open: () => ipcRenderer.invoke('vector-lab:load'),
   save: data => ipcRenderer.invoke('vector-lab:save', data),
+  close: () => ipcRenderer.invoke('vector-lab:close'),
   dirty: value => ipcRenderer.send('vector-lab:dirty', value === true)
 });

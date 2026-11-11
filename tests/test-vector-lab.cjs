@@ -14,10 +14,11 @@ const {checkedPath}=require('../electron/fileBrowser');
   constructor(options){super();this.options=options;this.webContents=new EventEmitter();this.webContents.id=windows.length+10;this.webContents.setWindowOpenHandler=fn=>this.open=fn;windows.push(this);}
   async loadURL(url){this.url=url;this.webContents.mainFrame={url};}
   focus(){this.focused=true;}
+  close(){let prevented=false;this.emit('close',{preventDefault(){prevented=true;}});this.closePrevented=prevented;if(!prevented)this.emit('closed');}
  }
  const main={webContents:{send:channel=>notifications.push(channel)}};
- let response=0;
- register({ipcMain:{handle:(key,fn)=>handlers[key]=fn,on:(key,fn)=>listeners[key]=fn},BrowserWindow:Window,dialog:{showMessageBox:async()=>({response}),showMessageBoxSync:()=>0},mainWindow:()=>main,root:()=>root,checkedPath});
+ let response=0, closeResponse=0;
+ register({ipcMain:{handle:(key,fn)=>handlers[key]=fn,on:(key,fn)=>listeners[key]=fn},BrowserWindow:Window,dialog:{showMessageBox:async()=>({response}),showMessageBoxSync:()=>closeResponse},mainWindow:()=>main,root:()=>root,checkedPath});
  try {
   await handlers['vector-lab:edit']({sender:main.webContents},pathToFileURL(target).href);
   const win=windows[0],event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
@@ -27,12 +28,19 @@ const {checkedPath}=require('../electron/fileBrowser');
   assert.throws(()=>handlers['vector-lab:load']({...event,senderFrame:{url:'https://example.com'}}));
   const edited=original.replace('width="20"','width="30"');
   const payload={version:1,mime:'image/svg+xml',base64:Buffer.from(edited).toString('base64')};
-  assert((await handlers['vector-lab:save'](event,payload)).saved);
+  const saving=handlers['vector-lab:save'](event,payload);
+  assert.equal(handlers['vector-lab:close'](event),false,'Closing is blocked while saving');
+  assert((await saving).saved);
   assert.equal(await fs.readFile(target,'utf8'),edited);assert.deepEqual(notifications,['vector-lab:saved']);
   await fs.writeFile(target,original);
   await assert.rejects(handlers['vector-lab:save'](event,payload),/changed outside/);
   await assert.rejects(handlers['vector-lab:save'](event,{...payload,base64:Buffer.from('<svg><script>bad</script></svg>').toString('base64')}),/unsupported/);
   await assert.rejects(handlers['vector-lab:edit']({sender:{}},pathToFileURL(target).href),/Unrecognized/);
+  assert.throws(()=>handlers['vector-lab:close']({...event,senderFrame:{url:'https://example.com'}}),/Unrecognized/);
+  listeners['vector-lab:dirty'](event,true);
+  handlers['vector-lab:close'](event);assert.equal(win.closePrevented,true,'Cancel retains unsaved work when Keep editing is chosen');
+  closeResponse=1;handlers['vector-lab:close'](event);assert.equal(win.closePrevented,false);
+  assert.equal(await fs.readFile(target,'utf8'),original,'Closing does not save image changes');assert.deepEqual(notifications,['vector-lab:saved']);
   Object.defineProperty(win, 'webContents', { get() { throw Error('Object has been destroyed'); } });
   assert.doesNotThrow(() => win.emit('closed'));
   await handlers['vector-lab:edit']({sender:main.webContents},pathToFileURL(target).href);

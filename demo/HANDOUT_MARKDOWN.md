@@ -63,7 +63,7 @@ Checklist block:
 :::
 
 Each Markdown list item becomes a printed empty checkbox. Keep the checklist
-items inside the block; the block is available from **Snippets → Basics →
+items inside the block; the block is available from **Insert → Text & Tables →
 Checklist**. A regular unordered list remains a regular bulleted list.
 
 Wrap several paragraphs around a left- or right-floating image:
@@ -124,7 +124,7 @@ Tables and worksheet tables:
 - Use a normal Markdown table for compact reference or response tables. Column
   alignment follows standard Markdown markers such as `:---`, `:---:`, and
   `---:`.
-- Insert a worksheet table from **Snippets → Layout → Table…**. Choose
+- Insert a worksheet table from **Insert → Text & Tables → Table…**. Choose
   Markdown for an editable Markdown table or HTML for fixed proportional
   columns. Generated body cells are intentionally blank and print with extra
   handwriting space.
@@ -144,7 +144,7 @@ scope selectors to `.handout-page` so they do not affect the editor UI.
 </style>
 ```
 
-The **Snippets → Layout → Style Block** command inserts a starter block. Raw
+The **Insert → Advanced → Style Block** command inserts a starter block. Raw
 HTML other than supported `<br>` and `<style>` blocks should be avoided; other
 raw HTML is escaped by the renderer.
 
@@ -156,6 +156,12 @@ Authoring constraints:
 - Avoid raw HTML other than <br>; the renderer escapes other raw HTML. HTML comments (<!-- ... -->) are removed and do not appear in the rendered output.
 - Avoid presenting questions in a grid layout. Use tables for that if the aim is to save space. There is not enough writing space for questions in a grid layout.
 - Multiple consecutive spaces are preserved: runs of two or more spaces in the source are converted to non-breaking spaces so you can add extra spacing in a controlled way.
+Both handouts and slides accept `:::grid` / `:::cell` and the equivalent
+`:::columns` / `:::column` syntax, including fractional `widths=` values.
+The Insert menu uses the same Markdown for shared blocks in either format.
+Worksheet questions and answer spaces are handout-only; backgrounds, positioned
+text, and presenter notes are slide-only. Inapplicable Insert commands are grayed out.
+
 - Grid / column closing guidance: use `:::grid` with `:::cell` markers to separate cells and a single closing `:::` to end the grid. Do not rely on using a lone `:::` to "close" a cell — that is ambiguous. If you accidentally use `:::` to close a cell and then immediately write another `:::`, the parser will accept the double `:::` sequence (both are consumed), but the recommended, unambiguous pattern is shown below:
 
   :::grid columns=2

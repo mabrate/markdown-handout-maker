@@ -606,6 +606,18 @@
     if (parse(text.slice(0, start) + body).slides.length < chunks.length) body = '---' + eol + body;
     return { start, end: text.length, text: body, index: index + 1 };
   }
+  function deleteEdit(text, index) {
+    const deck = parse(text);
+    if (!deck.enabled || !Number.isInteger(index) || !deck.slides[index] || deck.warnings.some(warning => warning.includes('missing their closing'))) return null;
+    const rows = text.split('\n'), offset = line => Math.min(text.length, rows.slice(0, line).reduce((sum, row) => sum + row.length + 1, 0));
+    const start = offset(deck.slides[0].startLine), eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const chunks = deck.slides.map(slide => text.slice(offset(slide.startLine), offset(slide.endLine)));
+    chunks.splice(index, 1);
+    let body = chunks.map((chunk, i) => i < chunks.length - 1 && !chunk.endsWith('\n') ? chunk + eol : chunk).join('---' + eol);
+    if (chunks.length && parse(text.slice(0, start) + body).slides.length < chunks.length) body = '---' + eol + body;
+    if (text.slice(start) === body) return null;
+    return { start, end: text.length, text: body, index: Math.min(index, Math.max(0, chunks.length - 1)) };
+  }
   // An explicit source edit, never an invisible layout change. Only uncomplicated
   // one-image slides qualify; manual columns, backgrounds and overlays stay intact.
   function imageTextEdit(text, index, imageDimensions = new Map()) {
@@ -826,6 +838,13 @@
     const end = Math.min(text.length, text.split('\n').slice(0, block.sourceEnd).reduce((sum, row) => sum + row.length + 1, 0));
     return { start, end, text: lines.slice(block.sourceStart, block.sourceEnd).join('\n') + (end > start && text[end - 1] === '\n' ? '\n' : '') };
   }
+  function footerInsertionEdit(text, index) {
+    const deck = parse(text), slide = deck.slides[index];
+    if (!deck.enabled || !slide || slide.footer || deck.warnings.length || slide.warnings.length) return null;
+    const start = Math.min(text.length, text.split('\n').slice(0, slide.endLine).reduce((sum, line) => sum + line.length + 1, 0));
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    return { start, end: start, text: eol + [':::footer height=0.65 size=16', 'Footer text', ':::', ''].join(eol) + eol };
+  }
   function footerEdit(text, element, values) {
     const lines = text.split('\n'), line = lines[element.sourceStart];
     if (!/^:::footer(?:\s|$)/.test(line || '')) return null;
@@ -849,5 +868,5 @@
     return lines.join('\n') + text.slice(meta.prefix.length);
   }
   const starter = '---\ntype: slides\ntheme: classroom\naspect: 16:9\n---\n\n# New lesson\n\nA short introduction to today’s learning.\n\n---\n\n# Investigate\n\n- Observe the example.\n- Test one idea.\n- Record your evidence.\n\n:::notes\nMaterials and teacher reminders go here.\n:::\n\n---\n\n# Reflect\n\nWhat changed your thinking today?\n';
-  return { metadata, parse, scene, reorderEdit, duplicateEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerEdit, listLayoutEdit, listTypeEdit, headingAlignmentEdit, setting, themes, starter, plain, blocksFromMarkdown };
+  return { metadata, parse, scene, reorderEdit, duplicateEdit, deleteEdit, imageTextEdit, overflowEdit, positionEdit, mediaEdit, movableTextEdit, backgroundEdit, footerInsertionEdit, footerEdit, listLayoutEdit, listTypeEdit, headingAlignmentEdit, setting, themes, starter, plain, blocksFromMarkdown };
 });

@@ -184,16 +184,24 @@ function makeRubric(title, criteria) {
 }
 
 function openSnippetDialog(kind) {
+  const original = source.value, documentPath = currentDocumentPath, slideMode = isSlideDocument();
+  const start = source.selectionStart, end = source.selectionEnd;
   const overlay = document.createElement("div");
   overlay.className = "app-dialog-overlay snippet-dialog-overlay";
   const close = () => { overlay.remove(); source.focus(); };
   const submit = event => {
     event.preventDefault();
+    if (source.disabled || source.value !== original || currentDocumentPath !== documentPath || isSlideDocument() !== slideMode) {
+      close(); statusText.textContent = 'The document changed. Open Insert again.'; return;
+    }
+    source.setSelectionRange(start, end);
     const form = event.currentTarget;
-    if (kind === "question") insertSnippet(makeQuestion(form.elements.type.value, form.elements.prompt.value, form.elements.points.value, form.elements.lines?.value, form.elements.content?.value || "", form.elements.correct?.value || "0", form.elements.answer?.value || ""));
-    else if (kind === "rubric") insertSnippet(makeRubric(form.elements.title.value, form.elements.criteria.value));
-    else if (kind === "columns") insertSnippet(makeColumns(form.elements.format.value, form.elements.widths.value, form.elements.cards.checked));
-    else if (kind === "table") insertSnippet(makeTable(form.elements.format.value, Number(form.elements.rows.value), Number(form.elements.columns.value)));
+    const insert = text => insertSnippet((slideMode ? "\n" : "") + text);
+    const format = slideMode ? 'markdown' : form.elements.format?.value;
+    if (kind === "question") insert(makeQuestion(form.elements.type.value, form.elements.prompt.value, form.elements.points.value, form.elements.lines?.value, form.elements.content?.value || "", form.elements.correct?.value || "0", form.elements.answer?.value || ""));
+    else if (kind === "rubric") insert(makeRubric(form.elements.title.value, form.elements.criteria.value));
+    else if (kind === "columns") insert(makeColumns(format, form.elements.widths.value, form.elements.cards.checked));
+    else if (kind === "table") insert(makeTable(format, Number(form.elements.rows.value), Number(form.elements.columns.value)));
     close();
   };
   const shells = {
@@ -206,7 +214,8 @@ function openSnippetDialog(kind) {
   overlay.innerHTML = `<form class="app-dialog snippet-dialog" role="dialog" aria-modal="true" aria-labelledby="snippet-dialog-title"><header>${shells[kind].match(/<h2[\s\S]*?<\/h2>/)?.[0] || ""}<button type="button" class="app-dialog-close" aria-label="Close">×</button></header>${shells[kind].replace(/<h2[\s\S]*?<\/h2>/, "")}<footer><button type="button" class="button secondary snippet-cancel">Cancel</button><button type="submit" class="button primary">${actionLabels[kind]}</button></footer></form>`;
   document.body.append(overlay);
   const form = overlay.querySelector("form");
-  if (isSlideDocument() && kind === 'table') { form.elements.format.value = 'markdown'; form.elements.format.closest('label').hidden = true; }
+  if (slideMode && ['table', 'columns'].includes(kind)) { form.elements.format.value = 'markdown'; form.elements.format.closest('label').hidden = true; }
+  if (slideMode && kind === 'table') overlay.querySelector('.app-dialog-description').textContent = 'Choose the number of rows and columns.';
   form.addEventListener("submit", submit);
   overlay.querySelector(".app-dialog-close").addEventListener("click", close);
   overlay.querySelector(".snippet-cancel").addEventListener("click", close);
@@ -542,8 +551,8 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
       continue;
     }
 
-    if (/^:::grid(?:\s+.*)?\s*$/.test(line.trim())) {
-      const attrText = line.trim().replace(/^:::grid\s*/, "");
+    if (/^:::(?:grid|columns)(?:\s+.*)?\s*$/.test(line.trim())) {
+      const attrText = line.trim().replace(/^:::(?:grid|columns)\s*/, "");
       const attr = { columns: undefined, widths: undefined, cards: false };
       attrText.split(/\s+/).forEach(token => {
         if (token === "cards") attr.cards = true;
@@ -557,14 +566,14 @@ function parseBlocks(markdown, numbering = { questionNumber: 1 }, sourceOffset =
       i++;
       while (i < lines.length) {
         const nested = lines[i].trim();
-        if (depth === 0 && /^:::cell\s*$/.test(nested)) {
+        if (depth === 0 && /^:::(?:cell|column)\s*$/.test(nested)) {
           if (cell.length) cells.push({ content: cell.join("\n"), offset: sourceOffset + cellStart });
           cell = [];
           cellStart = i + 1;
           i++;
           continue;
         }
-        if (/^:::(question|answer|wrap|grid|checklist)(?:\s+.*)?$/.test(nested)) depth++;
+        if (/^:::(question|answer|wrap|grid|columns|checklist)(?:\s+.*)?$/.test(nested)) depth++;
         else if (nested === ":::") {
           if (depth > 0) depth--;
           else break;
@@ -965,8 +974,8 @@ function render() {
   syncDocumentLayout();
   const mode = isSlideDocument() ? 'slides' : 'handout';
   handoutPresenter.sync(mode === 'handout');
-  const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default');
-  if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default').catch(() => {}); }
+  const modeKey = mode + ':' + (document.body.dataset.handoutTheme || 'default') + ':' + source.disabled + ':' + !!currentDocumentPath;
+  if (lastDocumentMode !== modeKey) { lastDocumentMode = modeKey; window.handoutDesktop?.setDocumentMode?.(mode, document.body.dataset.handoutTheme || 'default', { hasDocument: !source.disabled, saved: !!currentDocumentPath }).catch(() => {}); }
   if (slideStudio.render(source.value, slideImageUrl)) { handoutInspector.hide(); statusText.textContent = 'Slide preview updated'; return; }
   window.HandoutVideo.stop(preview);
   document.querySelector('.media-resize-outline')?.remove();
@@ -1333,6 +1342,9 @@ if (window.handoutDesktop) {
       return;
     }
     const wrappers = { b: ["**", "**"], i: ["*", "*"], u: ["<u>", "</u>"], "/": ["<!-- ", " -->"] };
+    if (key === "k" && window.handoutDesktop) {
+      event.preventDefault(); void insertContent('link'); return;
+    }
     if (key === "k") {
       event.preventDefault();
       const url = source.value.slice(source.selectionStart, source.selectionEnd);
@@ -1671,7 +1683,7 @@ if (window.handoutDesktop) {
         documentState.assets = refreshed.assets; setAssets(refreshed.assets); drawTree(); syncTreeSelection(true);
       }
     } catch { /* The file is saved even if a temporary directory-read error occurs. */ }
-    statusText.textContent = saved.name + ' saved';
+    render(); statusText.textContent = saved.name + ' saved';
     return !documentState.dirty;
   }
 
@@ -2429,6 +2441,8 @@ if (window.handoutDesktop) {
   }
   function addImageToFolderTree(imported) {
     if (!folder || !imported.path) return;
+    const contains = nodes => nodes.some(node => node.path === imported.path || node.type === 'folder' && contains(node.children));
+    if (contains(folder.tree)) return;
     const separatorIndex = Math.max(imported.path.lastIndexOf('/'), imported.path.lastIndexOf('\\'));
     const parentPath = imported.path.slice(0, separatorIndex);
     const imageNode = { type: 'file', name: imported.path.slice(separatorIndex + 1), path: imported.path, url: imported.url, image: true, markdown: false };
@@ -2447,16 +2461,44 @@ if (window.handoutDesktop) {
   async function importEditorImage(file, selectionStart, selectionEnd, action = 'Pasted', trailingText = '') {
     if (!selectedFile) throw new Error('Open a saved Markdown handout before importing an image.');
     if (selectedFile.untitled) throw new Error('Save this document before importing an image.');
-    const imported = await desktop.importImage(selectedFile.path, new Uint8Array(await file.arrayBuffer()));
+    const originalFile = selectedFile, originalContent = source.value;
+    const imported = await desktop.importImage(originalFile.path, new Uint8Array(await file.arrayBuffer()));
+    if (selectedFile !== originalFile || source.value !== originalContent) throw Error('The document changed. Insert the image from its images folder.');
+    return insertEditorImage(imported, file.name || 'image', selectionStart, selectionEnd, action, trailingText);
+  }
+  function insertEditorImage(imported, name, selectionStart, selectionEnd, action = 'Inserted', trailingText = '') {
     const documentState = documents.get(selectedFile.path);
-    if (documentState) documentState.assets = [...(documentState.assets || []), imported];
+    if (documentState) documentState.assets = [...(documentState.assets || []).filter(asset => asset.relative !== imported.relative), imported];
     assetMap.set(imported.relative, imported.url);
     assetMap.set(imported.relative.split('/').pop(), imported.url);
     addImageToFolderTree(imported);
     source.setSelectionRange(selectionStart, selectionEnd);
-    replaceEditorSelection(`![${imageAltText(file.name || 'image')}](${encodedMarkdownPath(imported.relative)})${isSlideDocument() ? '{width=3in}' : ''}${trailingText}`);
+    replaceEditorSelection(`![${imageAltText(name)}](${encodedMarkdownPath(imported.relative)})${trailingText}`);
     statusText.textContent = `${action} image as ${imported.relative}`;
     return imported;
+  }
+  async function chooseImage() {
+    const originalFile = selectedFile, originalContent = source.value, start = source.selectionStart, end = source.selectionEnd;
+    const imported = await desktop.chooseImage(originalFile.path);
+    if (!imported) return;
+    if (selectedFile !== originalFile || source.value !== originalContent) throw Error('The document changed. Choose the image again.');
+    insertEditorImage(imported, imported.name || 'image', start, end);
+  }
+  async function insertContent(id) {
+    const item = window.HandoutInsert.find(id), mode = isSlideDocument() ? 'slides' : 'handout';
+    if (!window.HandoutInsert.applicable(item, { mode, hasDocument: !source.disabled, saved: !!selectedFile && !selectedFile.untitled })) return;
+    try {
+      if (id === 'image') return await chooseImage();
+      if (id === 'drawing') return await desktop.editInVectorLab(null, selectedFile.path);
+      if (id === 'link') return internalLinks.openWeb();
+      if (id === 'internal-link') return internalLinks.open();
+      if (item.slideSnippet) return slideStudio.insertSnippet(item.slideSnippet);
+      if (item.dialog) {
+        if (mode === 'slides') slideStudio.prepareInsertion();
+        return openSnippetDialog(item.dialog);
+      }
+      if (item.snippet) return mode === 'slides' ? slideStudio.insertContent(snippets[item.snippet]) : insertSnippet(snippets[item.snippet]);
+    } catch (error) { statusText.textContent = `Could not insert: ${error.message}`; }
   }
   let pasteAsPlainText = false;
   source.addEventListener('keydown', event => { pasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v'; });
@@ -2739,7 +2781,14 @@ if (window.handoutDesktop) {
   document.addEventListener('slides:guide', () => void showSyntaxGuide('SLIDES_GUIDE.md'));
   desktop.onMenuCommand(async ({ command, payload }) => {
     if (command === 'new-handout') return makeNewHandout();
+    if (command === 'new-example-handout') {
+      discardBlankUntitledHandout();
+      const key = `__untitled_example_${Date.now()}__`;
+      addDocument({ type: 'file', name: 'example-handout.md', path: key, markdown: true, untitled: true }, snippets.boilerplate, []);
+      dirty = true; markDirty(true); drawTabs(); return;
+    }
     if (command === 'new-slides') return makeUntitledSlides();
+    if (command === 'insert-content') return insertContent(payload);
     if (command === 'export-pptx') return exportSlidesPowerPoint();
     if (command === 'present-slides') return slideStudio.present();
     if (command === 'exit-presentation') return handoutPresenter.active ? handoutPresenter.stop() : slideStudio.stopPresentation();
@@ -2786,10 +2835,6 @@ if (window.handoutDesktop) {
     if (unsaved && (!recoveryReady || !persistRecovery())) { event.preventDefault(); event.returnValue = ''; }
   });
 if (desktop?.editInVectorLab) {
-  const drawButton=document.createElement('button');drawButton.type='button';drawButton.textContent='Draw image…';drawButton.title='Create and insert artwork with Vector Lab';
-  document.getElementById('document-settings-button').before(drawButton);
-  drawButton.onclick=async()=>{try{if(!selectedFile || selectedFile.untitled)throw Error('Save your document before drawing an image.');await desktop.editInVectorLab(null,selectedFile.path);}catch(error){statusText.textContent=error.message;}};
-
   document.addEventListener('contextmenu', event => {
     if (!event.target.closest('#preview, .slide-presentation, .handout-presentation')) return;
     const image = event.target.closest('img');

@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('handoutDesktop', {
   openFile: invoke('files:open-dialog'), recentFiles: invoke('files:recent'), openRecent: invoke('files:open-recent'),
   readFile: invoke('files:read'), saveFile: invoke('files:save'), saveNewFile: invoke('files:save-new'), newFile: invoke('files:new'), renameFile: invoke('files:rename'), deleteFile: invoke('files:delete'),
   editInVectorLab: invoke('vector-lab:edit'), onVectorLabSaved: subscribe('vector-lab:saved'),
-  importImage: invoke('assets:import-image'), imageReference: invoke('assets:reference'), renameImage: invoke('assets:rename-image'),
+  chooseImage: invoke('assets:choose-image'), importImage: invoke('assets:import-image'), imageReference: invoke('assets:reference'), renameImage: invoke('assets:rename-image'),
   print: invoke('handout:print'), exportPdf: invoke('handout:pdf'), exportZip: invoke('handout:zip'),
   googleSettings: invoke('google:settings'), saveGoogleClientId: invoke('google:save-client-id'), googleSignIn: invoke('google:sign-in'), googleSignOut: invoke('google:sign-out'),
   googleExportPdf: invoke('google:export-pdf'), googleDocLink: invoke('google:doc-link'), googleSync: invoke('google:sync'), googlePush: invoke('google:push'), googlePull: invoke('google:pull'),

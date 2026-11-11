@@ -785,11 +785,13 @@ if (window.handoutVectorLab?.version === 1) {
   window.handoutVectorLabConnected = true;
   const bridge = window.handoutVectorLab;
   const toolbar = document.createElement('div');
-  toolbar.style.cssText='position:fixed;bottom:12px;right:16px;z-index:10000;background:#fff;padding:10px;border:1px solid #aaa;border-radius:8px;display:flex;gap:12px;align-items:center;color:#172c3b';
+  toolbar.style.cssText='position:fixed;bottom:12px;right:16px;z-index:10000;background:#fff;padding:10px;border:1px solid #aaa;border-radius:8px;display:flex;flex-wrap:wrap;max-width:calc(100vw - 32px);box-sizing:border-box;gap:12px;align-items:center;color:#172c3b';
   const status=document.createElement('span');status.textContent='Opening image from Handout Maker…';
   const save=document.createElement('button');save.textContent='Save back to slideshow';save.disabled=true;
+  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.title='Close Vector Lab without saving or inserting unsaved changes';
+  cancel.onclick=()=>{void bridge.close().catch(error=>{status.textContent='Could not close Vector Lab: '+error.message;});};
   const format=document.createElement('select');format.setAttribute('aria-label','Save image format');
-  toolbar.append(status,format,save);document.body.append(toolbar);
+  toolbar.append(status,format,cancel,save);document.body.append(toolbar);
   let session;
   const base64 = async blob => new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('Could not encode image.'));reader.readAsDataURL(blob);});
   void (async()=>{
@@ -820,7 +822,7 @@ if (window.handoutVectorLab?.version === 1) {
     }catch(error){status.textContent='Could not open image: '+error.message;toolbar.setAttribute('role','alert');toolbar.style.borderColor='#b42318';toolbar.style.maxWidth='90vw';status.style.whiteSpace='normal';say(status.textContent);}
   })();
   save.onclick=async()=>{
-    save.disabled=true;
+    save.disabled=true;cancel.disabled=true;
     try {
       finish(); const revision=snapshot(); let blob;
       if(session.mime==='image/svg+xml')blob=new Blob([serializeSVG(art,true)],{type:session.mime});
@@ -831,9 +833,9 @@ if (window.handoutVectorLab?.version === 1) {
         if(format.value==='image/png')blob=await embedEditableSVG(blob,serializeSVG(art,true));
       }
       const result=await bridge.save({version:1,mime:format.value,base64:await base64(blob)});
-      if(result.saved){if(result.mime)session.mime=result.mime;if(result.name)session.name=result.name;save.textContent='Save back to slideshow';if(session.mime==='image/png'){format.replaceChildren(new Option('Editable PNG','image/png'));}}
+      if(result.saved){if(result.mime)session.mime=result.mime;if(result.name)session.name=result.name;save.textContent='Save back to slideshow';cancel.textContent='Close';if(session.mime==='image/png'){format.replaceChildren(new Option('Editable PNG','image/png'));}}
       const dirty=!result.saved || snapshot()!==revision;bridge.dirty(dirty);
       status.textContent=result.saved?(dirty?'Saved; newer changes still need saving.':'Saved to slideshow.'):'Save cancelled.';
-    }catch(error){status.textContent=error.message;bridge.dirty(true);}finally{save.disabled=false;}
+    }catch(error){status.textContent=error.message;bridge.dirty(true);}finally{save.disabled=false;cancel.disabled=false;}
   };
 }

@@ -7,6 +7,7 @@ const { createEntry, moveHandout, moveFolder, checkedPath } = require('./fileBro
 const { extractArchive } = require('./zipFiles');
 const { RecoveryStore } = require('./recovery');
 const { WorkspaceSessionStore, restoreSession } = require('./workspaceSession');
+const insertMenu = require('../renderer/insert-menu');
 let sessionStore;
 const workspaceSession = () => sessionStore || (sessionStore = new WorkspaceSessionStore(app.getPath('userData')));
 let recoveryStore;
@@ -17,6 +18,7 @@ let editorWrapLines = false;
 let editorShowWhitespace = false;
 let handoutTheme = 'default';
 let documentMode = 'handout';
+let documentContext = { hasDocument: false, saved: false };
 let presentationState = null;
 const markdownExtension = /\.(md|markdown|mdown)$/i; const imageExtension = /\.(png|jpe?g|gif|webp|svg)$/i;
 const videoExtension = /\.(mp4|m4v|webm|ogv|ogg|mov)$/i;
@@ -51,13 +53,12 @@ async function refreshApplicationMenu() {
     ['Half letter landscape', 'half-landscape'], ['Two portrait half-sheet copies', 'half-duplicate-portrait'],
     ['Two landscape half-sheet copies', 'half-duplicate-landscape'], ['8.5×11 booklet', 'booklet-letter'], ['11×17 booklet', 'booklet']
   ];
-  const quickSnippet = (label, id, accelerator) => ({ label, ...(accelerator ? { accelerator } : {}), click: () => sendMenuCommand('insert-snippet', id) });
-  const snippetDialog = (label, id) => ({ label, click: () => sendMenuCommand('open-snippet-dialog', id) });
   if (presentationState) return;
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
       { label: 'New Handout', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand('new-handout') },
+      { label: 'New Example Handout', click: () => sendMenuCommand('new-example-handout') },
       { label: 'New Slide Deck', accelerator: 'CmdOrCtrl+Alt+N', click: () => sendMenuCommand('new-slides') },
       { label: 'Open File…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand('open-file') },
       { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand('open-folder') },
@@ -80,22 +81,7 @@ async function refreshApplicationMenu() {
       { type: 'separator' }, ...(process.platform === 'darwin' ? [{ role: 'close' }] : [{ role: 'quit' }])
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, { type: 'separator' }, { label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => sendMenuCommand('find') }] },
-    { label: 'Snippets', enabled: documentMode !== 'slides', submenu: [
-      { label: 'Basics', submenu: [
-        quickSnippet('Handout Boilerplate', 'boilerplate'), { type: 'separator' },
-        quickSnippet('Heading', 'heading'), quickSnippet('Checklist', 'checklist'),
-        quickSnippet('Answer Lines', 'lines'), quickSnippet('Inline Answer', 'inline-lines'),
-        quickSnippet('Drawing Space', 'space'), quickSnippet('Box Space', 'box'), quickSnippet('Dot-grid Space', 'dots')
-      ] },
-      { label: 'Questions & Assessment', submenu: [
-        snippetDialog('Question…', 'question'), snippetDialog('Rubric…', 'rubric'),
-        { type: 'separator' }, quickSnippet('Total Points', 'total-points'), quickSnippet('Grade Box', 'grade-box')
-      ] },
-      { label: 'Layout', submenu: [
-        quickSnippet('Image + Text Wrap', 'wrap'), quickSnippet('QR Code', 'qr'), quickSnippet('YouTube Video', 'youtube'), quickSnippet('Local Video', 'video'), snippetDialog('Columns…', 'columns'),
-        snippetDialog('Table…', 'table'), quickSnippet('Page Break', 'pagebreak'), quickSnippet('Style Block', 'style')
-      ] }
-    ] },
+    { label: 'Insert', submenu: insertMenu.build({ mode: documentMode, ...documentContext }, sendMenuCommand) },
     { label: 'View', submenu: [
       { label: 'Toggle Answers', enabled: documentMode !== 'slides', click: () => sendMenuCommand('toggle-answers') },
       { label: 'Toggle Handout Files Panel', click: () => sendMenuCommand('toggle-panel', 'file') },
@@ -109,11 +95,6 @@ async function refreshApplicationMenu() {
       ].map(([label, value]) => ({ label, type: 'radio', checked: handoutTheme === value, click: () => { handoutTheme = value; sendMenuCommand('set-theme', value); } })) },
       { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
       { type: 'separator' }, { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
-    ] },
-    { label: 'Slides', enabled: documentMode === 'slides', submenu: [
-      { label: 'Present', accelerator: 'F5', click: () => sendMenuCommand('present-slides') },
-      { label: 'Snippets', submenu: [['Columns', 'columns'], ['Background', 'background'], ['Text', 'text'], ['Notes', 'notes'], ['QR code', 'qr'], ['YouTube video', 'youtube'], ['Local video', 'video'], ['Table…', 'table'], ['Centered text', 'center'], ['Fit text', 'fit'], ['List layout', 'list'], ['Checklist', 'checklist'], ['Card grid', 'grid']].map(([label, value]) => ({ label, click: () => sendMenuCommand('slide-snippet', value) })) },
-      { label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }
     ] },
     { role: 'windowMenu', ...(process.platform === 'darwin' ? {} : { submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close', accelerator: 'Ctrl+Shift+W' }] }) },
     { role: 'help', submenu: [{ label: 'Slide Syntax Guide', click: () => sendMenuCommand('open-handout-guide', 'SLIDES_GUIDE.md') }, { label: 'AI Handout Syntax Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'AI_HANDOUT_GUIDE.md')) }, { label: 'Handout Markdown Guide', click: () => sendMenuCommand('open-handout-guide', path.join(__dirname, '..', 'demo', 'HANDOUT_MARKDOWN.md')) }] }
@@ -290,9 +271,10 @@ ipcMain.handle('browser:open-external', async (_event, target) => {
   if (error) throw Error(error);
   return true;
 });
-ipcMain.handle('document:mode', async (_event, mode, theme) => {
+ipcMain.handle('document:mode', async (_event, mode, theme, context) => {
   if (!['handout', 'slides'].includes(mode)) throw Error('Unknown document mode.');
   documentMode = mode;
+  if (context) documentContext = { hasDocument: context.hasDocument === true, saved: context.saved === true };
   if (['default', 'classic', 'modern', 'spacious'].includes(theme)) handoutTheme = theme;
   await refreshApplicationMenu();
 });
@@ -390,6 +372,24 @@ ipcMain.handle('assets:reference', async (_event, documentPath, imagePath) => {
   if (typeof imagePath !== 'string' || !(imageExtension.test(imagePath)||videoExtension.test(imagePath))) throw new Error('Choose an image or video from the open folder.');
   await checkedPath(currentRoot,imagePath);
   return path.relative(path.dirname(documentPath), imagePath).split(path.sep).join('/');
+});
+ipcMain.handle('assets:choose-image', async (event, documentPath) => {
+  if (event.sender !== mainWindow.webContents) throw Error('Invalid image request.');
+  validHandoutPath(documentPath);
+  const root = currentRoot;
+  await checkedPath(root, documentPath);
+  const result = await dialog.showOpenDialog(mainWindow, { title: 'Insert image', defaultPath: path.dirname(documentPath),
+    properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }] });
+  if (result.canceled || !result.filePaths.length) return null;
+  const imagePath = result.filePaths[0], name = path.basename(imagePath);
+  if (!imageExtension.test(imagePath)) throw Error('Choose a PNG, JPEG, GIF, WebP, or SVG image.');
+  if (currentRoot !== root) throw Error('The open folder changed. Choose the image again.');
+  if (isInsideRoot(imagePath) && await checkedPath(root, imagePath).then(() => true, () => false)) {
+    return { path: imagePath, name, relative: path.relative(path.dirname(documentPath), imagePath).split(path.sep).join('/'), url: pathToFileURL(imagePath).toString() };
+  }
+  const stat = await fs.stat(imagePath);
+  if (!stat.isFile() || stat.size > 25 * 1024 * 1024) throw Error('Choose an image smaller than 25 MB.');
+  return { ...await importImageAsset(documentPath, await fs.readFile(imagePath)), name };
 });
 ipcMain.handle('assets:rename-image', async (_event, imagePath, requestedName) => {
   if (typeof imagePath !== 'string' || !imageExtension.test(imagePath) || !isInsideRoot(imagePath)) throw new Error('The selected image is outside the open folder.');

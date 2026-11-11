@@ -18,7 +18,7 @@ Separate slides with a line containing three dashes: `---`. Arrange content with
 - Start with `:::columns widths=3/5,2/5`: concise text on the left, one image on the right. Use equal halves for a balanced image and short text; give a wide image more room when the text is very short. Portrait images generally need less width.
 - Aim for 3–5 short bullets or roughly 35–60 body words per image-and-text slide. These are planning targets, not a guarantee of fit. Split dense material across slides and move teacher detail into `:::notes` rather than shrinking everything into one slide.
 - Omit image dimensions initially. The app preserves the image proportions and fits it inside the remaining column space. A `width` parameter is a maximum, not permission to push content off the slide. Avoid fixed image heights unless a specific size is required.
-- Use the **Two columns: text + image** template for a starter. For an existing simple slide with one image, **Auto layout** chooses column proportions using text length, image aspect ratio, and estimated overflow, then writes ordinary `:::columns` Markdown. It preserves the title and teacher notes. It does not replace existing columns, backgrounds, or positioned text, and may still recommend splitting very long content.
+- Use the **Two columns: text + image** template for a starter. For an existing simple slide with one image, right-click its thumbnail or preview and choose **Create columns**. It chooses column proportions using text length, image aspect ratio, and estimated overflow, then writes ordinary `:::columns` Markdown. It preserves the title and teacher notes. It does not replace existing columns, backgrounds, or positioned text, and may still recommend splitting very long content.
 - Review the preview and overflow warnings. Use real available image filenames; do not invent assets.
 
 ```md
@@ -77,7 +77,10 @@ Each slide can have a `#` title followed by ordinary Markdown content. Text, ima
 | `theme` | `classroom`, `light`, `dark` |
 | `aspect` | `16:9`, `4:3` |
 
-Theme and aspect controls update the YAML. Ordinary Markdown files without `type: slides` remain handouts.
+Choose **Settings… → Document** (or **File → Document settings…**) for Slide
+theme and Slide aspect ratio. Apply updates the YAML and preview in one undoable
+edit; Cancel leaves them unchanged. These controls are kept out of the preview
+toolbar. Ordinary Markdown files without `type: slides` remain handouts.
 
 The **Classroom** theme uses **Trebuchet MS** for headings, body text, and list
 numbers. **Light** and **Dark** use Arial. Positioned text inherits the theme's
@@ -134,7 +137,7 @@ The **Columns** button inserts an editable example at the cursor. No layout sele
 
 ## List layouts
 
-Use **Slides → Snippets → List layout** to insert an editable six-item example.
+Use **Insert → Slide Elements → List Layout** to insert an editable six-item example.
 Wrap one ordinary Markdown list in `:::list` to arrange its items as text blocks:
 
 ```markdown
@@ -332,7 +335,7 @@ Thumbnails show the slide's layout and images. Videos use a static play symbol, 
 
 Click a slide title, paragraph, bullet, image, table row, or code block in the preview to highlight its Markdown in the editor. The editor scrolls to reveal the selection and keeps a visible highlight while keyboard focus stays in the slide preview, so arrow keys still change slides. Previous/Next and slide thumbnails also reveal and highlight the destination slide's heading or first block. Click the code editor when you want the keyboard to edit Markdown. Player controls retain their own arrow-key behavior; click outside a video to resume slide navigation. Ctrl-click a link (⌘-click on Mac) opens it in your browser.
 
-**Add slide** inserts a `---` separator and the selected template after the current slide. Templates are ordinary editable Markdown:
+**Insert slide** inserts a `---` separator and the selected template after the current slide. Templates are ordinary editable Markdown:
 
 - **Blank content:** a simple heading and content placeholder.
 - **Bell-ringer:** a class topic, opening question, agenda, and private teacher notes.
@@ -342,7 +345,7 @@ Click a slide title, paragraph, bullet, image, table row, or code block in the p
 
 **Append slide** adds the selected template at the end of the deck, regardless of which slide you are editing.
 
-Use **Slides → Snippets** to insert Columns, Background, Text, Notes, QR code, Table, Centered text, List layout, Checklist, or Card grid. **Fit text** wraps the current slide in an automatic fitting block. The syntax guide is under **Slides → Slide Syntax Guide**. These insertion and help buttons are kept out of the preview toolbar.
+Use **Insert** for media, links, Text & Tables, and Layout. **Insert → Slide Elements** adds Background Image, Positioned Text, Presenter Notes, Centered Text, List Layout, or Footer. **Fit content** in the slide preview toolbar wraps the current slide in an automatic fitting block. The syntax guide is under **Help → Slide Syntax Guide**. These insertion and help buttons are kept out of the preview toolbar.
 
 ## Image backgrounds and positioned text
 
@@ -383,7 +386,7 @@ Text options:
 
 Text blocks support paragraphs, headings, lists, checklists, line breaks, bold, italic, code, and links. Headings inside a text block stay in that box and use its specified size. Lists remain native PowerPoint bullet or numbering paragraphs in a single text box. Put images, tables, and other layout blocks outside text blocks. Multiple text blocks can be positioned independently, with or without a background. Fonts must be available on the presentation computer; another font may be substituted there.
 
-Use **Slides → Snippets → Background** or **Text** to insert these blocks. Replace the background's `image.jpg` placeholder with your image filename. Click positioned text in the preview to highlight its source and reveal **Move** and **Width** handles. Drag a handle to update the coordinates or width in Markdown. Escape cancels a drag; Undo reverses a completed change. Coordinates can also be edited directly in the source.
+Use **Insert → Slide Elements → Background Image** or **Positioned Text** to insert these blocks. Replace the background's `image.jpg` placeholder with your image filename. Click positioned text in the preview to highlight its source and reveal **Move** and **Width** handles. Drag a handle to update the coordinates or width in Markdown. Escape cancels a drag; Undo reverses a completed change. Coordinates can also be edited directly in the source.
 
 ## Contextual settings
 
@@ -395,9 +398,15 @@ Click a background or text block in the preview, or place the editor cursor insi
 
 Every change updates the Markdown, saves with the document, supports Undo, and carries through to PDF and PowerPoint. The settings row and resize handles stay out of presenting and exported documents. Click ordinary text, a heading, code, or a list and choose **Position freely** to convert it into a movable text block at its current position. A whole list moves together and retains native bullets. Positioned text overlays other content; flowing text can reflow after conversion, so review the arrangement.
 
+The **Footer** button in the slide preview toolbar creates a starter footer if
+none exists and opens its settings. **Insert → Slide Elements → Footer** does
+the same. An existing or inherited footer opens without duplication. New footers
+apply to the current slide; enable **Continue on following slides** to reuse
+them. Footer creation supports Undo.
+
 ## Shared handout elements
 
-Use **Link…** beside the Markdown editor's Settings button to choose a heading or
+Use **Insert → Link to Heading…** (or **Link to Slide…** for slides) to choose a heading or
 slide in this document. `[Practice](#practice)` jumps to the slide containing
 `# Practice` or `## Practice`; click the link in preview or during presentation.
 The jump remains a native slide link in PowerPoint export. Reordering slides
@@ -429,7 +438,7 @@ Slides accept the same Markdown images, QR codes, lists, emphasis, links, and Ma
 
 Image and QR widths accept `in`, `cm`, `mm`, `px`, and `%`. Percentages refer to the containing column or slide content area. Dragging a resize handle writes a width in inches, preserves the image's proportions, and retains attributes such as `.float-right`. The width setting can also be edited directly. Local QR codes are generated offline, with the same HTTP/HTTPS URL checks as handouts, and export as sharp vector images. They do not fetch the linked page.
 
-Markdown tables export as native editable PowerPoint tables. Use **Slides → Snippets → Table** for the table builder; slides use Markdown tables rather than HTML. Table cells can be edited in the source after clicking the corresponding preview row.
+Markdown tables export as native editable PowerPoint tables. Use **Insert → Text & Tables → Table** for the table builder; slides use Markdown tables rather than HTML. Table cells can be edited in the source after clicking the corresponding preview row.
 
 `:::grid` / `:::cell` are supported as aliases for columns, including fractional `widths=` values. `cards` draws editable card borders. `:::checklist` uses checkbox bullets, including in movable text blocks.
 
@@ -461,9 +470,15 @@ Private teacher reminders.
 :::
 ```
 
+Right-click a slide thumbnail or its preview background/text for **Duplicate slide**
+or **Delete slide**. Deletion removes that slide’s complete content and presenter
+notes, and supports Undo/Redo. Other slides and the document settings are kept.
+Deleting the only slide leaves an empty slide ready for new content. **Create
+columns** appears in this menu when the slide supports that layout change.
+
 ## Present
 
-**Present** hides the editor, app menus, and presentation controls. Only the slide is displayed, with letterboxing when the screen and slide proportions differ.
+The separate **Present** icon (screen with a play symbol) hides the editor, app menus, and presentation controls. Only the slide is displayed, with letterboxing when the screen and slide proportions differ.
 
 - Next slide: click/tap, Right/Down arrow, Space, or Page Down.
 - Previous slide: Left/Up arrow, Page Up, Shift-click, or right-click.
@@ -475,8 +490,8 @@ There are no visible navigation menus or buttons during presentation. Presenter 
 ## Save and export
 
 - **Save** saves the editable Markdown source.
-- **Export PowerPoint…** exports the entire deck, including editable objects and speaker notes. Ordinary lists become editable text boxes with native bullets or numbering, including nested items. Lists in separate columns remain separate text boxes. `:::list` layouts export their large numbers and item text as separate editable objects. PowerPoint edits do not sync back into Markdown.
-- **Export PDF…** and printing include every slide, one per page at the deck's aspect ratio, even though the preview displays only the current slide.
+- **File → Export PowerPoint…** exports the entire deck, including editable objects and speaker notes. Ordinary lists become editable text boxes with native bullets or numbering, including nested items. Lists in separate columns remain separate text boxes. `:::list` layouts export their large numbers and item text as separate editable objects. PowerPoint edits do not sync back into Markdown.
+- **File → Export PDF…** and printing include every slide, one per page at the deck's aspect ratio, even though the preview displays only the current slide.
 - The guide's **Copy entire guide** and **Save as…** actions let you share these instructions with an AI agent.
 
 Review overflow and image warnings before exporting. Split crowded content into additional slides. Font rendering can differ between computers, so check the deck on the computer you will use for teaching.
@@ -495,7 +510,7 @@ Review overflow and image warnings before exporting. Split crowded content into 
 
 ## Embedded videos
 
-Use **Slides → Snippets → YouTube video** or **Local video**:
+Use **Insert → YouTube Video** or **Local video**:
 
 ```md
 # Observe the garden
@@ -520,4 +535,4 @@ PDF and print output show video reference cards. PowerPoint exports include loca
 
 The app reads each image's actual dimensions and preserves its aspect ratio. A flowing image fits both its column width and the height left after reserving space for following content. Images with a `width` parameter use it as a maximum and can shrink further to fit the available height. QR codes keep their square sizing rules. Explicit image heights remain manual constraints and can still cause overflow. Background images continue to cover the whole slide and crop excess edges. Preview and PowerPoint share the same geometry.
 
-**Auto layout** is an explicit, undoable edit. It tries several two-column proportions and prefers arrangements that fit the estimated text and image dimensions. It does not silently rearrange your source while you type, and cannot judge the educational importance or visual detail of an image. If text alone exceeds the slide, split it across slides.
+The right-click **Create columns** action is an explicit, undoable edit. It appears only for compatible slides and can also split suitable text into columns. It tries several two-column proportions and prefers arrangements that fit the estimated text and image dimensions. It does not silently rearrange your source while you type, and cannot judge the educational importance or visual detail of an image. If text alone exceeds the slide, split it across slides.

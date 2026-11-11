@@ -6,6 +6,8 @@ To rebuild: install this directory's locked dependencies with npm ci, then run n
 
 The adapter accepts image bytes from the isolated Electron preload and returns editable SVG or PNG. The app owns the target path and checks for external changes before saving. PNG exports embed editable SVG.
 
+The Handout Maker toolbar includes Cancel beside Insert/Save. It closes through the host's existing unsaved-image confirmation without writing an image or inserting a reference. After saving, it reads Close and retains already-saved changes. It is disabled while saving.
+
 Updated with drawing-app commit `ea0d6b36074e0ebb433bfd1b2388cda7fff69dec` (2026-11-02): drag crops stay aligned with the canvas on rotated images, while preserving shape restrictions and editable SVG round trips. Handout Maker's open/save adapter is retained.
 
 To check the imported crop regressions, run `npm test` in this directory after `npm ci`. These browser tests currently use Chrome at `/usr/bin/google-chrome` and cover rotated crop previews, undo/redo, reset, shape clipping, browser recovery, and SVG reopening.
