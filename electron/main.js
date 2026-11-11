@@ -6,6 +6,9 @@ const drive = require('./googleDrive');
 const { createEntry, moveHandout, moveFolder, checkedPath } = require('./fileBrowser');
 const { extractArchive } = require('./zipFiles');
 const { RecoveryStore } = require('./recovery');
+const { WorkspaceSessionStore, restoreSession } = require('./workspaceSession');
+let sessionStore;
+const workspaceSession = () => sessionStore || (sessionStore = new WorkspaceSessionStore(app.getPath('userData')));
 let recoveryStore;
 const recovery = () => recoveryStore || (recoveryStore = new RecoveryStore(path.join(app.getPath('userData'), 'recovery')));
 let mainWindow; let currentRoot = null;
@@ -183,6 +186,23 @@ for (const [channel, action] of [['recovery:read', () => recovery().load()], ['r
     event.returnValue = { ok: true, ...action(value) };
   } catch (error) { event.returnValue = { ok: false, error: error.message }; }
 });
+for (const [channel, action] of [['session:read', () => workspaceSession().load()], ['session:write', snapshot => {
+  workspaceSession().save(snapshot);
+  if (!snapshot.root && !snapshot.documents.length) currentRoot = null;
+}]]) ipcMain.on(channel, (event, value) => {
+  try {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw Error('Invalid session request.');
+    event.returnValue = { ok: true, ...action(value) };
+  } catch (error) { event.returnValue = { ok: false, error: error.message }; }
+});
+ipcMain.handle('session:restore', async event => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) throw Error('Invalid session request.');
+  const restored = await restoreSession(workspaceSession().load().snapshot, {
+    readFolder: openHandoutFolder, readDocument: filePath => fs.readFile(filePath, 'utf8'), readAssets: assetsIn
+  });
+  currentRoot = restored.folder?.path || restored.documents[0]?.root || null;
+  return restored;
+});
 ipcMain.handle('recovery:restore', async event => {
   if (!mainWindow || event.sender !== mainWindow.webContents) throw Error('Invalid recovery request.');
   const snapshot = recovery().load().snapshot;
@@ -194,8 +214,9 @@ ipcMain.handle('recovery:restore', async event => {
   const assetCache = new Map(), documents = [];
   for (const document of snapshot.documents) {
     let disk = null, available = false;
-    if (document.path && currentRoot) {
-      try { const target = await checkedPath(currentRoot, document.path); disk = await fs.readFile(target, 'utf8'); available = true; } catch {}
+    const documentRoot = document.root || currentRoot;
+    if (document.path && documentRoot) {
+      try { const target = await checkedPath(documentRoot, document.path); disk = await fs.readFile(target, 'utf8'); available = true; } catch {}
     }
     const sameFile = available && (disk === document.savedContent || disk === document.content);
     const file = sameFile ? { path: document.path, name: path.basename(document.path), type: 'file', markdown: true } : {

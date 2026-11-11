@@ -1153,9 +1153,25 @@ if (window.handoutDesktop) {
   let wrapLines = false;
   let showWhitespace = false;
   let recoveryReady = false, recoveryWarning = '';
+  let sessionReady = false, sessionWarning = '';
   const recoveryStatus = document.createElement('div'); recoveryStatus.className = 'recovery-status'; recoveryStatus.hidden = true;
   recoveryStatus.setAttribute('role', 'status'); tabBar.after(recoveryStatus);
   source.disabled = true;
+
+  function persistSession() {
+    if (!sessionReady || !desktop.saveSession) return;
+    saveActiveState();
+    try {
+      const result = desktop.saveSession({ version: 1, root: folder?.path || null, activePath,
+        documents: [...documents.values()].filter(state => !state.file.untitled).map(state => ({
+          path: state.file.path, root: state.root || null, layout: state.layout, handoutTheme: state.handoutTheme,
+          selectionStart: state.selectionStart, selectionEnd: state.selectionEnd, scrollTop: state.scrollTop,
+          scrollLeft: state.scrollLeft, previewScrollTop: state.previewScrollTop
+        })) });
+      if (!result.ok) throw Error(result.error);
+      sessionWarning = '';
+    } catch (error) { sessionWarning = `Could not remember this session: ${error.message}.`; }
+  }
 
   function persistRecovery() {
     if (!recoveryReady || !desktop.saveRecovery) return false;
@@ -1170,8 +1186,8 @@ if (window.handoutDesktop) {
       const result = desktop.saveRecovery({ version: 1, root: folder?.path || null, activeId: activePath, documents: drafts });
       if (!result.ok) throw Error(result.error);
       recoveryStatus.classList.remove('recovery-error');
-      recoveryStatus.hidden = !drafts.length && !recoveryWarning;
-      recoveryStatus.textContent = [drafts.length ? 'Unsaved work protected locally. Save to update your Markdown files.' : '', recoveryWarning].filter(Boolean).join(' ');
+      recoveryStatus.hidden = !drafts.length && !recoveryWarning && !sessionWarning;
+      recoveryStatus.textContent = [drafts.length ? 'Unsaved work protected locally. Save to update your Markdown files.' : '', recoveryWarning, sessionWarning].filter(Boolean).join(' ');
       return true;
     } catch (error) {
       recoveryStatus.hidden = false; recoveryStatus.classList.add('recovery-error');
@@ -1180,43 +1196,73 @@ if (window.handoutDesktop) {
     }
   }
   async function initializeRecovery() {
-    if (!desktop.readRecovery || !desktop.saveRecovery) return;
-    let result;
-    try { result = desktop.readRecovery(); } catch (error) { result = { ok: false, error: error.message }; }
-    if (!result.ok) {
-      recoveryWarning = `Previous recovery could not be read: ${result.error}.`;
-      recoveryReady = true; persistRecovery(); return;
+    let previous = null, result = { ok: true, snapshot: null };
+    if (desktop.readSession) {
+      try {
+        const session = desktop.readSession();
+        if (!session.ok) throw Error(session.error);
+        previous = session.snapshot; recoveryWarning = session.warning || '';
+      } catch (error) { recoveryWarning = `Could not read the previous session: ${error.message}.`; }
     }
-    recoveryWarning = result.warning || '';
-    if (!result.snapshot?.documents?.length) { recoveryReady = true; persistRecovery(); return; }
-    const snapshot = result.snapshot, dialog = document.createElement('dialog'); dialog.className = 'unsaved-dialog recovery-dialog';
-    dialog.setAttribute('aria-label', 'Recover unsaved work');
-    const heading = document.createElement('h3'); heading.textContent = 'Recover unsaved work?';
-    const note = document.createElement('p'); note.textContent = `${snapshot.documents.length} document${snapshot.documents.length === 1 ? '' : 's'} protected on ${new Date(snapshot.savedAt).toLocaleString()}. Restore to continue editing. Discard recovery permanently removes these drafts; original files remain unchanged.`;
+    if (desktop.readRecovery && desktop.saveRecovery) {
+      try { result = desktop.readRecovery(); } catch (error) { result = { ok: false, error: error.message }; }
+      recoveryWarning = [recoveryWarning, result.ok ? result.warning : `Previous recovery could not be read: ${result.error}.`].filter(Boolean).join(' ');
+    }
+    const snapshot = result.ok ? result.snapshot : null, hasDrafts = !!snapshot?.documents?.length;
+    const finishStartup = () => { sessionReady = recoveryReady = true; persistSession(); persistRecovery(); };
+    if (!previous && !hasDrafts) { finishStartup(); return; }
+    const dialog = document.createElement('dialog'); dialog.className = 'unsaved-dialog recovery-dialog';
+    dialog.setAttribute('aria-label', hasDrafts ? 'Recover unsaved work' : 'Restore previous session');
+    const heading = document.createElement('h3'); heading.textContent = hasDrafts ? 'Recover unsaved work?' : 'Restore previous session?';
+    const note = document.createElement('p');
+    note.textContent = hasDrafts
+      ? `${snapshot.documents.length} document${snapshot.documents.length === 1 ? '' : 's'} protected on ${new Date(snapshot.savedAt).toLocaleString()}. Restore to continue editing${previous ? ' with your previous folder and open files' : ''}. Discard recovery starts fresh and permanently removes these drafts; original files remain unchanged.`
+      : 'Reopen your previous folder and files, and return to the active tab. Files are read from disk so you get the latest saved versions.';
     const list = document.createElement('ul');
-    for (const draft of snapshot.documents) { const item = document.createElement('li'); item.textContent = draft.name; item.title = draft.path || 'New unsaved document'; list.append(item); }
+    if (previous?.root) { const item = document.createElement('li'); item.textContent = previous.root; list.append(item); }
+    const draftPaths = new Set((snapshot?.documents || []).map(draft => draft.path));
+    for (const file of previous?.documents || []) {
+      if (draftPaths.has(file.path)) continue;
+      const item = document.createElement('li'); item.textContent = file.path; list.append(item);
+    }
+    for (const draft of snapshot?.documents || []) { const item = document.createElement('li'); item.textContent = draft.name; item.title = draft.path || 'New unsaved document'; list.append(item); }
     const error = document.createElement('p'); error.setAttribute('role', 'alert');
-    const restore = document.createElement('button'); restore.textContent = 'Restore files';
-    const discard = document.createElement('button'); discard.textContent = 'Discard recovery';
+    const restore = document.createElement('button'); restore.textContent = hasDrafts ? 'Restore files' : 'Restore session';
+    const discard = document.createElement('button'); discard.textContent = hasDrafts ? 'Discard recovery' : 'Start fresh';
     restore.onclick = async () => {
       restore.disabled = discard.disabled = true; error.textContent = 'Restoring…';
       try {
-        const restored = await desktop.restoreRecovery();
-        if (!restored?.documents?.length) throw Error('No recovery documents are available.');
+        const recovered = hasDrafts ? await desktop.restoreRecovery() : null;
+        if (hasDrafts && !recovered?.documents?.length) throw Error('No recovery documents are available.');
+        const workspace = previous ? await desktop.restoreSession() : null;
         selectedFile = null; activePath = null; documents.clear();
-        folder = restored.folder; folderName.textContent = folder?.name || 'No folder';
+        folder = workspace?.folder || recovered?.folder || null; folderName.textContent = folder?.name || 'No folder';
         if (folder) restoreFolderExpansion(folder.path);
-        for (const state of restored.documents) documents.set(state.file.path, state);
-        recoveryWarning = [recoveryWarning, ...restored.documents.map(state => state.recoveryNote).filter(Boolean)].filter(Boolean).join(' ');
+        for (const state of workspace?.documents || []) documents.set(state.file.path, state);
+        for (const state of recovered?.documents || []) {
+          if (state.path && state.path !== state.file.path) documents.delete(state.path);
+          documents.set(state.file.path, state);
+        }
+        recoveryWarning = [recoveryWarning, ...(recovered?.documents || []).map(state => state.recoveryNote),
+          workspace?.skipped?.length ? `Unavailable items skipped: ${workspace.skipped.join(', ')}.` : ''].filter(Boolean).join(' ');
+        const recoveredActive = recovered?.documents.find(state => state.id === previous?.activePath)?.file.path;
+        const nextActive = recoveredActive || (documents.has(previous?.activePath) && previous.activePath) || recovered?.activePath || workspace?.activePath;
         dialog.close(); dialog.remove();
-        recoveryReady = true; activateDocument(restored.activePath); drawTree(); persistRecovery();
-        statusText.textContent = `Recovered ${restored.documents.length} document${restored.documents.length === 1 ? '' : 's'}.`;
+        if (nextActive) activateDocument(nextActive);
+        else { source.value = ''; source.disabled = true; dirty = false; setAssets(folder?.assets || []); makeUntitledHandout(); }
+        drawTree();
+        // Let activation restore preview scrolling before recording the new session.
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        finishStartup();
+        statusText.textContent = `Restored ${documents.size} open document${documents.size === 1 ? '' : 's'}.${workspace?.skipped?.length ? ' Some items are unavailable; see the notice above.' : ''}`;
       } catch (failure) { error.textContent = `Could not restore: ${failure.message}`; restore.disabled = discard.disabled = false; }
     };
     discard.onclick = () => {
-      const cleared = desktop.saveRecovery({ version: 1, root: null, activeId: null, documents: [] });
-      if (!cleared.ok) { error.textContent = `Could not discard recovery: ${cleared.error}`; return; }
-      recoveryReady = true; persistRecovery(); dialog.close(); dialog.remove(); source.focus();
+      if (hasDrafts) {
+        const cleared = desktop.saveRecovery({ version: 1, root: null, activeId: null, documents: [] });
+        if (!cleared.ok) { error.textContent = `Could not discard recovery: ${cleared.error}`; return; }
+      }
+      finishStartup(); dialog.close(); dialog.remove(); source.focus();
     };
     dialog.addEventListener('cancel', event => event.preventDefault());
     dialog.append(heading, note, list, error, restore, discard); document.body.append(dialog); dialog.showModal(); restore.focus();
@@ -1490,7 +1536,7 @@ if (window.handoutDesktop) {
       tab.append(label, close);
       tabBar.append(tab);
     }
-    persistRecovery();
+    persistSession(); persistRecovery();
   }
   function askUnsaved(name) {
     return new Promise(resolve => {
@@ -2320,6 +2366,7 @@ if (window.handoutDesktop) {
     tree.innerHTML = ''; if (folder) addTree(folder.tree, tree);
     if (!tree.childNodes.length) { const empty = document.createElement('p'); empty.className = 'empty-tree'; empty.textContent = browserSearch.value ? 'No matching files.' : 'No files in this folder.'; tree.append(empty); }
     syncTreeSelection();
+    persistSession();
   }
   async function openFile(node, button) {
     if (selectedFile && node.path === selectedFile.path) return;
@@ -2734,6 +2781,7 @@ if (window.handoutDesktop) {
   });
   window.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); } });
   window.addEventListener("beforeunload", event => {
+    persistSession();
     const unsaved = dirty || [...documents.values()].some(state => state.dirty);
     if (unsaved && (!recoveryReady || !persistRecovery())) { event.preventDefault(); event.returnValue = ''; }
   });

@@ -8,6 +8,7 @@ const subscribe = channel => callback => {
 };
 
 contextBridge.exposeInMainWorld('handoutDesktop', {
+  readSession: () => ipcRenderer.sendSync('session:read'), saveSession: snapshot => ipcRenderer.sendSync('session:write', snapshot), restoreSession: invoke('session:restore'),
   readRecovery: () => ipcRenderer.sendSync('recovery:read'), saveRecovery: snapshot => ipcRenderer.sendSync('recovery:write', snapshot), restoreRecovery: invoke('recovery:restore'),
   platform: process.platform, setDocumentMode: invoke('document:mode'), setPresentation: invoke('slides:presentation'), exportPowerPoint: invoke('slides:powerpoint'), droppedFilePath: file => webUtils.getPathForFile(file), openWebLink: invoke('links:open'), readGuide: invoke('help:guide'), saveGuide: invoke('help:save-guide'), previewDocument: invoke('browser:preview'), startFileDrag: target => ipcRenderer.send('browser:drag', target), onDragError: subscribe('browser:drag-error'), revealItem: invoke('browser:reveal'), openExternalFile: invoke('browser:open-external'), extractZip: invoke('browser:extract-zip'),
   createEntry: invoke('browser:create'), moveHandout: invoke('browser:move'), moveFolder: invoke('browser:move-folder'),

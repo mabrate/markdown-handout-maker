@@ -514,6 +514,7 @@ body[data-handout-theme="spacious"] .handout-page li { margin: .05in 0; }
 .recovery-status.recovery-error { color:#842d1f; background:#fff0e8; border-color:#edc2b3; }
 .recovery-dialog { max-width:540px; }
 .recovery-dialog ul { max-height:220px; overflow:auto; padding-left:22px; }
+.recovery-dialog li, .recovery-status { overflow-wrap:anywhere; }
 @media print { .unsaved-dialog { display: none !important; } }
 
 .handout-inspector { position:sticky; top:42px; z-index:4; display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:10px 14px; background:#eef6fa; border-bottom:1px solid #b5cbd7; font-size:12px; }

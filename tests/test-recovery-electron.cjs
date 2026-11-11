@@ -50,6 +50,8 @@ const fs = require('fs/promises'), path = require('path'), os = require('os'), a
     await application.close(); application = null;
 
     page = await launch(); assert.equal(await page.getByRole('dialog', { name: 'Recover unsaved work', exact: true }).count(), 0);
+    const sessionPrompt = page.getByRole('dialog', { name: 'Restore previous session', exact: true });
+    await sessionPrompt.getByRole('button', { name: 'Start fresh', exact: true }).click(); await sessionPrompt.waitFor({ state: 'detached' });
     await command('open-recent', file); await page.waitForFunction(() => document.querySelector('#source').value.includes('Latest unsaved text.'));
     const conflictDraft = '# My draft before a crash'; await page.locator('#source').fill(conflictDraft);
     const child = application.process(), exited = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGKILL'); await exited; application = null;

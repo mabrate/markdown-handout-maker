@@ -66,7 +66,20 @@ files are included; web links remain online links. Assets must use relative path
 inside the open folder. Missing or inaccessible assets stop the export with the
 filename so you can fix the link before sharing.
 
-## Unsaved-file recovery
+## Restoring your workspace and unsaved files
+
+When you reopen the desktop app, it offers to **Restore session** with the folder
+and saved file tabs you last had open, including the active tab, editor selection,
+and scroll positions. Expanded subfolders are remembered too. Choose **Start
+fresh** to begin with an empty workspace instead. The app remembers the current
+workspace, rather than reopening everything listed in Open Recent.
+
+Saved files reopen using their current content on disk. Missing or unavailable
+folders and files are skipped with a notice; other files still open. The session
+record is stored locally as `workspace-session.json` in the app's per-user data
+folder. It contains paths and view settings, not copies of saved file contents.
+If unsaved drafts are also available, one **Restore files** offer restores both
+the workspace and those drafts.
 
 The desktop app automatically keeps a local recovery copy of every unsaved tab,
 including new handouts and slide decks. A green status strip confirms that the
