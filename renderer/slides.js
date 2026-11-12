@@ -396,7 +396,8 @@
     return { enabled: true, settings: { theme, aspect }, slides, warnings };
   }
   function lineCount(text, width, fontSize) {
-    // Conservative shared estimate; the browser also checks actual text overflow.
+    // Fallback for Node-only PowerPoint export. Native PowerPoint list
+    // paragraphs wrap themselves; browser scenes use rendered text below.
     const capacity = Math.max(5, width * 72 / (fontSize * 0.53));
     return String(text).split('\n').reduce((total, line) => {
       let length = 0, count = 1;
@@ -409,7 +410,35 @@
     const width = deck.settings.aspect === '4:3' ? 10 : 40 / 3, height = 7.5;
     const footer = slide.footer && !slide.footer.hidden ? slide.footer : null;
     const elements = [], lists = [], warnings = [...slide.warnings], margin = .62;
-    const textHeight = (runs, w, size, lineHeight = 1.2) => Math.max(.25, lineCount(plain(runs), w, size) * size / 72 * lineHeight + .035);
+    // Use the browser's own line breaking, including proportional fonts and
+    // inline formatting. Character counts can reserve a blank second line for
+    // text that actually fits, pushing every subsequent bullet down.
+    const heightCache = new Map();
+    const textHeight = (runs, w, size, lineHeight = 1.2, props = {}) => {
+      if (typeof document === 'undefined' || !document.body || props.paragraphs?.some(paragraph => paragraph.bullet)) {
+        return Math.max(.25, lineCount(plain(runs), w, size) * size / 72 * lineHeight + .035);
+      }
+      const font = props.code ? 'Courier New' : props.font || theme.font;
+      const key = JSON.stringify([runs.map(run => [run.text, !!run.bold, !!run.italic, !!run.code]), w, size, lineHeight, !!props.bold, font]);
+      if (heightCache.has(key)) return heightCache.get(key);
+      const node = document.createElement('div');
+      node.style.cssText = 'all:initial;position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;display:block;box-sizing:content-box;padding:0;border:0;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;';
+      node.style.width = `${w * 96}px`;
+      node.style.fontFamily = `"${font}", Arial, sans-serif`;
+      node.style.fontSize = `${size * 96 / 72}px`;
+      node.style.fontWeight = props.bold ? 'bold' : 'normal';
+      node.style.lineHeight = String(lineHeight);
+      for (const run of runs) {
+        const span = document.createElement('span'); span.textContent = run.text;
+        if (run.bold) span.style.fontWeight = 'bold';
+        if (run.italic) span.style.fontStyle = 'italic';
+        if (run.code) span.style.fontFamily = 'Courier New';
+        node.append(span);
+      }
+      document.body.append(node);
+      const h = Math.max(.25, node.getBoundingClientRect().height / 96 + .035);
+      node.remove(); heightCache.set(key, h); return h;
+    };
     const footerPadding = footer ? Math.min(footer.padding, footer.height / 4) : 0;
     const footerGap = footer?.blocks.length > 1 ? Math.min(footer.gap, (width - 2 * margin) / (footer.blocks.length * 2)) : 0;
     const footerCell = footer ? Math.max(.01, (width - 2 * margin - footerGap * Math.max(0, footer.blocks.length - 1)) / Math.max(1, footer.blocks.length)) : 0;
@@ -419,7 +448,7 @@
     const footerHeight = footer ? Math.min(height - margin, Math.max(footer.height, footerTextHeight + 2 * footerPadding)) : 0;
     const bottom = footer && !footer.overlay ? Math.min(6.96, height - footerHeight - .15) : 6.96;
     const addText = (runs, x, y, w, size, props = {}) => {
-      const h = textHeight(runs, w, size, props.lineHeight); elements.push({ type: 'text', runs, x, y, w, h, fontSize: size, color: theme.ink, ...props }); return h;
+      const h = textHeight(runs, w, size, props.lineHeight, props); elements.push({ type: 'text', runs, x, y, w, h, fontSize: size, color: theme.ink, ...props }); return h;
     };
     const fontSize = block => (block.code ? 18 : block.heading === 1 ? 40 : block.heading ? 27 : 23) * scale;
     function mediaBox(block, parentWidth, available = 2.7) {
@@ -463,7 +492,7 @@
       const positions = sizes.map((_, n) => groupOffset + sizes.slice(0, n).reduce((a, b) => a + b, 0) + n * gap);
       const markerSize = ordered ? (block.numberSize || 46) * scale : 0;
       const markerWidth = ordered ? Math.max(.18, ...block.items.map(item => item.marker.length * markerSize / 72 * .62 + .04)) : 0;
-      const markerHeight = ordered ? textHeight([{ text: block.items[0]?.marker || '1' }], markerWidth, markerSize, 1) : 0;
+      const markerHeight = ordered ? textHeight([{ text: block.items[0]?.marker || '1' }], markerWidth, markerSize, 1, { bold: true }) : 0;
       const indent = ordered && !stacked ? markerWidth + .14 : 0;
       const textOffset = stacked ? markerHeight + .1 : 0;
       const heights = [], cells = block.items.map((item, n) => {
@@ -492,7 +521,9 @@
         if (block.type === 'columns') { const sizes = columnSizes(block, w); return total + Math.max(...block.columns.map((col, i) => estimate(col, sizes[i]))) + .2; }
         if (block.type === 'list-layout') return total + listGeometry(block, w).height + .2;
         if (block.type === 'table') return total + block.rows.reduce((sum, row) => sum + Math.max(...row.map(cell => textHeight([{ text: cell }], w / Math.max(1, row.length) - .16, 19 * scale))) + .18, 0) + .22;
-        return total + textHeight(block.runs, Math.max(.2, w - (block.bullet ? .4 : 0)), fontSize(block)) + .16;
+        const markerWidth = block.bullet ? Math.max(.28, block.bullet.length * .17) : 0;
+        const indent = block.bullet ? markerWidth + .09 + (block.depth || 0) * .22 : 0;
+        return total + textHeight(block.runs, Math.max(.2, w - indent), fontSize(block), 1.2, { bold: !!block.heading, code: !!block.code }) + .16;
       }, 0);
     }
     function stack(blocks, x, y, w, limit = bottom, align = 'left') {
@@ -548,7 +579,7 @@
     stack(slide.blocks, margin, top, width - margin * 2);
     for (const block of specialBlocks.filter(block => block.type === 'positioned-text')) {
       const x = block.x / 100 * width, y = block.y / 100 * height, w = block.width / 100 * width;
-      const h = addText(block.runs, x, y, w, block.size * scale, { ...block, type: 'text', x, y, w, h: textHeight(block.runs, w, block.size * scale), positioned: true, color: block.color, fontSize: block.size * scale });
+      const h = addText(block.runs, x, y, w, block.size * scale, { ...block, type: 'text', x, y, w, positioned: true, color: block.color, fontSize: block.size * scale });
       if (x + w > width + .01 || y + h > height + .01) warnings.push('Content extends beyond the slide. Move or resize the positioned text, reduce its size, or use :::fit.');
     }
     if (!background && !slide.footer) elements.push({ type: 'text', runs: [{ text: String(index + 1) }], x: width - 1, y: 7.12, w: .4, h: .2, fontSize: 11, color: theme.muted, footer: true });

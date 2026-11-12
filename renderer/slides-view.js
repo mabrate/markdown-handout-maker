@@ -301,6 +301,7 @@
           item.style.textAlign = element.align || 'left'; item.style.color = '#' + element.color; if (element.bold) item.style.fontWeight = 'bold';
           if (element.lineHeight) item.style.lineHeight = String(element.lineHeight);
           if (element.font) item.style.fontFamily=element.font === 'Trebuchet MS' ? '"Trebuchet MS", Arial, sans-serif' : element.font;
+          if (element.code) item.style.fontFamily = 'Courier New';
         }
         mapSource(item, element);
         item.dataset.slideElement=elementIndex;
